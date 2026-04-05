@@ -1,0 +1,59 @@
+# =====================
+# SECRETS — ne jamais committer
+# =====================
+.env
+.env.local
+.env.*.local
+.env.production
+
+# =====================
+# NEXT.JS
+# =====================
+.next/
+out/
+build/
+dist/
+
+# =====================
+# NODE
+# =====================
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# =====================
+# TYPESCRIPT
+# =====================
+*.tsbuildinfo
+next-env.d.ts
+
+# =====================
+# OS
+# =====================
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+.idea/
+.vscode/settings.json
+
+# =====================
+# SUPABASE
+# =====================
+supabase/.branches
+supabase/.temp
+
+# =====================
+# SENTRY
+# =====================
+.sentryclirc
+
+# =====================
+# MISC
+# =====================
+*.log
+.vercel
+coverage/
+.nyc_output/
