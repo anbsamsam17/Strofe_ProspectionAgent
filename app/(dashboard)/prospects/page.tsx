@@ -19,15 +19,39 @@ const STATUS_LABELS: Record<ProspectStatus, string> = {
   on_hold: 'En pause',
 }
 
-const STATUS_STYLES: Record<ProspectStatus, string> = {
-  sourced: 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400',
-  qualified: 'bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-400',
-  contacted: 'bg-yellow-100 text-yellow-700 dark:bg-yellow-950 dark:text-yellow-400',
-  interested: 'bg-green-100 text-green-700 dark:bg-green-950 dark:text-green-400',
-  rdv: 'bg-purple-100 text-purple-700 dark:bg-purple-950 dark:text-purple-400',
-  converted: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-400',
-  rejected: 'bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-400',
-  on_hold: 'bg-orange-100 text-orange-700 dark:bg-orange-950 dark:text-orange-400',
+const STATUS_STYLES: Record<ProspectStatus, { badge: string; dot: string }> = {
+  sourced: {
+    badge: 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400',
+    dot: 'bg-gray-400',
+  },
+  qualified: {
+    badge: 'bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-400',
+    dot: 'bg-blue-500',
+  },
+  contacted: {
+    badge: 'bg-yellow-50 text-yellow-700 dark:bg-yellow-950 dark:text-yellow-400',
+    dot: 'bg-yellow-500',
+  },
+  interested: {
+    badge: 'bg-green-50 text-green-700 dark:bg-green-950 dark:text-green-400',
+    dot: 'bg-green-500',
+  },
+  rdv: {
+    badge: 'bg-purple-50 text-purple-700 dark:bg-purple-950 dark:text-purple-400',
+    dot: 'bg-purple-500',
+  },
+  converted: {
+    badge: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-400',
+    dot: 'bg-emerald-500',
+  },
+  rejected: {
+    badge: 'bg-red-50 text-red-700 dark:bg-red-950 dark:text-red-400',
+    dot: 'bg-red-500',
+  },
+  on_hold: {
+    badge: 'bg-orange-50 text-orange-700 dark:bg-orange-950 dark:text-orange-400',
+    dot: 'bg-orange-500',
+  },
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -54,20 +78,57 @@ function SortIcon({
   currentSort: string | undefined
   currentOrder: string | undefined
 }) {
-  if (currentSort !== column) {
+  const isActive = currentSort === column
+  if (!isActive) {
     return (
-      <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="ml-1 text-gray-400" aria-hidden="true">
+      <svg
+        xmlns="http://www.w3.org/2000/svg"
+        width="12"
+        height="12"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        className="ml-1 opacity-30 transition-opacity group-hover:opacity-60"
+        aria-hidden="true"
+      >
         <polyline points="8 15 12 19 16 15" />
         <polyline points="8 9 12 5 16 9" />
       </svg>
     )
   }
   return currentOrder === 'asc' ? (
-    <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="ml-1 text-green-600" aria-hidden="true">
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      width="12"
+      height="12"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className="ml-1 text-green-600 dark:text-green-400"
+      aria-hidden="true"
+    >
       <polyline points="18 15 12 9 6 15" />
     </svg>
   ) : (
-    <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="ml-1 text-green-600" aria-hidden="true">
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      width="12"
+      height="12"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className="ml-1 text-green-600 dark:text-green-400"
+      aria-hidden="true"
+    >
       <polyline points="6 9 12 15 18 9" />
     </svg>
   )
@@ -149,16 +210,20 @@ export default async function ProspectsPage({
     return buildHref({ sort, order, page: '1' })
   }
 
+  const th =
+    'px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400'
+
   return (
-    <div className="mx-auto max-w-7xl space-y-6">
+    <div className="mx-auto max-w-7xl space-y-5">
       {/* En-tête */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
+          <h1 className="text-2xl font-bold tracking-tight text-gray-900 dark:text-white">
             Prospects
           </h1>
           <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-            {count ?? 0} prospect{(count ?? 0) > 1 ? 's' : ''} au total
+            <span className="font-semibold text-gray-700 dark:text-gray-300">{count ?? 0}</span>{' '}
+            prospect{(count ?? 0) > 1 ? 's' : ''} au total
           </p>
         </div>
       </div>
@@ -171,51 +236,51 @@ export default async function ProspectsPage({
       />
 
       {/* Tableau */}
-      <div className="overflow-hidden rounded-xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900">
+      <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-900">
         <div className="overflow-x-auto">
           <table className="w-full text-sm" aria-label="Liste des prospects">
             <thead>
-              <tr className="border-b border-gray-200 bg-gray-50 dark:border-gray-800 dark:bg-gray-800/50">
-                <th scope="col" className="px-4 py-3 text-left">
+              <tr className="border-b border-gray-200 bg-gray-50/80 dark:border-gray-800 dark:bg-gray-800/40">
+                <th scope="col" className={th}>
                   <Link
                     href={buildSortHref('raison_sociale')}
-                    className="inline-flex items-center font-semibold text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white"
+                    className="group inline-flex items-center hover:text-gray-900 dark:hover:text-white"
                   >
                     Entreprise
                     <SortIcon column="raison_sociale" currentSort={params.sort} currentOrder={params.order} />
                   </Link>
                 </th>
-                <th scope="col" className="hidden px-4 py-3 text-left md:table-cell">
-                  <span className="font-semibold text-gray-600 dark:text-gray-400">Secteur</span>
+                <th scope="col" className={`${th} hidden md:table-cell`}>
+                  Secteur
                 </th>
-                <th scope="col" className="hidden px-4 py-3 text-left sm:table-cell">
-                  <span className="font-semibold text-gray-600 dark:text-gray-400">Ville</span>
+                <th scope="col" className={`${th} hidden sm:table-cell`}>
+                  Ville
                 </th>
-                <th scope="col" className="hidden px-4 py-3 text-left lg:table-cell">
-                  <span className="font-semibold text-gray-600 dark:text-gray-400">Effectif</span>
+                <th scope="col" className={`${th} hidden lg:table-cell`}>
+                  Effectif
                 </th>
-                <th scope="col" className="px-4 py-3 text-left">
+                <th scope="col" className={th}>
                   <Link
                     href={buildSortHref('score_priorite')}
-                    className="inline-flex items-center font-semibold text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white"
+                    className="group inline-flex items-center hover:text-gray-900 dark:hover:text-white"
                   >
                     Score
                     <SortIcon column="score_priorite" currentSort={params.sort} currentOrder={params.order} />
                   </Link>
                 </th>
-                <th scope="col" className="px-4 py-3 text-left">
+                <th scope="col" className={th}>
                   <Link
                     href={buildSortHref('statut')}
-                    className="inline-flex items-center font-semibold text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white"
+                    className="group inline-flex items-center hover:text-gray-900 dark:hover:text-white"
                   >
                     Statut
                     <SortIcon column="statut" currentSort={params.sort} currentOrder={params.order} />
                   </Link>
                 </th>
-                <th scope="col" className="hidden px-4 py-3 text-left xl:table-cell">
+                <th scope="col" className={`${th} hidden xl:table-cell`}>
                   <Link
                     href={buildSortHref('updated_at')}
-                    className="inline-flex items-center font-semibold text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white"
+                    className="group inline-flex items-center hover:text-gray-900 dark:hover:text-white"
                   >
                     Dernière action
                     <SortIcon column="updated_at" currentSort={params.sort} currentOrder={params.order} />
@@ -223,77 +288,133 @@ export default async function ProspectsPage({
                 </th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
+            <tbody>
               {prospects && prospects.length > 0 ? (
-                (prospects as unknown as Prospect[]).map((prospect) => (
-                  <tr
-                    key={prospect.id}
-                    className="group transition-colors hover:bg-gray-50 dark:hover:bg-gray-800/50"
-                  >
-                    <td className="px-4 py-3">
-                      <Link
-                        href={`/prospects/${prospect.id}`}
-                        className="block"
-                      >
-                        <p className="font-medium text-gray-900 group-hover:text-green-700 dark:text-white dark:group-hover:text-green-400">
-                          {prospect.raison_sociale}
-                        </p>
-                        {prospect.siren && (
-                          <p className="text-xs text-gray-400 dark:text-gray-600">
-                            SIREN {prospect.siren}
+                (prospects as unknown as Prospect[]).map((prospect, idx) => {
+                  const statusStyle =
+                    STATUS_STYLES[prospect.statut as ProspectStatus] ?? STATUS_STYLES.sourced
+                  const isEven = idx % 2 === 0
+                  return (
+                    <tr
+                      key={prospect.id}
+                      className={`group border-b border-gray-100 transition-colors last:border-0 hover:bg-green-50/40 dark:border-gray-800/60 dark:hover:bg-green-950/10 ${
+                        isEven ? '' : 'bg-gray-50/40 dark:bg-gray-800/10'
+                      }`}
+                    >
+                      {/* Entreprise */}
+                      <td className="px-4 py-3.5">
+                        <Link href={`/prospects/${prospect.id}`} className="block">
+                          <p className="font-semibold text-gray-900 transition-colors group-hover:text-green-700 dark:text-white dark:group-hover:text-green-400">
+                            {prospect.raison_sociale}
                           </p>
+                          {prospect.siren && (
+                            <p className="mt-0.5 text-xs text-gray-400 dark:text-gray-600">
+                              SIREN {prospect.siren}
+                            </p>
+                          )}
+                        </Link>
+                      </td>
+
+                      {/* Secteur */}
+                      <td className="hidden px-4 py-3.5 md:table-cell">
+                        {prospect.secteur_libelle ? (
+                          <span className="inline-block max-w-[180px] truncate rounded-md bg-gray-100 px-2 py-0.5 text-xs text-gray-600 dark:bg-gray-800 dark:text-gray-400">
+                            {prospect.secteur_libelle}
+                          </span>
+                        ) : (
+                          <span className="text-gray-400 dark:text-gray-600">—</span>
                         )}
-                      </Link>
-                    </td>
-                    <td className="hidden px-4 py-3 text-gray-600 dark:text-gray-400 md:table-cell">
-                      {prospect.secteur_libelle ?? '—'}
-                    </td>
-                    <td className="hidden px-4 py-3 text-gray-600 dark:text-gray-400 sm:table-cell">
-                      {prospect.ville ?? '—'}
-                    </td>
-                    <td className="hidden px-4 py-3 text-gray-600 dark:text-gray-400 lg:table-cell">
-                      {prospect.effectif_min && prospect.effectif_max
-                        ? `${prospect.effectif_min}–${prospect.effectif_max}`
-                        : prospect.effectif_min
-                          ? `+${prospect.effectif_min}`
-                          : '—'}
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-1">
-                        <span className="font-semibold tabular-nums text-gray-900 dark:text-white">
-                          {prospect.score_priorite}
-                        </span>
-                        <div className="h-1.5 w-12 overflow-hidden rounded-full bg-gray-200 dark:bg-gray-700">
-                          <div
-                            className="h-1.5 rounded-full bg-green-500"
-                            style={{ width: `${Math.min(100, prospect.score_priorite)}%` }}
+                      </td>
+
+                      {/* Ville */}
+                      <td className="hidden px-4 py-3.5 text-sm text-gray-600 dark:text-gray-400 sm:table-cell">
+                        {prospect.ville ?? (
+                          <span className="text-gray-400 dark:text-gray-600">—</span>
+                        )}
+                      </td>
+
+                      {/* Effectif */}
+                      <td className="hidden px-4 py-3.5 text-sm text-gray-600 dark:text-gray-400 lg:table-cell">
+                        {prospect.effectif_min && prospect.effectif_max
+                          ? `${prospect.effectif_min}–${prospect.effectif_max}`
+                          : prospect.effectif_min
+                            ? `+${prospect.effectif_min}`
+                            : <span className="text-gray-400 dark:text-gray-600">—</span>}
+                      </td>
+
+                      {/* Score */}
+                      <td className="px-4 py-3.5">
+                        <div className="flex items-center gap-2">
+                          <span className="w-6 text-right text-sm font-bold tabular-nums text-gray-900 dark:text-white">
+                            {prospect.score_priorite}
+                          </span>
+                          <div className="h-1.5 w-16 overflow-hidden rounded-full bg-gray-200 dark:bg-gray-700">
+                            <div
+                              className={`h-1.5 rounded-full transition-all ${
+                                prospect.score_priorite >= 75
+                                  ? 'bg-green-500'
+                                  : prospect.score_priorite >= 50
+                                    ? 'bg-yellow-500'
+                                    : 'bg-gray-400'
+                              }`}
+                              style={{ width: `${Math.min(100, prospect.score_priorite)}%` }}
+                              aria-hidden="true"
+                            />
+                          </div>
+                        </div>
+                      </td>
+
+                      {/* Statut */}
+                      <td className="px-4 py-3.5">
+                        <span
+                          className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium ${statusStyle.badge}`}
+                        >
+                          <span
+                            className={`h-1.5 w-1.5 flex-shrink-0 rounded-full ${statusStyle.dot}`}
                             aria-hidden="true"
                           />
-                        </div>
-                      </div>
-                    </td>
-                    <td className="px-4 py-3">
-                      <span
-                        className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-medium ${
-                          STATUS_STYLES[prospect.statut as ProspectStatus] ??
-                          STATUS_STYLES.sourced
-                        }`}
-                      >
-                        {STATUS_LABELS[prospect.statut as ProspectStatus] ??
-                          prospect.statut}
-                      </span>
-                    </td>
-                    <td className="hidden px-4 py-3 text-gray-500 dark:text-gray-500 xl:table-cell">
-                      {new Intl.DateTimeFormat('fr-FR', {
-                        dateStyle: 'short',
-                      }).format(new Date(prospect.updated_at))}
-                    </td>
-                  </tr>
-                ))
+                          {STATUS_LABELS[prospect.statut as ProspectStatus] ?? prospect.statut}
+                        </span>
+                      </td>
+
+                      {/* Dernière action */}
+                      <td className="hidden px-4 py-3.5 text-sm text-gray-500 dark:text-gray-500 xl:table-cell">
+                        {new Intl.DateTimeFormat('fr-FR', {
+                          dateStyle: 'short',
+                        }).format(new Date(prospect.updated_at))}
+                      </td>
+                    </tr>
+                  )
+                })
               ) : (
                 <tr>
-                  <td colSpan={7} className="px-4 py-12 text-center text-gray-500 dark:text-gray-400">
-                    Aucun prospect trouvé avec ces filtres.
+                  <td colSpan={7} className="px-4 py-16 text-center">
+                    <div className="flex flex-col items-center gap-3">
+                      <div className="flex h-12 w-12 items-center justify-center rounded-full bg-gray-100 dark:bg-gray-800">
+                        <svg
+                          xmlns="http://www.w3.org/2000/svg"
+                          width="20"
+                          height="20"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="1.5"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          className="text-gray-400 dark:text-gray-600"
+                          aria-hidden="true"
+                        >
+                          <circle cx="11" cy="11" r="8" />
+                          <line x1="21" y1="21" x2="16.65" y2="16.65" />
+                        </svg>
+                      </div>
+                      <p className="text-sm font-medium text-gray-500 dark:text-gray-400">
+                        Aucun prospect trouvé
+                      </p>
+                      <p className="text-xs text-gray-400 dark:text-gray-600">
+                        Essayez de modifier ou réinitialiser vos filtres.
+                      </p>
+                    </div>
                   </td>
                 </tr>
               )}
@@ -303,28 +424,103 @@ export default async function ProspectsPage({
 
         {/* Pagination */}
         {totalPages > 1 && (
-          <div className="flex items-center justify-between border-t border-gray-200 px-4 py-3 dark:border-gray-800">
-            <p className="text-sm text-gray-500 dark:text-gray-400">
-              Page {page} sur {totalPages} — {count} résultats
+          <div className="flex items-center justify-between border-t border-gray-200 px-5 py-3.5 dark:border-gray-800">
+            <p className="text-xs text-gray-500 dark:text-gray-400">
+              Page{' '}
+              <span className="font-semibold text-gray-700 dark:text-gray-300">{page}</span>{' '}
+              sur{' '}
+              <span className="font-semibold text-gray-700 dark:text-gray-300">{totalPages}</span>
+              {' '}—{' '}
+              <span className="font-semibold text-gray-700 dark:text-gray-300">{count}</span>{' '}
+              résultats
             </p>
-            <div className="flex items-center gap-2">
-              {page > 1 && (
+            <div className="flex items-center gap-1.5">
+              {page > 1 ? (
                 <Link
                   href={buildHref({ page: String(page - 1) })}
                   aria-label="Page précédente"
-                  className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-600 transition-colors hover:border-gray-300 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 dark:hover:bg-gray-800"
                 >
-                  ← Précédent
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    width="12"
+                    height="12"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    aria-hidden="true"
+                  >
+                    <polyline points="15 18 9 12 15 6" />
+                  </svg>
+                  Précédent
                 </Link>
+              ) : (
+                <span className="inline-flex cursor-not-allowed items-center gap-1.5 rounded-lg border border-gray-100 bg-white px-3 py-1.5 text-xs font-medium text-gray-300 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-700">
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    width="12"
+                    height="12"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    aria-hidden="true"
+                  >
+                    <polyline points="15 18 9 12 15 6" />
+                  </svg>
+                  Précédent
+                </span>
               )}
-              {page < totalPages && (
+
+              <span className="rounded-lg bg-green-600 px-3 py-1.5 text-xs font-semibold text-white">
+                {page}
+              </span>
+
+              {page < totalPages ? (
                 <Link
                   href={buildHref({ page: String(page + 1) })}
                   aria-label="Page suivante"
-                  className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-600 transition-colors hover:border-gray-300 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 dark:hover:bg-gray-800"
                 >
-                  Suivant →
+                  Suivant
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    width="12"
+                    height="12"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    aria-hidden="true"
+                  >
+                    <polyline points="9 18 15 12 9 6" />
+                  </svg>
                 </Link>
+              ) : (
+                <span className="inline-flex cursor-not-allowed items-center gap-1.5 rounded-lg border border-gray-100 bg-white px-3 py-1.5 text-xs font-medium text-gray-300 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-700">
+                  Suivant
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    width="12"
+                    height="12"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    aria-hidden="true"
+                  >
+                    <polyline points="9 18 15 12 9 6" />
+                  </svg>
+                </span>
               )}
             </div>
           </div>

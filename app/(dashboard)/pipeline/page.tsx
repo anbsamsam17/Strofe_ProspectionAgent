@@ -47,16 +47,48 @@ export default async function PipelinePage() {
     }
   }
 
+  const totalCount = (prospects ?? []).length
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       {/* En-tête */}
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
-          Pipeline CRM
-        </h1>
-        <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-          {(prospects ?? []).length} prospects dans le pipeline
-        </p>
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight text-gray-900 dark:text-white">
+            Pipeline CRM
+          </h1>
+          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+            <span className="font-semibold text-gray-700 dark:text-gray-300">{totalCount}</span>{' '}
+            prospect{totalCount > 1 ? 's' : ''} dans le pipeline
+          </p>
+        </div>
+
+        {/* Légende rapide */}
+        <div className="hidden items-center gap-3 sm:flex">
+          {PIPELINE_COLUMNS.map((col) => {
+            const count = prospectsByStatus[col.status].length
+            return (
+              <div key={col.status} className="flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400">
+                <span
+                  className={`h-2 w-2 rounded-full ${
+                    col.color === 'gray'
+                      ? 'bg-gray-400'
+                      : col.color === 'blue'
+                        ? 'bg-blue-500'
+                        : col.color === 'yellow'
+                          ? 'bg-yellow-500'
+                          : col.color === 'purple'
+                            ? 'bg-purple-500'
+                            : 'bg-green-500'
+                  }`}
+                  aria-hidden="true"
+                />
+                <span className="font-medium">{count}</span>
+                <span>{col.label}</span>
+              </div>
+            )
+          })}
+        </div>
       </div>
 
       {/* Kanban */}

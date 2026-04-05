@@ -47,44 +47,75 @@ export default async function SettingsPage() {
   }
 
   return (
-    <div className="mx-auto max-w-2xl space-y-8">
-      {/* En-tête */}
+    <div className="mx-auto max-w-2xl space-y-6">
+
+      {/* ── En-tête ──────────────────────────────────────────── */}
       <div>
         <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
-          Paramètres de l&apos;agent
+          Paramètres
         </h1>
-        <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+        <p className="mt-0.5 text-sm text-gray-500 dark:text-gray-400">
           Configurez les critères de prospection utilisés par l&apos;agent IA.
         </p>
       </div>
 
-      {/* Infos compte */}
+      {/* ── Infos compte ─────────────────────────────────────── */}
       <section
         aria-labelledby="account-title"
-        className="rounded-xl border border-gray-200 bg-white p-6 dark:border-gray-800 dark:bg-gray-900"
+        className="rounded-xl border border-gray-100 bg-white shadow-sm dark:border-gray-800/60 dark:bg-gray-900"
       >
-        <h2 id="account-title" className="mb-4 text-sm font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
-          Compte
-        </h2>
-        <div className="space-y-1">
-          <p className="text-sm text-gray-700 dark:text-gray-300">
-            <span className="font-medium">Email :</span>{' '}
-            {profile?.email ?? user.email}
-          </p>
-          {profile?.full_name && (
-            <p className="text-sm text-gray-700 dark:text-gray-300">
-              <span className="font-medium">Nom :</span> {profile.full_name}
-            </p>
-          )}
-          {profile?.company_name && (
-            <p className="text-sm text-gray-700 dark:text-gray-300">
-              <span className="font-medium">Entreprise :</span> {profile.company_name}
-            </p>
-          )}
+        <div className="border-b border-gray-100 px-6 py-4 dark:border-gray-800/60">
+          <h2
+            id="account-title"
+            className="text-xs font-semibold uppercase tracking-widest text-gray-400 dark:text-gray-600"
+          >
+            Compte
+          </h2>
+        </div>
+
+        <div className="px-6 py-5">
+          <div className="flex items-start gap-4">
+            {/* Avatar */}
+            <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-green-500 to-green-700 text-lg font-bold text-white shadow-sm shadow-green-600/25">
+              {(profile?.full_name ?? profile?.email ?? user.email ?? 'U').charAt(0).toUpperCase()}
+            </div>
+
+            {/* Infos */}
+            <div className="min-w-0 flex-1 space-y-2">
+              {profile?.full_name && (
+                <div>
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-600">
+                    Nom
+                  </p>
+                  <p className="mt-0.5 text-sm font-medium text-gray-900 dark:text-white">
+                    {profile.full_name}
+                  </p>
+                </div>
+              )}
+              <div>
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-600">
+                  Email
+                </p>
+                <p className="mt-0.5 text-sm text-gray-700 dark:text-gray-300">
+                  {profile?.email ?? user.email}
+                </p>
+              </div>
+              {profile?.company_name && (
+                <div>
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-600">
+                    Entreprise
+                  </p>
+                  <p className="mt-0.5 text-sm text-gray-700 dark:text-gray-300">
+                    {profile.company_name}
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
         </div>
       </section>
 
-      {/* Formulaire paramètres agent */}
+      {/* ── Formulaire paramètres agent ──────────────────────── */}
       <SettingsForm
         initialSettings={settings}
         secteursDisponibles={SECTEURS_DISPONIBLES}

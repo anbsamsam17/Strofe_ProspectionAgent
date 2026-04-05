@@ -78,12 +78,12 @@ export default async function DashboardLayout({
         />
 
         {/* Contenu de la page */}
-        <main className="flex-1 overflow-y-auto p-4 pb-24 sm:p-6 lg:pb-6">
-          {children}
+        <main className="flex-1 overflow-y-auto">
+          <div className="p-4 pb-24 sm:p-6 lg:pb-8">
+            {children}
+          </div>
         </main>
       </div>
-
-      {/* Navigation mobile en bas — rendu dans Sidebar */}
     </div>
   )
 }
