@@ -71,6 +71,7 @@ export function DashboardHeader({ userName, agentRun, dailyList }: DashboardHead
       const response = await fetch('/api/agent/run', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
       })
       if (!response.ok) {
         const data = await response.json() as { error?: string }
