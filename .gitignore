@@ -5,6 +5,7 @@
 .env.local
 .env.*.local
 .env.production
+CLAUDE.local.md
 
 # =====================
 # NEXT.JS
