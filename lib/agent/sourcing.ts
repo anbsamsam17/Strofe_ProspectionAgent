@@ -14,8 +14,8 @@ import type {
 // CONSTANTES
 // ------------------------------------------------------------
 
-const INSEE_TOKEN_URL = 'https://api.insee.fr/token'
-const INSEE_SIRET_URL = 'https://api.insee.fr/entreprises/sirene/V3.11/siret'
+const INSEE_TOKEN_URL = 'https://portail-api.insee.fr/token'
+const INSEE_SIRET_URL = 'https://portail-api.insee.fr/entreprises/sirene/V3.11/siret'
 const ADEME_BEGES_URL = 'https://data.ademe.fr/api/3/action/datastore_search'
 const ADEME_RESOURCE_ID = 'dbe07a87-8a2b-47d3-a0ca-f2a7b5e4f3c2'
 
