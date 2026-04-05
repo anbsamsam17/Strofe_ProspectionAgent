@@ -141,12 +141,12 @@ export default async function ProspectsPage({
       ...newParams,
     }
     const qs = new URLSearchParams(merged).toString()
-    return `/prospects?${qs}` as `/prospects${string}`
+    return `/prospects?${qs}`
   }
 
   function buildSortHref(column: SortableColumn) {
     const { sort, order } = getSortOrder(column, params.sort, params.order)
-    return buildHref({ sort, order, page: '1' }) as `/prospects${string}`
+    return buildHref({ sort, order, page: '1' })
   }
 
   return (
