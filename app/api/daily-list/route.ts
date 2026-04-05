@@ -161,7 +161,7 @@ export async function GET(request: NextRequest) {
     notified_at: (listData.notified_at as string | null) ?? undefined,
     created_at: listData.created_at as string,
     updated_at: listData.updated_at as string,
-    items: ((listData.items as DailyListItem[]) ?? []).map((item) => ({
+    items: ((listData.items as unknown as DailyListItem[]) ?? []).map((item) => ({
       ...item,
       prospect: item.prospect as unknown as Prospect,
     })),

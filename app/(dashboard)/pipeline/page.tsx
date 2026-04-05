@@ -4,7 +4,7 @@ import type { Prospect, ProspectStatus } from '@/lib/types'
 import { PipelineClient } from '@/components/pipeline/pipeline-client'
 
 // Colonnes Kanban dans l'ordre logique du pipeline
-export const PIPELINE_COLUMNS: { status: ProspectStatus; label: string; color: string }[] = [
+const PIPELINE_COLUMNS: { status: ProspectStatus; label: string; color: string }[] = [
   { status: 'sourced', label: 'Sourcé', color: 'gray' },
   { status: 'qualified', label: 'Qualifié', color: 'blue' },
   { status: 'contacted', label: 'Contacté', color: 'yellow' },
@@ -40,7 +40,7 @@ export default async function PipelinePage() {
     on_hold: [],
   }
 
-  for (const prospect of (prospects ?? []) as Prospect[]) {
+  for (const prospect of (prospects ?? []) as unknown as Prospect[]) {
     const status = prospect.statut as ProspectStatus
     if (prospectsByStatus[status]) {
       prospectsByStatus[status].push(prospect)

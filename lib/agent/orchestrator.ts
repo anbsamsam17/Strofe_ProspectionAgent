@@ -3,7 +3,8 @@
 // Chef d'orchestre du run nocturne (Vercel Cron 22h)
 // ============================================================
 
-import type { SupabaseClient } from '@supabase/supabase-js'
+import type { Database, Json } from '@/lib/supabase/database.types'
+import type { SupabaseServerClient } from '@/lib/supabase/server'
 import type {
   AgentLog,
   AgentRun,
@@ -72,22 +73,24 @@ function log(
  */
 async function updateRunInDB(
   run: AgentRun,
-  supabase: SupabaseClient,
+  supabase: SupabaseServerClient,
   extra: Partial<AgentRun> = {},
 ): Promise<void> {
+  const updatePayload: Database['public']['Tables']['agent_runs']['Update'] = {
+    status: run.status,
+    phase: run.phase,
+    prospects_sourced: run.prospects_sourced,
+    prospects_qualified: run.prospects_qualified,
+    list_generated: run.list_generated,
+    error_message: run.error_message ?? null,
+    logs: run.logs as unknown as Json,
+    completed_at: run.completed_at ?? null,
+    ...(extra as Partial<Database['public']['Tables']['agent_runs']['Update']>),
+  }
+
   const { error } = await supabase
     .from('agent_runs')
-    .update({
-      status: run.status,
-      phase: run.phase,
-      prospects_sourced: run.prospects_sourced,
-      prospects_qualified: run.prospects_qualified,
-      list_generated: run.list_generated,
-      error_message: run.error_message ?? null,
-      logs: run.logs,
-      completed_at: run.completed_at ?? null,
-      ...extra,
-    })
+    .update(updatePayload)
     .eq('id', run.id)
 
   if (error) {
@@ -109,7 +112,7 @@ async function updateRunInDB(
 
 async function phaseInit(
   userId: string,
-  supabase: SupabaseClient,
+  supabase: SupabaseServerClient,
 ): Promise<AgentRun> {
   const { data, error } = await supabase
     .from('agent_runs')
@@ -155,7 +158,7 @@ async function phaseInit(
 
 async function phaseLoadSettings(
   run: AgentRun,
-  supabase: SupabaseClient,
+  supabase: SupabaseServerClient,
 ): Promise<ProfileSettings> {
   run.phase = 'load_settings'
   log(run, 'load_settings', 'Chargement des paramètres utilisateur', 'info')
@@ -174,7 +177,7 @@ async function phaseLoadSettings(
     )
   }
 
-  const settings = data.settings as ProfileSettings
+  const settings = data.settings as unknown as ProfileSettings
 
   log(run, 'load_settings', 'Paramètres chargés', 'info', {
     daily_call_target: settings.daily_call_target,
@@ -191,7 +194,7 @@ async function phaseLoadSettings(
 
 async function phaseSourcing(
   run: AgentRun,
-  supabase: SupabaseClient,
+  supabase: SupabaseServerClient,
 ): Promise<Array<Partial<Prospect>>> {
   run.phase = 'sourcing_sirene'
   log(run, 'sourcing_sirene', 'Démarrage du sourcing Sirene INSEE', 'info')
@@ -276,7 +279,7 @@ async function phaseSourcing(
 
 async function phaseScoring(
   run: AgentRun,
-  supabase: SupabaseClient,
+  supabase: SupabaseServerClient,
   rawProspects: Array<Partial<Prospect>>,
 ): Promise<Prospect[]> {
   run.phase = 'scoring'
@@ -305,7 +308,7 @@ async function phaseScoring(
 
     const { data, error } = await supabase
       .from('prospects')
-      .upsert(batch, { onConflict: 'user_id,siren' })
+      .upsert(batch as unknown as Database['public']['Tables']['prospects']['Insert'][], { onConflict: 'user_id,siren' })
       .select()
 
     if (error) {
@@ -317,7 +320,7 @@ async function phaseScoring(
     }
 
     if (data) {
-      savedProspects.push(...(data as Prospect[]))
+      savedProspects.push(...(data as unknown as Prospect[]))
     }
   }
 
@@ -332,7 +335,7 @@ async function phaseScoring(
 
 async function phaseSelection(
   run: AgentRun,
-  supabase: SupabaseClient,
+  supabase: SupabaseServerClient,
   settings: ProfileSettings,
 ): Promise<Prospect[]> {
   run.phase = 'selection'
@@ -353,7 +356,7 @@ async function phaseSelection(
     )
   }
 
-  const prospects = (data ?? []) as Prospect[]
+  const prospects = (data ?? []) as unknown as Prospect[]
   log(run, 'selection', `${prospects.length} prospects sélectionnés pour la liste du jour`, 'info')
 
   return prospects
@@ -384,7 +387,7 @@ async function phaseGeneratePitchs(
 
 async function phaseCreateDailyList(
   run: AgentRun,
-  supabase: SupabaseClient,
+  supabase: SupabaseServerClient,
   prospects: Prospect[],
   pitchs: GeneratedPitch[],
 ): Promise<DailyList> {
@@ -467,7 +470,7 @@ async function phaseCreateDailyList(
 
   const { error: itemsError } = await supabase
     .from('daily_list_items')
-    .insert(items)
+    .insert(items as unknown as Database['public']['Tables']['daily_list_items']['Insert'][])
 
   if (itemsError) {
     throw new Error(
@@ -512,7 +515,7 @@ async function phaseCreateDailyList(
  */
 export async function runAgentNocturne(
   userId: string,
-  supabaseAdmin: SupabaseClient,
+  supabaseAdmin: SupabaseServerClient,
 ): Promise<AgentRun> {
   // --------------------------------------------------------
   // PHASE 1 : INIT — créer le run en DB

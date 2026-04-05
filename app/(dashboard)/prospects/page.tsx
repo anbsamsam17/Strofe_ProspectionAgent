@@ -225,7 +225,7 @@ export default async function ProspectsPage({
             </thead>
             <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
               {prospects && prospects.length > 0 ? (
-                (prospects as Prospect[]).map((prospect) => (
+                (prospects as unknown as Prospect[]).map((prospect) => (
                   <tr
                     key={prospect.id}
                     className="group transition-colors hover:bg-gray-50 dark:hover:bg-gray-800/50"

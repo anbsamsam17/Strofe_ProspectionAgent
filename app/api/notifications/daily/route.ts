@@ -128,7 +128,7 @@ export async function GET(request: NextRequest) {
 
   // Traiter chaque liste séquentiellement pour éviter de surcharger Resend
   for (const list of lists) {
-    const profile = list.profiles as {
+    const profile = list.profiles as unknown as {
       email: string
       full_name: string | null
       settings: { notification_email?: string; daily_call_target?: number }

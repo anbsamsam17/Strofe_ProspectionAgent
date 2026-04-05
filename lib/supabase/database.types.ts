@@ -1,5 +1,6 @@
 // ============================================================
 // TYPES GÉNÉRÉS DEPUIS LE SCHEMA SUPABASE
+// Format : @supabase/postgrest-js v2 (Relationships obligatoire par table)
 // Regénérer après chaque migration avec :
 //   npx supabase gen types typescript --project-id <id> > lib/supabase/database.types.ts
 // ============================================================
@@ -12,7 +13,7 @@ export type Json =
   | { [key: string]: Json | undefined }
   | Json[]
 
-export interface Database {
+export type Database = {
   public: {
     Tables: {
       profiles: {
@@ -48,6 +49,7 @@ export interface Database {
           onboarded?: boolean
           updated_at?: string
         }
+        Relationships: []
       }
       prospects: {
         Row: {
@@ -139,6 +141,15 @@ export interface Database {
           enriched_at?: string | null
           updated_at?: string
         }
+        Relationships: [
+          {
+            foreignKeyName: "prospects_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          }
+        ]
       }
       daily_lists: {
         Row: {
@@ -167,6 +178,15 @@ export interface Database {
           notified_at?: string | null
           updated_at?: string
         }
+        Relationships: [
+          {
+            foreignKeyName: "daily_lists_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          }
+        ]
       }
       daily_list_items: {
         Row: {
@@ -187,6 +207,7 @@ export interface Database {
           call_notes: string | null
           called_at: string | null
           created_at: string
+          updated_at: string
         }
         Insert: {
           id?: string
@@ -206,13 +227,38 @@ export interface Database {
           call_notes?: string | null
           called_at?: string | null
           created_at?: string
+          updated_at?: string
         }
         Update: {
           call_result?: string | null
           callback_date?: string | null
           call_notes?: string | null
           called_at?: string | null
+          updated_at?: string
         }
+        Relationships: [
+          {
+            foreignKeyName: "daily_list_items_daily_list_id_fkey"
+            columns: ["daily_list_id"]
+            isOneToOne: false
+            referencedRelation: "daily_lists"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "daily_list_items_prospect_id_fkey"
+            columns: ["prospect_id"]
+            isOneToOne: false
+            referencedRelation: "prospects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "daily_list_items_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          }
+        ]
       }
       agent_runs: {
         Row: {
@@ -251,10 +297,20 @@ export interface Database {
           logs?: Json
           completed_at?: string | null
         }
+        Relationships: [
+          {
+            foreignKeyName: "agent_runs_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          }
+        ]
       }
     }
-    Views: Record<string, never>
-    Functions: Record<string, never>
-    Enums: Record<string, never>
+    Views: { [_ in never]: never }
+    Functions: { [_ in never]: never }
+    Enums: { [_ in never]: never }
+    CompositeTypes: { [_ in never]: never }
   }
 }
