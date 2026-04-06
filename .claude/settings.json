@@ -1,4 +1,7 @@
 {
+  "env": {
+    "CLAUDE_PROJECT": "true"
+  },
   "permissions": {
     "allow": [
       "Read",
@@ -6,13 +9,11 @@
       "Grep",
       "Edit",
       "Write",
-      "Bash"
+      "Bash",
+      "WebFetch(domain:portail-api.insee.fr)"
     ],
     "deny": [
       "Bash(rm -rf*)"
     ]
-  },
-  "env": {
-    "CLAUDE_PROJECT": "true"
   }
 }

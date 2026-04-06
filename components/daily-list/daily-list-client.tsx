@@ -10,6 +10,33 @@ interface DailyListClientProps {
 
 export function DailyListClient({ initialItems }: DailyListClientProps) {
   const [items, setItems] = useState(initialItems)
+  const [isResetting, setIsResetting] = useState(false)
+  const [resetError, setResetError] = useState<string | null>(null)
+
+  async function handleReset() {
+    const confirmed = window.confirm(
+      'Vider les appels non effectués ?\n\nLes appels déjà effectués seront conservés. Cette action est irréversible.',
+    )
+    if (!confirmed) return
+
+    setIsResetting(true)
+    setResetError(null)
+
+    try {
+      const response = await fetch('/api/daily-list', { method: 'DELETE' })
+
+      if (!response.ok) {
+        const data = (await response.json()) as { error?: string }
+        throw new Error(data.error ?? 'Erreur lors de la réinitialisation')
+      }
+
+      // Rafraîchir la page pour refléter la suppression
+      window.location.reload()
+    } catch (err) {
+      setResetError(err instanceof Error ? err.message : 'Erreur inconnue')
+      setIsResetting(false)
+    }
+  }
 
   function handleFeedbackSubmit(
     itemId: string,
@@ -69,6 +96,65 @@ export function DailyListClient({ initialItems }: DailyListClientProps) {
 
   return (
     <div className="space-y-6" aria-label="Liste des appels du jour">
+      {/* Bouton de réinitialisation — visible uniquement si des items non appelés existent */}
+      {pendingItems.length > 0 && (
+        <div className="flex flex-col items-end gap-1.5">
+          {resetError && (
+            <p className="text-xs text-red-600 dark:text-red-400" role="alert">
+              {resetError}
+            </p>
+          )}
+          <button
+            onClick={handleReset}
+            disabled={isResetting}
+            aria-label={`Vider les ${pendingItems.length} appels non effectués de la liste`}
+            className="inline-flex items-center gap-2 rounded-xl border border-orange-200 bg-orange-50 px-4 py-2 text-sm font-medium text-orange-700 transition-colors hover:border-orange-300 hover:bg-orange-100 focus:outline-none focus:ring-2 focus:ring-orange-400 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60 dark:border-orange-800/50 dark:bg-orange-950/30 dark:text-orange-400 dark:hover:bg-orange-950/50 dark:focus:ring-offset-gray-900"
+          >
+            {isResetting ? (
+              <>
+                <svg
+                  className="animate-spin"
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="14"
+                  height="14"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden="true"
+                >
+                  <path d="M21 12a9 9 0 1 1-6.219-8.56" />
+                </svg>
+                <span>Suppression...</span>
+              </>
+            ) : (
+              <>
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="14"
+                  height="14"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden="true"
+                >
+                  <polyline points="3 6 5 6 21 6" />
+                  <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+                  <path d="M10 11v6M14 11v6" />
+                  <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
+                </svg>
+                <span>Vider les {pendingItems.length} appels non effectués</span>
+              </>
+            )}
+          </button>
+        </div>
+      )}
+
       {/* Stats du jour */}
       <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-800 dark:bg-gray-900">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">

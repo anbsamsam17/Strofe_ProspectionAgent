@@ -358,6 +358,32 @@ Mettre a jour les composants frontend pour afficher les nouvelles donnees prospe
 
 ---
 
+## Session du : 2026-04-06 — Mode cumulatif daily list + bouton reset
+
+## Objectif de cette session
+Implémenter le mode cumulatif de la daily list (chaque run ajoute 15 nouveaux prospects sans écraser les existants) et le bouton de reset des appels non effectués.
+
+## Taches effectuees
+- [x] orchestrator.ts `phaseCreateDailyList` : suppression du DELETE WHERE called_at IS NULL — mode append pur
+- [x] orchestrator.ts `phaseSelection` : déduplication anti-doublon via `NOT IN (prospect_ids déjà dans la liste du jour)`
+- [x] app/api/daily-list/route.ts : ajout handler DELETE — supprime `called_at IS NULL`, conserve les appelés
+- [x] components/daily-list/daily-list-client.tsx : bouton "Vider les N appels non effectués" avec confirm() + loading state + reload
+- [x] components/dashboard/generate-list-button.tsx : libellé "Ajouter 15 prospects" (mode cumulatif) + compteur total courant
+- [x] app/(dashboard)/dashboard/page.tsx : props `listItemCount` + `dailyTarget` passées au GenerateListButton, max MetricCard "Appels préparés" = totalPrepared
+- [x] npx tsc --noEmit : exit code 0
+
+## Fichiers modifies
+- lib/agent/orchestrator.ts
+- app/api/daily-list/route.ts
+- components/daily-list/daily-list-client.tsx
+- components/dashboard/generate-list-button.tsx
+- app/(dashboard)/dashboard/page.tsx
+
+## Etat en fin de session
+Mode cumulatif opérationnel. Après 2 runs : 30 items dans la liste. Le bouton reset vide uniquement les non-appelés. Idempotence garantie par exclusion des prospect_ids déjà présents. 0 erreur TypeScript.
+
+---
+
 ## Session du : 2026-04-06 — Debug dashboard : run échoué affiché au lieu du run récent
 
 ## Objectif de cette session
@@ -376,3 +402,26 @@ Diagnostiquer et corriger le bug d'affichage du dashboard qui montrait un run é
 ## Etat en fin de session
 - 0 erreur TypeScript (npx tsc --noEmit — exit code 0)
 - 4 corrections apportées dans `dashboard/page.tsx`
+
+---
+
+## Session du : 2026-04-06 — Page détail prospect + contact rapide carte daily list
+
+## Objectif de cette session
+Créer la page de détail d'un prospect (`/prospects/{id}`) qui donnait un 404, et afficher les infos contact immédiatement visibles dans la carte prospect de la daily list.
+
+## Taches effectuees
+- [x] Création `app/(dashboard)/prospects/[id]/page.tsx` — Server Component avec auth, ownership check, fiche complète
+- [x] Sections : Header (h1 + badges), Entreprise (SIREN/NAF/effectif/ville/source), Contact (tel/email/LinkedIn), BEGES (badge 3 états + date + lien ADEME + explication), Score (barre progression + décomposition ScoreDetails), Signaux RSE (liste), Historique
+- [x] Modification `components/daily-list/prospect-card.tsx` — bloc contact compact (nom+poste+tel+email) inséré après h2 raison_sociale, visible sans dérouler
+- [x] `export const dynamic = 'force-dynamic'` sur la page de détail
+- [x] UUID validation RFC 4122 stricte avant requête Supabase
+- [x] SVG inline pour toutes les icônes, aria-label sur tous les liens
+- [x] Dark mode + responsive (1 col mobile, 2 cols desktop)
+- [x] npx tsc --noEmit : exit code 0
+
+## Fichiers créés
+- app/(dashboard)/prospects/[id]/page.tsx (NOUVEAU)
+
+## Fichiers modifiés
+- components/daily-list/prospect-card.tsx

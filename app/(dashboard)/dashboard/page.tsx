@@ -320,7 +320,7 @@ export default async function DashboardPage() {
           <MetricCard
             label="Appels préparés"
             value={totalPrepared}
-            max={dailyTarget}
+            max={totalPrepared > 0 ? totalPrepared : dailyTarget}
             color="blue"
             icon={<IconPhone />}
           />
@@ -548,7 +548,11 @@ export default async function DashboardPage() {
               </p>
             </div>
           </div>
-          <GenerateListButton hasExistingList={dailyList !== null} />
+          <GenerateListButton
+            hasExistingList={dailyList !== null}
+            listItemCount={totalPrepared}
+            dailyTarget={dailyTarget}
+          />
         </div>
       </section>
 

@@ -16,6 +16,27 @@ links:
 
 ---
 
+## 2026-04-06 — Page détail prospect + contact rapide carte daily list
+
+**Tâche** : Créer la page `/prospects/{id}` (Server Component) et ajouter le bloc contact visible en haut de la carte daily list.
+
+**Fichiers créés** : `app/(dashboard)/prospects/[id]/page.tsx`
+**Fichiers modifiés** : `components/daily-list/prospect-card.tsx`
+
+**Résultat** : 0 erreur TypeScript. Toutes les sections de fiche prospect implémentées. Contact (nom+poste+tel+email) visible immédiatement dans la carte sans dérouler. Design cohérent Linear/Vercel, dark mode, accessible.
+
+---
+
+## 2026-04-06 — Mode cumulatif daily list + bouton reset
+
+**Tâche** : Implémenter le mode cumulatif (chaque run ajoute 15 prospects sans écraser la liste) et un bouton de reset des appels non effectués.
+
+**Fichiers modifiés** : `lib/agent/orchestrator.ts`, `app/api/daily-list/route.ts`, `components/daily-list/daily-list-client.tsx`, `components/dashboard/generate-list-button.tsx`, `app/(dashboard)/dashboard/page.tsx`
+
+**Résultat** : 0 erreur TypeScript. Mode append pur dans l'orchestrateur. Anti-doublon par exclusion des prospect_ids. DELETE /api/daily-list opérationnel. Bouton reset avec confirm() + loading + reload.
+
+---
+
 ## 2026-04-06 — Debug dashboard : run échoué affiché, métriques du jour incorrectes
 
 **Type** : Bug Fix / Dashboard

@@ -418,14 +418,41 @@ async function phaseSelection(
   settings: ProfileSettings,
 ): Promise<Prospect[]> {
   run.phase = 'selection'
+  // En mode cumulatif, target = nombre de NOUVEAUX prospects à ajouter à chaque run.
   const target = settings.daily_call_target ?? DAILY_CALL_TARGET
-  log(run, 'selection', `Sélection des ${target} meilleurs prospects non encore appelés`, 'info')
+  log(run, 'selection', `Sélection de ${target} nouveaux prospects (mode cumulatif)`, 'info')
+
+  // Récupérer les prospect_ids déjà présents dans la daily list du jour
+  // pour garantir l'idempotence : relancer 2x ne crée pas de doublons.
+  const today = new Date().toISOString().split('T')[0]
+
+  const { data: existingList } = await supabase
+    .from('daily_lists')
+    .select('id')
+    .eq('user_id', run.user_id)
+    .eq('date', today)
+    .maybeSingle()
+
+  let excludedProspectIds: string[] = []
+
+  if (existingList) {
+    const { data: existingListItems } = await supabase
+      .from('daily_list_items')
+      .select('prospect_id')
+      .eq('daily_list_id', existingList.id)
+
+    excludedProspectIds = (existingListItems ?? []).map(
+      (row: { prospect_id: string }) => row.prospect_id,
+    )
+  }
+
+  log(run, 'selection', `${excludedProspectIds.length} prospects déjà dans la liste (exclus)`, 'info')
 
   // Filtrer uniquement les prospects SANS BEGES valide :
   // - beges_publie = false  → aucun BEGES publié (cible principale)
   // - beges_publie = true ET beges_valide = false → BEGES expiré (> 4 ans)
   // Les prospects avec beges_valide = true sont exclus (conformes, moins prioritaires).
-  const { data, error } = await supabase
+  let query = supabase
     .from('prospects')
     .select('*')
     .eq('user_id', run.user_id)
@@ -434,6 +461,13 @@ async function phaseSelection(
     .order('score_priorite', { ascending: false })
     .limit(target)
 
+  // Exclure les prospects déjà dans la daily list du jour (anti-doublon)
+  if (excludedProspectIds.length > 0) {
+    query = query.not('id', 'in', `(${excludedProspectIds.join(',')})`)
+  }
+
+  const { data, error } = await query
+
   if (error) {
     throw new Error(
       `phaseSelection: requête DB échouée — ${error.message}`,
@@ -441,7 +475,7 @@ async function phaseSelection(
   }
 
   const prospects = (data ?? []) as unknown as Prospect[]
-  log(run, 'selection', `${prospects.length} prospects sélectionnés pour la liste du jour`, 'info')
+  log(run, 'selection', `${prospects.length} nouveaux prospects sélectionnés pour la liste du jour`, 'info')
 
   return prospects
 }
@@ -546,15 +580,10 @@ async function phaseCreateDailyList(
     }
   })
 
-  // Mode "append" : supprimer uniquement les items PAS encore appelés (called_at IS NULL).
-  // Les appels déjà effectués (called_at IS NOT NULL) sont conservés pour l'historique.
-  await supabase
-    .from('daily_list_items')
-    .delete()
-    .eq('daily_list_id', dailyList.id)
-    .is('called_at', null)
-
-  // Récupérer le dernier ordre des items déjà appelés pour continuer la numérotation.
+  // Mode "append cumulatif" : NE PAS supprimer les items existants (ni appelés ni non appelés).
+  // Chaque run AJOUTE de nouveaux prospects à la suite de la liste existante.
+  // Les items déjà appelés ET non appelés sont tous conservés.
+  // Récupérer le dernier ordre de TOUS les items existants pour continuer la numérotation.
   const { data: existingItems } = await supabase
     .from('daily_list_items')
     .select('ordre')

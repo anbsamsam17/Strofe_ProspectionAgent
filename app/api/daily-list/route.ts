@@ -167,3 +167,98 @@ export async function GET(request: NextRequest) {
 
   return NextResponse.json({ list }, { status: 200 })
 }
+
+// ------------------------------------------------------------
+// Handler DELETE — Réinitialiser les appels non effectués
+// Supprime tous les daily_list_items avec called_at IS NULL pour
+// la daily list du jour de l'utilisateur authentifié.
+// Les items déjà appelés (called_at IS NOT NULL) sont conservés.
+// Les prospects de la table `prospects` ne sont PAS touchés.
+// ------------------------------------------------------------
+
+export async function DELETE(_request: NextRequest) {
+  // -- Auth --
+  const supabase = await createClient()
+  const {
+    data: { user },
+    error: authError,
+  } = await supabase.auth.getUser()
+
+  if (authError || !user) {
+    return NextResponse.json(
+      { error: 'Non authentifié', code: 'UNAUTHORIZED' },
+      { status: 401 },
+    )
+  }
+
+  const today = new Date().toISOString().split('T')[0]
+
+  // Trouver la daily list du jour
+  const { data: dailyList, error: listError } = await supabase
+    .from('daily_lists')
+    .select('id')
+    .eq('user_id', user.id)
+    .eq('date', today)
+    .maybeSingle()
+
+  if (listError) {
+    console.log(
+      JSON.stringify({
+        level: 'error',
+        route: 'DELETE /api/daily-list',
+        msg: 'Erreur récupération daily_list',
+        error: listError.message,
+        user_id: user.id,
+      }),
+    )
+    return NextResponse.json(
+      { error: 'Erreur base de données', code: 'DB_ERROR' },
+      { status: 500 },
+    )
+  }
+
+  // Aucune liste pour aujourd'hui — rien à supprimer
+  if (!dailyList) {
+    return NextResponse.json({ deleted: 0 }, { status: 200 })
+  }
+
+  // Supprimer uniquement les items non appelés (called_at IS NULL)
+  const { data: deleted, error: deleteError } = await supabase
+    .from('daily_list_items')
+    .delete()
+    .eq('daily_list_id', dailyList.id)
+    .is('called_at', null)
+    .select('id')
+
+  if (deleteError) {
+    console.log(
+      JSON.stringify({
+        level: 'error',
+        route: 'DELETE /api/daily-list',
+        msg: 'Erreur suppression daily_list_items',
+        error: deleteError.message,
+        user_id: user.id,
+        daily_list_id: dailyList.id,
+      }),
+    )
+    return NextResponse.json(
+      { error: 'Erreur suppression', code: 'DB_ERROR' },
+      { status: 500 },
+    )
+  }
+
+  const deletedCount = deleted?.length ?? 0
+
+  console.log(
+    JSON.stringify({
+      level: 'info',
+      route: 'DELETE /api/daily-list',
+      msg: `${deletedCount} items non appelés supprimés`,
+      user_id: user.id,
+      daily_list_id: dailyList.id,
+      deleted_count: deletedCount,
+    }),
+  )
+
+  return NextResponse.json({ deleted: deletedCount }, { status: 200 })
+}

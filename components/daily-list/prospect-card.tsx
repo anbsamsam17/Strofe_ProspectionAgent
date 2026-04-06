@@ -225,6 +225,92 @@ export function ProspectCard({ item, onFeedbackSubmit }: ProspectCardProps) {
             {prospect.raison_sociale}
           </h2>
 
+          {/* Contact rapide — visible immédiatement sans dérouler */}
+          {(prospect.contact_nom || prospect.contact_prenom || prospect.contact_telephone || prospect.contact_email) && (
+            <div className="mt-2 space-y-1">
+              {(prospect.contact_nom || prospect.contact_prenom) && (
+                <p className="flex items-center gap-1.5 text-sm text-gray-600 dark:text-gray-400">
+                  {/* Icône personne */}
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    width="13"
+                    height="13"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    className="flex-shrink-0 text-gray-400"
+                    aria-hidden="true"
+                  >
+                    <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                    <circle cx="12" cy="7" r="4" />
+                  </svg>
+                  <span className="font-medium text-gray-800 dark:text-gray-200">
+                    {[prospect.contact_prenom, prospect.contact_nom].filter(Boolean).join(' ')}
+                  </span>
+                  {prospect.contact_poste && (
+                    <span className="text-gray-500 dark:text-gray-500">
+                      — {prospect.contact_poste}
+                    </span>
+                  )}
+                </p>
+              )}
+
+              {prospect.contact_telephone && (
+                <a
+                  href={`tel:${prospect.contact_telephone.replace(/\s/g, '')}`}
+                  className="flex items-center gap-1.5 text-sm font-medium text-green-600 transition-colors hover:text-green-700 dark:text-green-400 dark:hover:text-green-300"
+                  aria-label={`Appeler le ${prospect.contact_telephone}`}
+                >
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    width="13"
+                    height="13"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    className="flex-shrink-0"
+                    aria-hidden="true"
+                  >
+                    <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12a19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 3.5 1h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 8.91a16 16 0 0 0 5.27 5.27l1.17-1.17a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 21.28 15l.64 1.92z" />
+                  </svg>
+                  {prospect.contact_telephone}
+                </a>
+              )}
+
+              {prospect.contact_email && (
+                <a
+                  href={`mailto:${prospect.contact_email}`}
+                  className="flex items-center gap-1.5 text-sm font-medium text-green-600 transition-colors hover:text-green-700 dark:text-green-400 dark:hover:text-green-300"
+                  aria-label={`Envoyer un email à ${prospect.contact_email}`}
+                >
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    width="13"
+                    height="13"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    className="flex-shrink-0"
+                    aria-hidden="true"
+                  >
+                    <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" />
+                    <polyline points="22,6 12,13 2,6" />
+                  </svg>
+                  {prospect.contact_email}
+                </a>
+              )}
+            </div>
+          )}
+
           {/* Tags */}
           <div className="mt-2.5 flex flex-wrap gap-1.5">
             {prospect.secteur_libelle && (

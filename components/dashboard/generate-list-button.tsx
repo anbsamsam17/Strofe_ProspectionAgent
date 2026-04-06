@@ -4,9 +4,9 @@ import { useState } from 'react'
 
 interface GenerateListButtonProps {
   hasExistingList: boolean
-  /** Nombre d'items déjà dans la liste du jour (pour différencier "compléter" vs "ajouter") */
+  /** Nombre total d'items dans la liste du jour (mode cumulatif) */
   listItemCount?: number
-  /** Objectif quotidien d'appels (ex: 15) */
+  /** Objectif de nouveaux prospects ajoutés à chaque run (ex: 15) */
   dailyTarget?: number
 }
 
@@ -42,26 +42,19 @@ export function GenerateListButton({
     }
   }
 
-  // Détermine le libellé du bouton selon l'état de la liste
-  const isListComplete = hasExistingList && listItemCount >= dailyTarget
-  const isListPartial = hasExistingList && listItemCount > 0 && listItemCount < dailyTarget
-
+  // Mode cumulatif : chaque run ajoute dailyTarget nouveaux prospects.
+  // Le libellé reflète ce comportement d'accumulation.
   const buttonLabel = !hasExistingList
     ? 'Générer la liste du jour'
-    : isListPartial
-      ? 'Compléter la liste'
-      : 'Ajouter de nouveaux prospects'
+    : `Ajouter ${dailyTarget} prospects`
 
   const ariaLabel = !hasExistingList
     ? 'Générer la liste du jour'
-    : isListPartial
-      ? `Compléter la liste (${listItemCount}/${dailyTarget} appels)`
-      : `Ajouter de nouveaux prospects à la liste (${listItemCount}/${dailyTarget} — liste complète)`
+    : `Ajouter ${dailyTarget} nouveaux prospects à la liste (${listItemCount} appels programmés actuellement)`
 
+  // Texte d'aide : affiche le total courant uniquement si une liste existe
   const helpText = hasExistingList
-    ? isListComplete
-      ? `Liste complète (${listItemCount}/${dailyTarget}). Les appels déjà effectués seront conservés.`
-      : `${listItemCount}/${dailyTarget} appels — les appels effectués seront conservés.`
+    ? `${listItemCount} appel${listItemCount > 1 ? 's' : ''} programmé${listItemCount > 1 ? 's' : ''} actuellement`
     : null
 
   if (success) {
