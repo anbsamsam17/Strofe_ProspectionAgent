@@ -1,10 +1,9 @@
 // ============================================================
 // SOURCING — Agent IA Prospection Bilan Carbone
-// Source : API Sirene INSEE v3.11 + ADEME BEGES
+// Source : API Sirene INSEE v3.11 + ADEME BEGES (Data Fair)
 // ============================================================
 
 import type {
-  AdemeBeges,
   Prospect,
   SireneEtablissement,
   SireneResponse,
@@ -14,10 +13,13 @@ import type {
 // CONSTANTES
 // ------------------------------------------------------------
 
-const INSEE_TOKEN_URL = 'https://portail-api.insee.fr/token'
-const INSEE_SIRET_URL = 'https://portail-api.insee.fr/entreprises/sirene/V3.11/siret'
-const ADEME_BEGES_URL = 'https://data.ademe.fr/api/3/action/datastore_search'
-const ADEME_RESOURCE_ID = 'dbe07a87-8a2b-47d3-a0ca-f2a7b5e4f3c2'
+// Depuis sept. 2025, l'INSEE a remplacé OAuth2 (client_id/secret) par une API Key simple.
+// Anciens endpoints (MORTS) : portail-api.insee.fr/token, portail-api.insee.fr/entreprises/sirene/V3.11/siret
+const INSEE_SIRET_URL = 'https://api.insee.fr/api-sirene/3.11/siret'
+
+// BUG-01 FIX : l'ancien endpoint CKAN (data.ademe.fr/api/3/action/datastore_search) est mort.
+// Nouvel endpoint : API Data Fair (v1), recherche full-text par SIREN.
+const ADEME_BEGES_URL = 'https://data.ademe.fr/data-fair/api/v1/datasets/bilan-ges/lines'
 
 // Codes NAF prioritaires (viticulture, aéro, logistique, agro-alimentaire, industrie)
 const NAF_PRIORITAIRES = [
@@ -55,14 +57,41 @@ export interface SourcingOptions {
   codePostalRange?: string
 }
 
-interface InseeBearerCache {
-  token: string
-  expiresAt: number
+/**
+ * Type local représentant un record ADEME BEGES renvoyé par l'API Data Fair.
+ * Les champs correspondent à l'API : https://data.ademe.fr/data-fair/api/v1/datasets/bilan-ges/lines
+ * Ce type est plus riche que l'interface AdemeBeges de types.ts (qui reste la surface publique).
+ */
+interface AdemeBegesDataFairRecord {
+  siren_principal: string
+  raison_sociale: string
+  annee_de_reporting: number
+  date_de_publication: string
+  courriel?: string
+  responsable_du_suivi?: string
+  fonction?: string
+  id: string
+  structure_obligee?: string
 }
 
-// Cache mémoire du token (valide 7 jours, donc on peut le garder en mémoire
-// dans un process long comme un cron serverless Edge Function warm)
-let _inseeTokenCache: InseeBearerCache | null = null
+/**
+ * Type enrichi pour usage interne : contient les champs supplémentaires
+ * renvoyés par l'API Data Fair (contact, URL bilan, validité).
+ */
+interface AdemeBegesEnrichi {
+  siren: string
+  raison_sociale: string
+  annee_reporting: number
+  date_publication: string
+  url_bilan: string
+  /** Responsable du suivi BEGES (contact ADEME) */
+  responsable_du_suivi?: string
+  /** Poste / fonction du responsable */
+  fonction?: string
+  /** Email du responsable */
+  courriel?: string
+}
+
 
 // ------------------------------------------------------------
 // HELPERS
@@ -131,81 +160,22 @@ async function fetchWithRetry(
 }
 
 // ------------------------------------------------------------
-// OAUTH2 TOKEN INSEE
+// API KEY INSEE (depuis sept. 2025 — remplace OAuth2)
 // ------------------------------------------------------------
 
 /**
- * Obtient un Bearer token OAuth2 pour l'API Sirene INSEE.
- * Utilise un cache mémoire — le token est valide 7 jours.
- * Renouvelle automatiquement si expiré (avec 1 min de marge).
+ * Retourne la clé API INSEE depuis les variables d'environnement.
+ * Depuis sept. 2025, l'INSEE utilise une API Key simple au lieu d'OAuth2.
+ * La clé se génère sur https://portail-api.insee.fr/ → Applications → API Key.
  */
-export async function getInseeBearerToken(): Promise<string> {
-  const now = Date.now()
-  const ONE_MINUTE_MS = 60_000
-
-  // Retourner le token en cache s'il est encore valide (avec 1 min de marge)
-  if (_inseeTokenCache && _inseeTokenCache.expiresAt - ONE_MINUTE_MS > now) {
-    return _inseeTokenCache.token
-  }
-
-  const clientId = process.env.INSEE_CLIENT_ID
-  const clientSecret = process.env.INSEE_CLIENT_SECRET
-
-  if (!clientId || !clientSecret) {
+export function getInseeApiKey(): string {
+  const apiKey = process.env.INSEE_API_KEY
+  if (!apiKey) {
     throw new Error(
-      'getInseeBearerToken: INSEE_CLIENT_ID et INSEE_CLIENT_SECRET sont requis',
+      'getInseeApiKey: INSEE_API_KEY est requis. Générez-la sur https://portail-api.insee.fr/',
     )
   }
-
-  const credentials = Buffer.from(`${clientId}:${clientSecret}`).toString('base64')
-
-  let response: Response
-  try {
-    response = await fetchWithRetry(INSEE_TOKEN_URL, {
-      method: 'POST',
-      headers: {
-        Authorization: `Basic ${credentials}`,
-        'Content-Type': 'application/x-www-form-urlencoded',
-      },
-      body: 'grant_type=client_credentials',
-    })
-  } catch (err) {
-    throw new Error(
-      `getInseeBearerToken: impossible d'obtenir le token INSEE. ${
-        err instanceof Error ? err.message : String(err)
-      }`,
-    )
-  }
-
-  if (!response.ok) {
-    const body = await response.text().catch(() => '(body illisible)')
-    throw new Error(
-      `getInseeBearerToken: HTTP ${response.status} — ${body}`,
-    )
-  }
-
-  const data = (await response.json()) as { access_token: string; expires_in: number }
-
-  if (!data.access_token) {
-    throw new Error('getInseeBearerToken: access_token absent dans la réponse INSEE')
-  }
-
-  // Mettre en cache (expires_in est en secondes)
-  _inseeTokenCache = {
-    token: data.access_token,
-    expiresAt: now + data.expires_in * 1_000,
-  }
-
-  console.log(
-    JSON.stringify({
-      level: 'info',
-      module: 'sourcing',
-      msg: 'Token INSEE renouvelé',
-      expires_in_hours: Math.floor(data.expires_in / 3600),
-    }),
-  )
-
-  return data.access_token
+  return apiKey
 }
 
 // ------------------------------------------------------------
@@ -225,20 +195,30 @@ export async function sourcerEntreprises(
     codePostalRange = CODE_POSTAL_QUERY,
   } = options
 
-  const token = await getInseeBearerToken()
+  const apiKey = getInseeApiKey()
 
   // Construction du filtre Lucene
-  // L'API Sirene utilise les codes NAF sans point (ex: "4941A" et non "49.41A")
-  const nafFilter = `activitePrincipaleEtablissement:(${nafCodes
-    .map((c) => c.replace('.', ''))
-    .join(' ')})`
+  // L'API Sirene utilise les codes NAF sans point (ex: "4941A" et non "49.41A").
+  // On retire le point via replace — mais String.replace() ne remplace que la PREMIÈRE occurrence.
+  // "01.21Z" → "0121Z" (correct). Pas de second point dans un code NAF valide.
+  // IMPORTANT : si nafCodes est vide après nettoyage, ne PAS inclure le filtre NAF
+  // pour éviter un filtre Lucene malformé "activitePrincipaleEtablissement:()" → HTTP 400.
+  const cleanedNafCodes = nafCodes
+    .map((c) => c.replace('.', '').trim().toUpperCase())
+    .filter((c) => c.length > 0)
 
-  const query = [
+  const queryParts: string[] = [
     codePostalRange,
     `trancheEffectifsEtablissement:[${TRANCHE_MIN} TO ${TRANCHE_MAX}]`,
     'etatAdministratifEtablissement:A',
-    nafFilter,
-  ].join(' AND ')
+  ]
+
+  // N'ajouter le filtre NAF que si la liste est non vide — sinon on cible tous les secteurs
+  if (cleanedNafCodes.length > 0) {
+    queryParts.push(`activitePrincipaleEtablissement:(${cleanedNafCodes.join(' ')})`)
+  }
+
+  const query = queryParts.join(' AND ')
 
   const allEtablissements: SireneEtablissement[] = []
   const pageSize = 100
@@ -255,7 +235,7 @@ export async function sourcerEntreprises(
     try {
       response = await fetchWithRetry(url.toString(), {
         headers: {
-          Authorization: `Bearer ${token}`,
+          'X-INSEE-Api-Key-Integration': apiKey,
           Accept: 'application/json',
         },
       })
@@ -327,18 +307,133 @@ export async function sourcerEntreprises(
 }
 
 // ------------------------------------------------------------
-// ADEME BEGES
+// FALLBACK : API Recherche Entreprises (data.gouv.fr — open data, sans clé)
+// Utilisée quand l'API Sirene INSEE est indisponible ou que la clé est invalide.
+// ------------------------------------------------------------
+
+const RECHERCHE_ENTREPRISES_URL = 'https://recherche-entreprises.api.gouv.fr/search'
+
+interface RechercheEntreprisesResult {
+  siren: string
+  nom_complet: string
+  nom_raison_sociale: string
+  siege: {
+    siret: string
+    activite_principale: string
+    code_postal: string
+    libelle_commune: string
+    adresse: string
+    tranche_effectif_salarie: string
+    annee_tranche_effectif_salarie: string
+    etat_administratif: string
+  }
+  activite_principale: string
+  tranche_effectif_salarie: string
+  etat_administratif: string
+}
+
+/**
+ * Sourcing fallback via l'API Recherche Entreprises (open data, pas de clé).
+ * Convertit les résultats au format SireneEtablissement pour compatibilité.
+ */
+export async function sourcerEntreprisesFallback(
+  options: SourcingOptions = {},
+): Promise<SireneEtablissement[]> {
+  const { maxResults = 200, nafCodes = NAF_PRIORITAIRES } = options
+
+  const allEtablissements: SireneEtablissement[] = []
+  const perPage = 25 // max par page de cette API
+
+  // L'API recherche-entreprises utilise le format NAF AVEC point (49.41A, pas 4941A).
+  for (const naf of nafCodes) {
+    if (allEtablissements.length >= maxResults) break
+
+    const url = new URL(RECHERCHE_ENTREPRISES_URL)
+    url.searchParams.set('activite_principale', naf)
+    url.searchParams.set('departement', '33')
+    url.searchParams.set('tranche_effectif_salarie', '31,32,41,42,51,52,53')
+    url.searchParams.set('etat_administratif', 'A')
+    url.searchParams.set('per_page', String(perPage))
+    url.searchParams.set('page', '1')
+
+    let response: Response
+    try {
+      response = await fetchWithRetry(url.toString(), {
+        headers: { Accept: 'application/json' },
+      })
+    } catch (err) {
+      console.log(JSON.stringify({
+        level: 'warn',
+        module: 'sourcing',
+        msg: `Recherche Entreprises fallback: erreur pour NAF ${naf}`,
+        error: err instanceof Error ? err.message : String(err),
+      }))
+      continue
+    }
+
+    if (!response.ok) continue
+
+    let data: { results?: RechercheEntreprisesResult[] }
+    try {
+      data = await response.json()
+    } catch {
+      continue
+    }
+
+    const results = data?.results ?? []
+
+    for (const r of results) {
+      if (allEtablissements.length >= maxResults) break
+      if (!r.siren || !r.siege) continue
+
+      // Convertir au format SireneEtablissement pour compatibilité avec enrichirProspect
+      const etab: SireneEtablissement = {
+        siret: r.siege.siret,
+        siren: r.siren,
+        denominationUniteLegale: r.nom_raison_sociale || r.nom_complet,
+        codePostalEtablissement: r.siege.code_postal,
+        libelleCommuneEtablissement: r.siege.libelle_commune,
+        activitePrincipaleEtablissement: r.siege.activite_principale || r.activite_principale,
+        trancheEffectifsEtablissement: r.siege.tranche_effectif_salarie || r.tranche_effectif_salarie,
+        etatAdministratifEtablissement: 'A',
+        adresseEtablissement: {
+          libelleVoieEtablissement: r.siege.adresse,
+          codePostalEtablissement: r.siege.code_postal,
+          libelleCommuneEtablissement: r.siege.libelle_commune,
+        },
+      }
+
+      allEtablissements.push(etab)
+    }
+
+    console.log(JSON.stringify({
+      level: 'info',
+      module: 'sourcing',
+      msg: `Recherche Entreprises fallback: NAF ${naf}`,
+      resultats: results.length,
+      cumul: allEtablissements.length,
+    }))
+  }
+
+  return allEtablissements.slice(0, maxResults)
+}
+
+// ------------------------------------------------------------
+// ADEME BEGES — API Data Fair (remplace CKAN mort)
 // ------------------------------------------------------------
 
 /**
  * Vérifie si une entreprise a publié un BEGES dans la base ADEME.
+ * Utilise l'API Data Fair (endpoint /bilan-ges/lines) — l'ancien endpoint CKAN est mort.
+ * Retourne le record le PLUS RÉCENT (tri par annee_de_reporting desc).
  * Retourne null si aucun résultat ou en cas d'erreur.
  */
-export async function verifierBegesAdeme(siren: string): Promise<AdemeBeges | null> {
+export async function verifierBegesAdeme(siren: string): Promise<AdemeBegesEnrichi | null> {
+  // L'API Data Fair accepte q= pour la recherche full-text par SIREN,
+  // size=5 pour récupérer plusieurs années et choisir la plus récente.
   const url = new URL(ADEME_BEGES_URL)
-  url.searchParams.set('resource_id', ADEME_RESOURCE_ID)
   url.searchParams.set('q', siren)
-  url.searchParams.set('limit', '1')
+  url.searchParams.set('size', '5')
 
   let response: Response
   try {
@@ -368,40 +463,99 @@ export async function verifierBegesAdeme(siren: string): Promise<AdemeBeges | nu
     return null
   }
 
-  let data: {
-    result?: {
-      records?: Array<Record<string, unknown>>
-    }
-  }
+  let data: { results?: AdemeBegesDataFairRecord[]; total?: number }
   try {
     data = await response.json()
   } catch {
     return null
   }
 
-  const records = data?.result?.records
-  if (!records || records.length === 0) {
+  const results = data?.results
+  if (!results || results.length === 0) {
     return null
   }
 
-  const record = records[0]
+  // Filtrer sur siren_principal exact pour éviter les faux positifs (full-text peut matcher
+  // sur raison_sociale), puis trier par annee_de_reporting DESC pour prendre le plus récent.
+  const matches = results
+    .filter((r) => r.siren_principal === siren)
+    .sort((a, b) => b.annee_de_reporting - a.annee_de_reporting)
+
+  // Si aucun match exact, tenter sans filtre SIREN (certains bilans ont des sous-entités)
+  const record = matches.length > 0 ? matches[0] : results.sort((a, b) => b.annee_de_reporting - a.annee_de_reporting)[0]
 
   return {
-    siren: String(record['siren'] ?? record['SIREN'] ?? siren),
-    raison_sociale: String(record['raison_sociale'] ?? record['Raison_Sociale'] ?? ''),
-    annee_reporting: Number(
-      record['annee_reporting'] ?? record['Annee_Reporting'] ?? 0,
-    ),
-    statut_publication: String(
-      record['statut_publication'] ?? record['Statut_Publication'] ?? 'publié',
-    ),
-    url_bilan: record['url_bilan']
-      ? String(record['url_bilan'])
-      : undefined,
-    date_publication: record['date_publication']
-      ? String(record['date_publication'])
-      : undefined,
+    siren: record.siren_principal,
+    raison_sociale: record.raison_sociale,
+    annee_reporting: record.annee_de_reporting,
+    date_publication: record.date_de_publication,
+    url_bilan: `https://bilans-ges.ademe.fr/bilans/${record.id}`,
+    responsable_du_suivi: record.responsable_du_suivi || undefined,
+    fonction: record.fonction || undefined,
+    courriel: record.courriel || undefined,
   }
+}
+
+// ------------------------------------------------------------
+// ENRICHISSEMENT TÉLÉPHONE
+// ------------------------------------------------------------
+
+/**
+ * Tente de trouver un numéro de téléphone public pour un SIREN donné.
+ *
+ * Stratégie :
+ * 1. API Recherche Entreprises (recherche-entreprises.api.gouv.fr) — champ siege.telephone
+ * 2. Retourne null si aucune source ne fournit de téléphone
+ *
+ * Note : l'API Entreprise (entreprise.api.gouv.fr/v3) nécessite un token SIRET-specific
+ * non public — elle n'est pas utilisée ici.
+ * L'API Annuaire Entreprises (annuaire-entreprises.data.gouv.fr) ne retourne pas de champ
+ * téléphone dans son format JSON public actuel (2025).
+ */
+export async function rechercherTelephone(siren: string): Promise<string | null> {
+  // Validation SIREN : 9 chiffres
+  if (!/^\d{9}$/.test(siren)) return null
+
+  const url = new URL(RECHERCHE_ENTREPRISES_URL)
+  url.searchParams.set('q', siren)
+  url.searchParams.set('per_page', '1')
+  url.searchParams.set('page', '1')
+
+  let response: Response
+  try {
+    response = await fetchWithRetry(url.toString(), {
+      headers: { Accept: 'application/json' },
+    })
+  } catch {
+    return null
+  }
+
+  if (!response.ok) return null
+
+  let data: { results?: Array<{ siege?: { telephone?: string }; matching_etablissements?: Array<{ telephone?: string }> }> }
+  try {
+    data = await response.json()
+  } catch {
+    return null
+  }
+
+  const results = data?.results ?? []
+  if (results.length === 0) return null
+
+  const premier = results[0]
+
+  // Priorité 1 : téléphone du siège
+  const telSiege = premier?.siege?.telephone?.trim()
+  if (telSiege && telSiege.length >= 10) return telSiege
+
+  // Priorité 2 : téléphone dans les établissements matchés
+  const matchingEtabs = premier?.matching_etablissements ?? []
+  for (const etab of matchingEtabs) {
+    const tel = etab?.telephone?.trim()
+    if (tel && tel.length >= 10) return tel
+  }
+
+  return null
 }
 
 // ------------------------------------------------------------
@@ -442,7 +596,7 @@ export async function enrichirProspect(
     : undefined
 
   // Vérification BEGES ADEME (sans bloquer sur erreur)
-  let begesAdeme: AdemeBeges | null = null
+  let begesAdeme: AdemeBegesEnrichi | null = null
   try {
     begesAdeme = await verifierBegesAdeme(etab.siren)
   } catch (err) {
@@ -454,6 +608,24 @@ export async function enrichirProspect(
         error: err instanceof Error ? err.message : String(err),
       }),
     )
+  }
+
+  // Calcul de la validité BEGES : un BEGES est valide si son année de reporting
+  // est dans les 4 dernières années (obligation de renouvellement quadriennal).
+  // Ex: en 2026, un BEGES de 2022 est encore valide, un de 2021 ne l'est plus.
+  const currentYear = new Date().getFullYear()
+  const begesValide = begesAdeme !== null
+    ? begesAdeme.annee_reporting >= currentYear - 4
+    : undefined
+
+  // Enrichissement téléphone : tentative via Recherche Entreprises (open data).
+  // ADEME ne fournit pas de téléphone — on requête l'API de recherche avec le SIREN.
+  // Non bloquant : si la source ne retourne rien, contact_telephone reste null.
+  let contactTelephone: string | null = null
+  try {
+    contactTelephone = await rechercherTelephone(etab.siren)
+  } catch {
+    // Silencieux — le téléphone est une donnée enrichissement best-effort
   }
 
   const prospect: Partial<Prospect> = {
@@ -474,6 +646,13 @@ export async function enrichirProspect(
     beges_derniere_publication: begesAdeme?.date_publication
       ? begesAdeme.date_publication.substring(0, 10)
       : undefined,
+    beges_url: begesAdeme?.url_bilan ?? undefined,
+    beges_valide: begesValide,
+    // Enrichissement contact depuis les données ADEME + téléphone Recherche Entreprises
+    contact_nom: begesAdeme?.responsable_du_suivi ?? undefined,
+    contact_poste: begesAdeme?.fonction ?? undefined,
+    contact_email: begesAdeme?.courriel ?? undefined,
+    contact_telephone: contactTelephone ?? undefined,
     obligation_beges: obligationBeges,
     source: 'sirene_api',
     signaux: [],

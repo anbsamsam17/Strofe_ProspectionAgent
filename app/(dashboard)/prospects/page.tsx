@@ -268,6 +268,9 @@ export default async function ProspectsPage({
                     <SortIcon column="score_priorite" currentSort={params.sort} currentOrder={params.order} />
                   </Link>
                 </th>
+                <th scope="col" className={`${th} hidden lg:table-cell`}>
+                  BEGES
+                </th>
                 <th scope="col" className={th}>
                   <Link
                     href={buildSortHref('statut')}
@@ -364,6 +367,60 @@ export default async function ProspectsPage({
                         </div>
                       </td>
 
+                      {/* BEGES */}
+                      <td className="hidden px-4 py-3.5 lg:table-cell">
+                        {(() => {
+                          const begesPublie = prospect.beges_publie
+                          const begesValide = prospect.beges_valide
+                          const begesUrl = prospect.beges_url
+                          const begesDate = prospect.beges_derniere_publication
+
+                          let badgeClass: string
+                          let badgeLabel: string
+
+                          if (begesPublie && begesValide) {
+                            badgeClass = 'bg-green-50 text-green-700 border-green-200 dark:bg-green-950/50 dark:text-green-400 dark:border-green-800'
+                            badgeLabel = 'Publié'
+                          } else if (begesPublie && !begesValide) {
+                            badgeClass = 'bg-orange-50 text-orange-700 border-orange-200 dark:bg-orange-950/50 dark:text-orange-400 dark:border-orange-800'
+                            badgeLabel = 'Expiré'
+                          } else {
+                            badgeClass = 'bg-red-50 text-red-700 border-red-200 dark:bg-red-950/50 dark:text-red-400 dark:border-red-800'
+                            badgeLabel = 'Absent'
+                          }
+
+                          const badge = (
+                            <span
+                              className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-medium ${badgeClass}`}
+                              title={begesDate ? `Dernière publication : ${new Intl.DateTimeFormat('fr-FR', { dateStyle: 'short' }).format(new Date(begesDate))}` : undefined}
+                            >
+                              {badgeLabel}
+                              {begesDate && (
+                                <span className="opacity-70">
+                                  {' '}
+                                  {new Intl.DateTimeFormat('fr-FR', { year: 'numeric' }).format(new Date(begesDate))}
+                                </span>
+                              )}
+                            </span>
+                          )
+
+                          if (begesUrl) {
+                            return (
+                              <a
+                                href={begesUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                aria-label={`Voir le BEGES de ${prospect.raison_sociale} (ouvre dans un nouvel onglet)`}
+                                className="inline-flex hover:opacity-80 transition-opacity"
+                              >
+                                {badge}
+                              </a>
+                            )
+                          }
+                          return badge
+                        })()}
+                      </td>
+
                       {/* Statut */}
                       <td className="px-4 py-3.5">
                         <span
@@ -388,7 +445,7 @@ export default async function ProspectsPage({
                 })
               ) : (
                 <tr>
-                  <td colSpan={7} className="px-4 py-16 text-center">
+                  <td colSpan={8} className="px-4 py-16 text-center">
                     <div className="flex flex-col items-center gap-3">
                       <div className="flex h-12 w-12 items-center justify-center rounded-full bg-gray-100 dark:bg-gray-800">
                         <svg

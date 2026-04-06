@@ -1,6 +1,25 @@
 import type { NextConfig } from 'next'
 import { withSentryConfig } from '@sentry/nextjs'
 
+// En développement, unsafe-eval est nécessaire pour les source maps et Fast Refresh.
+// En production, on le supprime pour réduire la surface d'attaque XSS.
+const isDev = process.env.NODE_ENV === 'development'
+const scriptSrc = isDev
+  ? "script-src 'self' 'unsafe-eval' 'unsafe-inline'"
+  : "script-src 'self' 'unsafe-inline'"
+
+const cspValue = [
+  "default-src 'self'",
+  scriptSrc,
+  "style-src 'self' 'unsafe-inline'",
+  "img-src 'self' blob: data: https:",
+  "font-src 'self'",
+  "connect-src 'self' https://*.supabase.co https://api.openai.com https://api.insee.fr https://*.sentry.io",
+  "frame-ancestors 'none'",
+  "object-src 'none'",
+  "base-uri 'self'",
+].join('; ')
+
 const nextConfig: NextConfig = {
   images: {
     formats: ['image/avif', 'image/webp'],
@@ -28,8 +47,7 @@ const nextConfig: NextConfig = {
           },
           {
             key: 'Content-Security-Policy',
-            value:
-              "default-src 'self'; script-src 'self' 'unsafe-eval' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' blob: data: https:; font-src 'self'; connect-src 'self' https://*.supabase.co https://api.openai.com https://portail-api.insee.fr; frame-ancestors 'none'",
+            value: cspValue,
           },
         ],
       },

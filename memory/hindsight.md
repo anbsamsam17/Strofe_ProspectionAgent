@@ -137,4 +137,239 @@ Claude doit ajouter une entrée à la fin de chaque session significative :
 
 **Comment l'éviter** : Avant d'écrire des templates email avec du texte français, repérer les contractions (n', l', qu', c', j', s') et choisir systématiquement les double-quotes pour ces strings. Lancer `tsc --noEmit` immédiatement après la création de tout nouveau fichier.
 
+## 2026-04-05 — Mise à jour @supabase/supabase-js v2.101 : compatibilité @supabase/ssr
+
+**Erreur commise** : Mise à jour de `@supabase/supabase-js` vers `2.101.1` sans mettre à jour `@supabase/ssr` en parallèle. La v2.101 a changé la signature de `SupabaseClient` de 3 paramètres génériques à 5, ce qui a cassé `@supabase/ssr@0.6.1` qui compilait encore avec l'ancienne signature (3e param = Schema objet, non SchemaName string).
+
+**Règle à retenir** :
+- `@supabase/supabase-js` et `@supabase/ssr` forment un binôme : toujours les mettre à jour ensemble. Vérifier via `npm view @supabase/ssr peerDependencies` la version de supabase-js attendue.
+- Version compatible : `@supabase/ssr@0.10.0` ↔ `@supabase/supabase-js@^2.100.1`
+- Toujours définir `export type Database = {...}` (type alias) pas `export interface Database` — requis pour que `Omit<Database, '__InternalSupabase'>` fonctionne dans les génériques conditionnels de SupabaseClient.
+- Exporter `SupabaseServerClient = ReturnType<typeof createServerClient<Database>>` depuis `server.ts` — évite de se battre avec les paramètres génériques de SupabaseClient directement.
+- Les colonnes JSONB (score_details, signaux, logs) retournent le type `Json` depuis Supabase — toujours utiliser `as unknown as MonType` à la frontière DB/app-types.
+- La relation `daily_lists.user_id → profiles.id` n'est pas visible statiquement par postgrest-js (la FK est vers `auth.users`, pas `public.profiles`) — le join `profiles!inner` dans un select Supabase compile en `SelectQueryError` côté TypeScript → cast `as unknown as T`.
+- `next.config.ts` : `typedRoutes` a quitté `experimental` dans Next.js 15 récent — le déplacer au niveau racine de `NextConfig`.
+
+**Comment l'éviter** :
+1. Avant chaque `npm install @supabase/supabase-js@latest`, vérifier `npm view @supabase/ssr@latest peerDependencies`.
+2. Après toute mise à jour Supabase, exécuter immédiatement `npx tsc --noEmit`.
+3. Chercher les erreurs `never` dans les queries Supabase — signe d'un schema mal résolu (souvent interface vs type ou mismatch de version).
+
+## 2026-04-05 — Tailwind CSS v4 : migration de tailwind.config.ts vers @theme CSS
+
+**Erreur commise** : Le projet avait installe `tailwindcss@^4` mais conservait un `tailwind.config.ts` (syntaxe v3) et n'avait pas de `postcss.config.mjs`. Tailwind v4 ignore completement `tailwind.config.ts` et exige un plugin PostCSS dedie.
+
+**Regle a retenir** :
+- Tailwind v4 utilise la configuration CSS-first via `@theme {}` dans le fichier CSS principal — pas de `tailwind.config.ts`.
+- Le plugin PostCSS de Tailwind v4 s'appelle `@tailwindcss/postcss` (pas `tailwindcss` directement). Il faut creer `postcss.config.mjs` avec `{ plugins: { "@tailwindcss/postcss": {} } }`.
+- La detection des fichiers templates est automatique en v4 (pas besoin de `content: [...]`).
+- Les couleurs custom se declarent comme `--color-brand-500: #22c55e` dans `@theme {}`.
+- Les polices custom se declarent comme `--font-sans: 'Inter', system-ui` dans `@theme {}`.
+- Les animations custom vont dans `@keyframes` reguliers en CSS — pas dans `theme.extend.keyframes`.
+- Le dark mode via `class` est le comportement par defaut en v4, aucune config necessaire.
+
+**Comment l'eviter** :
+- A chaque initialisation d'un projet Next.js avec Tailwind, verifier la version : si `^4`, creer immediatement `postcss.config.mjs` et utiliser `@theme {}`.
+- Ne jamais copier un `tailwind.config.ts` d'un projet v3 vers un projet v4.
+- Verifier que `@import "tailwindcss"` est bien present (et non `@tailwind base; @tailwind components; @tailwind utilities;` syntaxe v3).
+
+## 2026-04-06 — Audit debug pipeline : patterns de bugs récurrents identifiés
+
+**Erreurs commises (dans le code existant)** :
+
+**1. Resource ID externe en dur sans validation**
+- `ADEME_RESOURCE_ID = 'dbe07a87-...'` est un placeholder qui retourne silencieusement `null` à chaque appel.
+- Règle : tout identifiant de ressource externe (dataset ID, resource ID, workspace ID) doit être dans `.env` et validé au démarrage avec un test de connectivité.
+
+**2. Fire-and-forget incompatible avec Vercel serverless**
+- `promise.catch(...)` lancé après `return NextResponse.json()` est tué par Vercel immédiatement.
+- Règle : utiliser `import { after } from 'next/server'` (Next.js 15 natif) pour tout traitement en arrière-plan dans une API Route. Ne jamais utiliser de fire-and-forget nu dans un handler serverless.
+
+**3. Aucun timeout sur les appels LLM**
+- Un appel OpenAI sans timeout peut durer 10 minutes et dépasser la limite Vercel (300s).
+- Règle : toujours configurer `timeout` sur le client OpenAI (`new OpenAI({ timeout: 30_000 })`) et ajouter un retry avec `maxRetries: 2`.
+
+**4. Run concurrent non protégé**
+- Deux runs simultanés peuvent créer une condition de course sur `daily_list_items` (DELETE + INSERT concurrent).
+- Règle : toujours vérifier l'absence d'un run `status = 'running'` avant d'en créer un nouveau. Pattern : SELECT FOR UPDATE ou INSERT avec CHECK via trigger.
+
+**5. Merge partiel de settings JSONB**
+- Des champs (`notification_email`, `target_postal_codes`) présents dans le schema Zod mais oubliés dans le merge conditionnel → silencieusement ignorés.
+- Règle : quand on merge un JSONB, construire le payload merged via une boucle sur les clés du schema Zod plutôt qu'en listant manuellement chaque clé.
+
+**6. Regex UUID : ne pas réinventer une validation qui existe déjà dans le projet**
+- Une helper `isValidUUID` correcte existait dans `prospects/[id]/route.ts` mais n'a pas été réutilisée dans `feedback/route.ts` — regex différente et moins stricte.
+- Règle : les helpers de validation (UUID, SIREN, date) doivent être dans `lib/utils/validation.ts` et importés partout. Ne jamais dupliquer.
+
+**7. pitchs[] et prospects[] décorrélés sans vérification de longueur**
+- Si un batch de pitchs échoue complètement et retourne `[]`, les items créés ont des pitchs vides sans warning visible.
+- Règle : quand deux tableaux sont liés par index (items[i] → pitchs[i]), vérifier `pitchs.length >= prospects.length` avant l'étape de construction des items. Si incohérence, logger un warn avec les counts.
+
+**Comment l'éviter** :
+- Avant tout run de cron : health check des 3 APIs (INSEE, ADEME, OpenAI) avec log du résultat.
+- Avant tout handler API avec body merge : faire la revue exhaustive des clés du schema Zod vs les clés du merge.
+- Avant tout lancement d'une Promise dans un handler serverless : vérifier si `after()` est disponible.
+
+## 2026-04-06 — Audit Performance : Pipeline Agent Nocturne
+
+**Ce qui a bien marché dans la conception actuelle** :
+- Index composite `idx_prospects_user_score_statut` (migration 003) couvre parfaitement phaseSelection : index-only scan, 5-15ms.
+- Dénormalisation `user_id` dans `daily_list_items` validée : policies RLS sans JOIN, O(1).
+- Cache token INSEE au niveau module : bonne pratique serverless, économise 1 appel OAuth2 par run warm.
+- `Promise.allSettled` pour batchs ADEME et cron multi-user : un échec n'arrête pas les autres.
+
+**Bottleneck principal identifié** :
+- `genererPitchsBatch` séquentiel avec delay 500ms = 55-75% du temps pipeline (52-75s sur 62-93s total).
+- Le delay 500ms est 4x plus conservateur que nécessaire (RPM gpt-4o = 500 sur compte standard → 120ms minimum).
+
+**Règle à retenir** :
+- Pour les pipelines LLM avec plusieurs appels, toujours mesurer le RPM réel de l'API avant de choisir un delay. Groupes de 3-5 appels parallèles + delay entre groupes est optimal vs séquentiel pur.
+- Un cron multi-user partageant des credentials API tiers doit tenir compte du rate limit global : 10 users × 2 pages Sirene = 300 req/min vs limite 30 req/min → blocage systématique. Dimensionner les rate limits pour N users dès la conception.
+
+**Risque de scaling critique identifié** :
+- Le handler cron Vercel (`Promise.allSettled` de N runs) a un timeout de 300s global. Si N > 5 et qu'un run est lent, le handler expire avant que tous les runs se terminent. Solution : queue asynchrone (Inngest, Trigger.dev).
+
+**Comment l'éviter** :
+- Avant d'implémenter un pipeline LLM séquentiel, documenter le RPM de l'API cible et calculer le délai minimum réel.
+- Toujours simuler le scénario multi-user dès la conception du cron : multiplier les requêtes API par le nombre d'users attendus et comparer aux rate limits.
+
+## 2026-04-06 — INSEE API : migration OAuth2 → API Key (changement breaking)
+
+**Erreur commise** : L'API Sirene INSEE avait été migrée de `api.insee.fr` vers `portail-api.insee.fr` (commit 5cc69c4) mais l'endpoint `/token` retournait une page HTML Gravitee au lieu de JSON. Le système d'authentification OAuth2 (client_id/secret → Bearer token) avait été **complètement supprimé** par l'INSEE en septembre 2025.
+
+**Règle à retenir** :
+- Depuis septembre 2025, l'INSEE utilise une **API Key simple** (header `X-INSEE-Api-Key-Integration`) au lieu du flow OAuth2 (client_credentials).
+- L'URL de l'API est `https://api.insee.fr/api-sirene/3.11/siret` (nouveau chemin `/api-sirene/3.11/` au lieu de `/entreprises/sirene/V3.11/`).
+- `portail-api.insee.fr` est le **portail développeur** (UI), pas l'API. L'API est sur `api.insee.fr`.
+- Les anciennes variables `INSEE_CLIENT_ID` et `INSEE_CLIENT_SECRET` sont remplacées par une seule `INSEE_API_KEY`.
+
+**Comment l'éviter** :
+- Quand une API externe retourne du HTML au lieu de JSON, c'est probablement un portail/gateway qui a changé — pas un bug réseau.
+- Toujours vérifier le Content-Type de la réponse avant de parser du JSON. Si `text/html`, logger l'erreur clairement.
+- Pour les APIs gouvernementales françaises, surveiller les annonces de migration (souvent sur X/Mastodon des comptes officiels).
+
+## 2026-04-06 — Middleware Next.js : ne pas bloquer les routes API
+
+**Erreur commise** : Le middleware Supabase Auth interceptait TOUTES les routes (y compris `/api/*`) et redirigeait vers `/login` quand il n'y a pas de cookie de session. Les endpoints cron/webhook qui s'authentifient via `Authorization: Bearer {CRON_SECRET}` étaient bloqués avant que leur propre logique d'auth ne s'exécute.
+
+**Règle à retenir** :
+- Les routes API (`/api/*`) gèrent leur propre authentification (Bearer token, API Key, etc.) — le middleware ne doit PAS interférer.
+- Ajouter `isApiRoute = pathname.startsWith('/api/')` dans le middleware et bypasser le redirect auth.
+- Le middleware reste utile pour les security headers sur les routes API (X-Content-Type-Options, X-Frame-Options).
+
+**Comment l'éviter** :
+- À chaque ajout d'un endpoint API avec une auth non-session (Bearer, API Key, webhook signature), vérifier que le middleware ne le bloque pas.
+- Tester les routes API avec curl SANS cookies de session.
+
+## 2026-04-06 — Fallback sourcing : stratégie de résilience API
+
+**Erreur commise** : Quand l'API Sirene INSEE retournait 0 résultats (HTTP 401 silencieux), `sourcerEntreprises()` ne throw pas — elle retourne un tableau vide. L'orchestrateur ne basculait donc pas sur le fallback.
+
+**Règle à retenir** :
+- Le fallback doit se déclencher aussi quand le résultat est vide (pas seulement sur une erreur throw).
+- L'API Recherche Entreprises (`recherche-entreprises.api.gouv.fr`) est un fallback viable : open data, pas de clé, format similaire.
+- Attention : cette API utilise le format NAF AVEC point (`49.41A`) tandis que l'API Sirene utilise SANS point (`4941A`). Les deux conventions existent.
+
+**Comment l'éviter** :
+- Pour toute API externe critique, prévoir un fallback et le tester indépendamment.
+- Le fallback doit se déclencher sur 3 conditions : (1) throw, (2) résultat vide, (3) résultat invalide.
+
+## 2026-04-06 — API ADEME BEGES : migration CKAN mort → API Data Fair
+
+**Erreur commise** : L'endpoint CKAN (`data.ademe.fr/api/3/action/datastore_search` avec `ADEME_RESOURCE_ID = 'dbe07a87-...'`) était un placeholder hardcodé retournant silencieusement des résultats vides. Le scoring BEGES était donc inopérant depuis l'origine.
+
+**Règle à retenir** :
+- Le nouvel endpoint ADEME BEGES est `https://data.ademe.fr/data-fair/api/v1/datasets/bilan-ges/lines?q={siren}&size=5` (API Data Fair).
+- Champs utiles : `siren_principal`, `annee_de_reporting`, `date_de_publication`, `responsable_du_suivi`, `fonction`, `courriel`, `id`.
+- URL bilan : `https://bilans-ges.ademe.fr/bilans/{id}`.
+- Le full-text peut matcher sur la raison_sociale — toujours filtrer sur `siren_principal === siren`.
+- Tout identifiant de dataset externe DOIT être en env var, validé au démarrage.
+
+**Comment l'éviter** :
+- Avant d'implémenter un appel API externe, tester l'endpoint en curl et vérifier que les champs attendus sont bien présents.
+
+## 2026-04-06 — Scoring BEGES 3 niveaux : absent / expiré / valide
+
+**Règle à retenir** :
+- Un BEGES expiré (beges_publie=true, beges_valide=false) est une cible prioritaire — obligation de renouvellement non respectée. Score intermédiaire (15 pts) entre absent (20 pts) et valide (0 pts).
+- Tester `beges_valide === false` (strict) : `undefined` signifie "inconnu", traiter comme valide pour ne pas pénaliser.
+
+## 2026-04-06 — Mode append daily_list : ne jamais effacer l'historique des appels
+
+**Règle à retenir** :
+- Un DELETE total sur `daily_list_items` efface les appels déjà effectués. Toujours filtrer `.is('called_at', null)` pour ne supprimer que les items non traités.
+- Récupérer MAX(ordre) des items conservés et utiliser comme offset pour les nouveaux items.
+
+## 2026-04-06 — API Routes : 6 corrections (BUG-04/05/06/08 + IMP-03/04)
+
+**Règles à retenir** :
+
+**1. after() vs fire-and-forget dans les handlers serverless**
+- Un `promise.catch(...)` nu lancé APRES `return NextResponse.json()` est tué immédiatement par Vercel. La réponse HTTP ferme le contexte d'exécution.
+- Solution : `import { after } from 'next/server'` — le callback s'exécute après la réponse mais AVANT que la fonction serverless soit détruite. Disponible nativement en Next.js 15.
+- Ne jamais écrire : `runSomething().catch(...)` après un `return` dans un handler. Toujours utiliser `after()`.
+
+**2. Constante `now` unique pour éviter les bugs à minuit**
+- Si `new Date()` est appelé plusieurs fois dans un handler (calcul targetDate, conditions, message de réponse), les valeurs peuvent différer si le handler s'exécute exactement à minuit.
+- Règle : extraire `const now = new Date()` et `const today = now.toISOString().split('T')[0]` comme premières lignes du handler, puis référencer `today` partout.
+
+**3. Merge JSONB exhaustif : révision systématique vs listing manuel**
+- Le listing manuel des champs à merger dans un JSONB est sujet aux oublis — si Zod valide N champs, le merge doit couvrir les N mêmes champs.
+- Méthode de vérification : compter les clés dans le schema Zod et compter les blocs `...(payload.X !== undefined && { X })` — les deux comptes doivent être égaux.
+
+**4. GET avec effets de bord = violation HTTP**
+- Un GET qui envoie des emails et modifie la base de données viole les spécifications HTTP (idempotence et safety).
+- Règle : tout handler qui crée, modifie ou déclenche un effet de bord doit être POST, PATCH ou PUT. Les crons Vercel supportent POST nativement.
+
+**5. Regex UUID : toujours utiliser la variante stricte RFC 4122**
+- `/^[0-9a-f-]{36}$/` est trop permissive — elle accepte des chaînes du type `"---...---"` (36 tirets).
+- Regex correcte : `/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i`
+- Cette regex valide la variante (1-5) et les variant bits ([89ab]) conformément à RFC 4122.
+
+**6. Vérifier les runs concurrents avant tout lancement d'orchestrateur**
+- Deux runs simultanés sur la même table `daily_list_items` créent une condition de course (DELETE/INSERT concurrent).
+- Pattern standard : `SELECT id FROM agent_runs WHERE user_id = $1 AND status = 'running' LIMIT 1` avant tout INSERT de run. Si résultat non-null → retourner HTTP 409 avec le `runId` existant.
+
+## 2026-04-06 — Migration DB requise quand on ajoute des colonnes au type Prospect
+
+**Erreur commise** : Ajout de `beges_url` et `beges_valide` dans `lib/types.ts` sans migration SQL. L'upsert Supabase a echoue avec "Could not find the 'beges_url' column".
+
+**Regle a retenir** : Toute nouvelle colonne dans un type TypeScript DOIT avoir une migration SQL. L'upsert doit etre resilient (fallback sans champs manquants si migration non appliquee).
+
+## 2026-04-06 — API ADEME Data Fair : le bon endpoint
+
+**Endpoint correct** : `https://data.ademe.fr/data-fair/api/v1/datasets/bilan-ges/lines?q={siren}&size=5`
+**Champs cles** : `siren_principal`, `date_de_publication`, `annee_de_reporting`, `responsable_du_suivi`, `fonction`, `courriel`, `id`
+**URL bilan** : `https://bilans-ges.ademe.fr/bilans/{id}`
+
+## 2026-04-06 — Filtre Lucene INSEE Sirene : liste NAF vide → HTTP 400
+
+**Erreur commise** : `nafCodes.map(c => c.replace('.', '')).join(' ')` produit une chaîne vide quand `nafCodes = []`. Le filtre Lucene `activitePrincipaleEtablissement:()` est syntaxiquement invalide → HTTP 400 "Erreur de syntaxe dans le paramètre q".
+
+**Règle à retenir** : Tout filtre Lucene construit dynamiquement doit être conditionnel. Utiliser un tableau `queryParts[]` et n'y `push()` un filtre que si les valeurs sources sont non vides. Ne jamais concatener directement dans une string.
+
+**Comment l'éviter** : Avant tout `.join(' AND ')` sur un filtre Lucene, logger les parts pour vérification. Ajouter un test unitaire avec `nafCodes = []` sur `sourcerEntreprises()`.
+
+## 2026-04-06 — Enrichissement téléphone : API Recherche Entreprises via siege.telephone
+
+**Règle à retenir** : L'API Recherche Entreprises (`recherche-entreprises.api.gouv.fr`) retourne un champ `siege.telephone` qui peut contenir un numéro de standard. C'est la seule source open-data sans token disponible. L'API Entreprise (`entreprise.api.gouv.fr/v3`) et l'API Annuaire Entreprises ne sont pas exploitables sans token ou ne retournent pas de téléphone. Traiter cet enrichissement comme best-effort (silencieux si null).
+
+## 2026-04-06 — Dashboard stale : `force-dynamic` + `.limit(1)` + `.order(referencedTable)`
+
+**Erreur commise** : La page `dashboard/page.tsx` affichait un ancien run échoué même après des runs réussis plus récents, à cause de trois problèmes combinés.
+
+**Règle 1 — `export const dynamic = 'force-dynamic'` sur toute page dashboard** :
+Next.js 15 peut mettre en cache les Server Components même quand `cookies()` est utilisé dans un module importé. Pour les pages affichant des données temps-réel (statut agent, métriques), toujours ajouter `export const dynamic = 'force-dynamic'` en tête de fichier.
+
+**Règle 2 — Ne pas combiner `.limit(1)` et `.maybeSingle()`** :
+`.maybeSingle()` de postgrest-js v2 impose déjà `LIMIT 1` en interne. Ajouter `.limit(1)` avant est redondant. Forme canonique : `.order('started_at', { ascending: false }).maybeSingle()` — sans `.limit(1)`.
+
+**Règle 3 — Ne pas utiliser `.order(referencedTable)` sur une requête avec `.maybeSingle()`** :
+Trier une relation imbriquée via `.order('colonne', { referencedTable: 'table_enfant' })` peut provoquer une multiplication des lignes retournées par postgrest. `.maybeSingle()` retourne alors `null` au lieu de la ligne attendue (erreur PGRST116 silencieuse). Trier côté JS avec `.sort()`.
+
+**Comment l'éviter** :
+- Toute page dashboard lisant `agent_runs` ou `daily_lists` → `export const dynamic = 'force-dynamic'`
+- Postgrest : `.maybeSingle()` = pas de `.limit(1)`, pas de `.order(referencedTable)`
+- Tri des relations imbriquées : toujours côté JS via `.sort()`, jamais via la chaîne postgrest
+
 <!-- Les entrées suivantes seront ajoutées automatiquement par Claude après chaque session -->

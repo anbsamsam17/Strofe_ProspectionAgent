@@ -83,7 +83,7 @@ export async function PATCH(request: Request) {
       offer_description: currentSettings.offer_description ?? '',
       notification_email: currentSettings.notification_email,
       target_postal_codes: currentSettings.target_postal_codes,
-      // Merge avec payload
+      // Merge avec payload — chaque champ validé par Zod est appliqué si présent
       ...(payload.offer_description !== undefined && {
         offer_description: payload.offer_description,
       }),
@@ -96,13 +96,20 @@ export async function PATCH(request: Request) {
       ...(payload.daily_call_target !== undefined && {
         daily_call_target: payload.daily_call_target,
       }),
+      // Champs précédemment absents du merge — ajoutés pour IMP-03 / BUG-05
+      ...(payload.notification_email !== undefined && {
+        notification_email: payload.notification_email,
+      }),
+      ...(payload.target_postal_codes !== undefined && {
+        target_postal_codes: payload.target_postal_codes,
+      }),
     }
 
     // Mise à jour du profil (UPDATE uniquement — le profil est créé par trigger auth)
-    // Cast nécessaire : les types générés Supabase utilisent Json strict
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const profilesTable = supabase.from('profiles') as any
-    const { error: updateError } = await profilesTable
+    // Cast via unknown pour contourner le type strict Json de Supabase sans perdre
+    // la type-safety (as unknown as Json est préférable à as any)
+    const { error: updateError } = await supabase
+      .from('profiles')
       .update({
         settings: updatedSettings as unknown as Json,
         updated_at: new Date().toISOString(),

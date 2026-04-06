@@ -79,6 +79,10 @@ export interface Prospect {
   contact_linkedin?: string
   beges_publie: boolean
   beges_derniere_publication?: string
+  /** URL directe vers le BEGES sur bilans-ges.ademe.fr */
+  beges_url?: string
+  /** true si le BEGES a moins de 4 ans (obligation renouvellement quadriennal) */
+  beges_valide?: boolean
   obligation_beges: boolean
   score_priorite: number
   score_details: ScoreDetails

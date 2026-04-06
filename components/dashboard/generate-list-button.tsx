@@ -4,9 +4,17 @@ import { useState } from 'react'
 
 interface GenerateListButtonProps {
   hasExistingList: boolean
+  /** Nombre d'items déjà dans la liste du jour (pour différencier "compléter" vs "ajouter") */
+  listItemCount?: number
+  /** Objectif quotidien d'appels (ex: 15) */
+  dailyTarget?: number
 }
 
-export function GenerateListButton({ hasExistingList }: GenerateListButtonProps) {
+export function GenerateListButton({
+  hasExistingList,
+  listItemCount = 0,
+  dailyTarget = 15,
+}: GenerateListButtonProps) {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState(false)
@@ -33,6 +41,28 @@ export function GenerateListButton({ hasExistingList }: GenerateListButtonProps)
       setIsLoading(false)
     }
   }
+
+  // Détermine le libellé du bouton selon l'état de la liste
+  const isListComplete = hasExistingList && listItemCount >= dailyTarget
+  const isListPartial = hasExistingList && listItemCount > 0 && listItemCount < dailyTarget
+
+  const buttonLabel = !hasExistingList
+    ? 'Générer la liste du jour'
+    : isListPartial
+      ? 'Compléter la liste'
+      : 'Ajouter de nouveaux prospects'
+
+  const ariaLabel = !hasExistingList
+    ? 'Générer la liste du jour'
+    : isListPartial
+      ? `Compléter la liste (${listItemCount}/${dailyTarget} appels)`
+      : `Ajouter de nouveaux prospects à la liste (${listItemCount}/${dailyTarget} — liste complète)`
+
+  const helpText = hasExistingList
+    ? isListComplete
+      ? `Liste complète (${listItemCount}/${dailyTarget}). Les appels déjà effectués seront conservés.`
+      : `${listItemCount}/${dailyTarget} appels — les appels effectués seront conservés.`
+    : null
 
   if (success) {
     return (
@@ -94,7 +124,7 @@ export function GenerateListButton({ hasExistingList }: GenerateListButtonProps)
       <button
         onClick={handleClick}
         disabled={isLoading}
-        aria-label={hasExistingList ? 'Régénérer la liste de demain' : 'Générer la liste de demain'}
+        aria-label={ariaLabel}
         className="group relative inline-flex items-center gap-2.5 overflow-hidden rounded-xl bg-green-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition-all hover:bg-green-700 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60 dark:focus:ring-offset-gray-900"
       >
         {/* Shimmer d'arrière-plan au survol */}
@@ -139,12 +169,17 @@ export function GenerateListButton({ hasExistingList }: GenerateListButtonProps)
             >
               <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
             </svg>
-            <span>
-              {hasExistingList ? 'Régénérer la liste' : 'Générer la liste de demain'}
-            </span>
+            <span>{buttonLabel}</span>
           </>
         )}
       </button>
+
+      {/* Texte d'aide — affiché uniquement quand une liste existe */}
+      {helpText && !isLoading && (
+        <p className="text-right text-xs text-gray-400 dark:text-gray-600">
+          {helpText}
+        </p>
+      )}
     </div>
   )
 }

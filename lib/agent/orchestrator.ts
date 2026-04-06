@@ -15,7 +15,7 @@ import type {
   ProfileSettings,
   Prospect,
 } from '@/lib/types'
-import { enrichirProspect, sourcerEntreprises } from './sourcing'
+import { enrichirProspect, sourcerEntreprises, sourcerEntreprisesFallback } from './sourcing'
 import { calculerScore, determinerPriorite, getScoreDetails } from './scoring'
 import { genererPitchsBatch } from './pitch-gen'
 
@@ -114,6 +114,22 @@ async function phaseInit(
   userId: string,
   supabase: SupabaseServerClient,
 ): Promise<AgentRun> {
+  // CRIT-04 : Protection anti-run concurrent.
+  // Vérifier qu'aucun run n'est déjà en cours pour cet utilisateur avant d'en créer un nouveau.
+  // Deux runs simultanés créent une condition de course sur daily_list_items (DELETE + INSERT concurrent).
+  const { data: existingRun } = await supabase
+    .from('agent_runs')
+    .select('id')
+    .eq('user_id', userId)
+    .eq('status', 'running')
+    .maybeSingle()
+
+  if (existingRun) {
+    throw new Error(
+      `Un run est déjà en cours pour cet utilisateur (run_id: ${existingRun.id})`,
+    )
+  }
+
   const { data, error } = await supabase
     .from('agent_runs')
     .insert({
@@ -192,12 +208,41 @@ async function phaseLoadSettings(
 // PHASE 3 : SOURCING
 // ------------------------------------------------------------
 
+// NAF_PRIORITAIRES par défaut utilisés quand les settings ne fournissent pas de codes NAF valides.
+// Format sans point (API Sirene) — le format avec point est utilisé dans le fallback.
+const NAF_PRIORITAIRES_DEFAULT = [
+  '01.21Z', '01.22Z',
+  '30.30Z',
+  '52.10B', '52.29A',
+  '10.11Z', '10.13A', '10.32Z', '10.51A', '10.71A',
+  '46.17B',
+  '49.41A', '49.41B', '52.21Z',
+]
+
 async function phaseSourcing(
   run: AgentRun,
   supabase: SupabaseServerClient,
+  settings: ProfileSettings,
 ): Promise<Array<Partial<Prospect>>> {
   run.phase = 'sourcing_sirene'
   log(run, 'sourcing_sirene', 'Démarrage du sourcing Sirene INSEE', 'info')
+
+  // IMP-08 : Construction des options de sourcing depuis les settings utilisateur.
+  // - Si settings.target_sectors est non vide, l'utiliser comme nafCodes.
+  //   Note : les settings stockent les secteurs sous forme de codes NAF (ex: "49.41A")
+  //   ou de noms libres. On valide le format NAF (NNNNX) — si invalide, fallback NAF_PRIORITAIRES.
+  // - Si settings.target_city est défini, l'utiliser pour affiner le filtre géographique.
+  //   Pour l'instant, on utilise le code postal range par défaut (Gironde) — la v2 mapera
+  //   target_city → code département pour la plage codePostalRange.
+  const targetSectors = settings.target_sectors ?? []
+  const nafRegex = /^\d{2}\.\d{2}[A-Z]$/
+  const validNafCodes = targetSectors.filter((s) => nafRegex.test(s.trim().toUpperCase()))
+  const nafCodes = validNafCodes.length > 0 ? validNafCodes : NAF_PRIORITAIRES_DEFAULT
+
+  log(run, 'sourcing_sirene', `Codes NAF utilisés pour le sourcing`, 'info', {
+    source: validNafCodes.length > 0 ? 'settings_user' : 'naf_prioritaires_default',
+    count: nafCodes.length,
+  })
 
   // Récupérer les SIREN déjà en base pour cet utilisateur (déduplication)
   const { data: existingSirens, error: sirenError } = await supabase
@@ -217,14 +262,27 @@ async function phaseSourcing(
 
   log(run, 'sourcing_sirene', `${sirenSet.size} SIREN déjà en base (à exclure)`, 'info')
 
-  // Appel API Sirene
+  // Appel API Sirene INSEE (primaire) avec fallback Recherche Entreprises (open data)
   let etablissements: Awaited<ReturnType<typeof sourcerEntreprises>> = []
   try {
-    etablissements = await sourcerEntreprises({ maxResults: 200 })
+    etablissements = await sourcerEntreprises({ maxResults: 200, nafCodes })
   } catch (err) {
-    throw new Error(
-      `phaseSourcing: échec Sirene — ${err instanceof Error ? err.message : String(err)}`,
-    )
+    log(run, 'sourcing_sirene', `API Sirene INSEE erreur — bascule sur fallback`, 'warn', {
+      error: err instanceof Error ? err.message : String(err),
+    })
+  }
+
+  // Fallback si Sirene a retourné 0 résultats (auth 401, rate limit, ou API down)
+  if (etablissements.length === 0) {
+    log(run, 'sourcing_sirene', 'Sirene: 0 résultats — bascule sur Recherche Entreprises (open data)', 'warn')
+    try {
+      etablissements = await sourcerEntreprisesFallback({ maxResults: 200, nafCodes })
+      log(run, 'sourcing_sirene', `Fallback Recherche Entreprises: ${etablissements.length} établissements sourcés`, 'info')
+    } catch (fallbackErr) {
+      throw new Error(
+        `phaseSourcing: échec Sirene ET fallback — ${fallbackErr instanceof Error ? fallbackErr.message : String(fallbackErr)}`,
+      )
+    }
   }
 
   run.prospects_sourced = etablissements.length
@@ -235,15 +293,14 @@ async function phaseSourcing(
   log(run, 'sourcing_sirene', `${nouveaux.length} nouveaux établissements après déduplication`, 'info')
 
   // Enrichir chaque établissement (appel ADEME par établissement)
-  // Parallélisation par batch de 10 pour réduire la durée d'enrichissement :
+  // Parallélisation par batch de 20 (augmenté depuis 10 — perf audit recommandation #3) :
   // - 200 étabs séquentiels à ~300 ms/appel = ~60 s
-  // - 200 étabs en batchs de 10 = ~6-8 s
-  // L'API ADEME publique n'impose pas de rate limit documenté — 10 req simultanées
-  // est conservateur et compatible avec les quotas observés en pratique.
+  // - 200 étabs en batchs de 20 = ~3-4 s
+  // L'API ADEME Data Fair publique n'impose pas de rate limit documenté.
   run.phase = 'enrichissement'
   log(run, 'enrichissement', 'Enrichissement des prospects (ADEME BEGES)', 'info')
 
-  const ADEME_BATCH_SIZE = 10
+  const ADEME_BATCH_SIZE = 20
   const enrichis: Array<Partial<Prospect>> = []
 
   for (let i = 0; i < nouveaux.length; i += ADEME_BATCH_SIZE) {
@@ -306,10 +363,32 @@ async function phaseScoring(
   for (let i = 0; i < scored.length; i += BATCH_SIZE) {
     const batch = scored.slice(i, i + BATCH_SIZE)
 
-    const { data, error } = await supabase
+    // Tentative d'upsert. Si les colonnes beges_url/beges_valide n'existent pas encore
+    // en DB (migration 004 non appliquée), on retry sans ces colonnes.
+    let data: unknown[] | null = null
+    let error: { message: string } | null = null
+
+    const result1 = await supabase
       .from('prospects')
       .upsert(batch as unknown as Database['public']['Tables']['prospects']['Insert'][], { onConflict: 'user_id,siren' })
       .select()
+
+    if (result1.error && result1.error.message.includes('beges_')) {
+      // Fallback : retirer les colonnes BEGES non migrées
+      const cleanBatch = batch.map(({ beges_url, beges_valide, ...rest }) => rest)
+      const result2 = await supabase
+        .from('prospects')
+        .upsert(cleanBatch as unknown as Database['public']['Tables']['prospects']['Insert'][], { onConflict: 'user_id,siren' })
+        .select()
+      data = result2.data
+      error = result2.error
+      if (!error) {
+        log(run, 'scoring', 'Migration 004 non appliquée — colonnes beges_url/beges_valide ignorées', 'warn')
+      }
+    } else {
+      data = result1.data
+      error = result1.error
+    }
 
     if (error) {
       log(run, 'scoring', `Erreur upsert batch ${i / BATCH_SIZE + 1}`, 'warn', {
@@ -342,11 +421,16 @@ async function phaseSelection(
   const target = settings.daily_call_target ?? DAILY_CALL_TARGET
   log(run, 'selection', `Sélection des ${target} meilleurs prospects non encore appelés`, 'info')
 
+  // Filtrer uniquement les prospects SANS BEGES valide :
+  // - beges_publie = false  → aucun BEGES publié (cible principale)
+  // - beges_publie = true ET beges_valide = false → BEGES expiré (> 4 ans)
+  // Les prospects avec beges_valide = true sont exclus (conformes, moins prioritaires).
   const { data, error } = await supabase
     .from('prospects')
     .select('*')
     .eq('user_id', run.user_id)
     .in('statut', ['sourced', 'qualified'])
+    .or('beges_publie.eq.false,beges_valide.eq.false')
     .order('score_priorite', { ascending: false })
     .limit(target)
 
@@ -462,15 +546,35 @@ async function phaseCreateDailyList(
     }
   })
 
-  // Insérer les items (suppression préalable pour idempotence)
+  // Mode "append" : supprimer uniquement les items PAS encore appelés (called_at IS NULL).
+  // Les appels déjà effectués (called_at IS NOT NULL) sont conservés pour l'historique.
   await supabase
     .from('daily_list_items')
     .delete()
     .eq('daily_list_id', dailyList.id)
+    .is('called_at', null)
+
+  // Récupérer le dernier ordre des items déjà appelés pour continuer la numérotation.
+  const { data: existingItems } = await supabase
+    .from('daily_list_items')
+    .select('ordre')
+    .eq('daily_list_id', dailyList.id)
+    .order('ordre', { ascending: false })
+    .limit(1)
+
+  const lastOrdre = existingItems && existingItems.length > 0
+    ? (existingItems[0] as { ordre: number }).ordre
+    : 0
+
+  // Décaler l'ordre des nouveaux items pour s'ajouter après les items existants.
+  const itemsWithOffset = items.map((item) => ({
+    ...item,
+    ordre: item.ordre + lastOrdre,
+  }))
 
   const { error: itemsError } = await supabase
     .from('daily_list_items')
-    .insert(items as unknown as Database['public']['Tables']['daily_list_items']['Insert'][])
+    .insert(itemsWithOffset as unknown as Database['public']['Tables']['daily_list_items']['Insert'][])
 
   if (itemsError) {
     throw new Error(
@@ -561,7 +665,7 @@ export async function runAgentNocturne(
   // --------------------------------------------------------
   let rawProspects: Array<Partial<Prospect>> = []
   try {
-    rawProspects = await phaseSourcing(run, supabaseAdmin)
+    rawProspects = await phaseSourcing(run, supabaseAdmin, settings)
     await updateRunInDB(run, supabaseAdmin)
   } catch (err) {
     log(run, 'sourcing_sirene', 'FATAL: sourcing Sirene échoué', 'error', {

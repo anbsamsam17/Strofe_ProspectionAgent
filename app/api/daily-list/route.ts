@@ -6,10 +6,10 @@
 // Comportement :
 //   - Retourne la liste avec ses items et les prospects joints
 //   - Si aucune liste n'existe pour la date → déclenche la génération
-//     en arrière-plan via waitUntil (si disponible dans le runtime)
+//     en arrière-plan via after() (Next.js 15 — survit à la réponse HTTP)
 // ============================================================
 
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest, NextResponse, after } from 'next/server'
 import { z } from 'zod'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { runAgentNocturne } from '@/lib/agent/orchestrator'
@@ -70,7 +70,11 @@ export async function GET(request: NextRequest) {
     )
   }
 
-  const targetDate = parsed.data.date ?? new Date().toISOString().split('T')[0]
+  // Constante unique pour éviter toute incohérence si le handler s'exécute à minuit
+  const now = new Date()
+  const today = now.toISOString().split('T')[0]
+
+  const targetDate = parsed.data.date ?? today
 
   // -- Récupérer la liste du jour avec items + prospects --
   const { data: listData, error: listError } = await supabase
@@ -108,32 +112,26 @@ export async function GET(request: NextRequest) {
   // -- Aucune liste pour cette date → déclencher la génération --
   if (!listData) {
     // Déclencher uniquement pour la date d'aujourd'hui (pas de régénération du passé)
-    const today = new Date().toISOString().split('T')[0]
-
     if (targetDate === today) {
-      // Utiliser waitUntil si disponible (Vercel Edge Runtime)
-      // pour ne pas bloquer la réponse HTTP
       const supabaseAdmin = await createAdminClient()
 
-      // @ts-expect-error — waitUntil n'est pas typé dans Next.js 15 mais disponible
-      // sur Vercel via `after()` ou via le contexte de la requête
-      if (typeof globalThis.waitUntil === 'function') {
-        // @ts-expect-error
-        globalThis.waitUntil(runAgentNocturne(user.id, supabaseAdmin))
-      } else {
-        // Fallback : lancement sans attendre (fire-and-forget)
-        // Le garbage collector ne tuera pas la Promise grâce à Vercel serverless
-        runAgentNocturne(user.id, supabaseAdmin).catch((err) => {
+      // after() de Next.js 15 : le callback s'exécute APRÈS que la réponse HTTP
+      // est envoyée au client mais AVANT que la fonction serverless soit détruite.
+      // Contrairement au fire-and-forget nu, Vercel garantit l'exécution complète.
+      after(async () => {
+        try {
+          await runAgentNocturne(user.id, supabaseAdmin)
+        } catch (err) {
           console.log(
             JSON.stringify({
               level: 'error',
-              route: '/api/daily-list',
-              msg: 'Génération background échouée',
+              module: 'daily-list',
+              msg: 'Background agent run failed',
               error: err instanceof Error ? err.message : String(err),
             }),
           )
-        })
-      }
+        }
+      })
     }
 
     // Retourner une réponse vide mais structurée — le frontend peut afficher
@@ -141,9 +139,9 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(
       {
         list: null,
-        generating: targetDate === new Date().toISOString().split('T')[0],
+        generating: targetDate === today,
         message:
-          targetDate === new Date().toISOString().split('T')[0]
+          targetDate === today
             ? 'Liste en cours de génération'
             : 'Aucune liste pour cette date',
       },

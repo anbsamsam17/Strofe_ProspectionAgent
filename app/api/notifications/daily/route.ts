@@ -1,7 +1,11 @@
 // ============================================================
-// GET /api/notifications/daily
+// POST /api/notifications/daily
 // Envoi des emails de notification matin (cron 7h30).
 // Protection : header Authorization: Bearer {CRON_SECRET} uniquement.
+//
+// POST est utilisé (et non GET) car ce handler envoie des emails et modifie
+// l'état en base — un GET avec effets de bord viole la sémantique HTTP.
+// Le cron Vercel doit être configuré avec method: POST.
 //
 // Comportement :
 //   1. Récupère toutes les daily_lists avec status='ready' pour aujourd'hui
@@ -21,6 +25,8 @@ export const dynamic = 'force-dynamic'
 
 // ------------------------------------------------------------
 // Helper : validation du secret cron (comparaison en temps constant)
+// TODO: Remplacer par import { isCronRequest } from '@/lib/auth/cron'
+//       une fois que lib/auth/cron.ts est créé par l'agent dédié.
 // ------------------------------------------------------------
 
 function isCronRequest(request: NextRequest): boolean {
@@ -54,10 +60,10 @@ function formatDateHuman(isoDate: string): string {
 }
 
 // ------------------------------------------------------------
-// Handler GET
+// Handler POST (anciennement GET — cf. IMP-04)
 // ------------------------------------------------------------
 
-export async function GET(request: NextRequest) {
+export async function POST(request: NextRequest) {
   // -- Auth cron uniquement --
   if (!isCronRequest(request)) {
     return NextResponse.json(

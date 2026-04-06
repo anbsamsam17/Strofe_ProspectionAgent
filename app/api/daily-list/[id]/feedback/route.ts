@@ -16,6 +16,15 @@ import type { CallResult, ProspectStatus } from '@/lib/types'
 export const dynamic = 'force-dynamic'
 
 // ------------------------------------------------------------
+// Validation UUID (BUG-06 — regex stricte RFC 4122)
+// La version précédente /^[0-9a-f-]{36}$/ acceptait des UUIDs invalides
+// (ex: "----------------------------------" passait la validation).
+// La regex ci-dessous valide le format exact : variante 1-5 + variant bits [89ab].
+// ------------------------------------------------------------
+
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+
+// ------------------------------------------------------------
 // Validation du body (Zod strict)
 // ------------------------------------------------------------
 
@@ -85,7 +94,7 @@ export async function PATCH(
   // -- Résolution du paramètre dynamique --
   const { id: itemId } = await params
 
-  if (!itemId || !/^[0-9a-f-]{36}$/.test(itemId)) {
+  if (!itemId || !UUID_REGEX.test(itemId)) {
     return NextResponse.json(
       { error: 'Identifiant invalide', code: 'INVALID_ID' },
       { status: 400 },

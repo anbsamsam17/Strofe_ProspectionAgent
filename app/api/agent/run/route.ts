@@ -10,10 +10,14 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
-import { timingSafeEqual } from 'crypto'
 import { createAdminClient, createClient } from '@/lib/supabase/server'
 import { runAgentNocturne } from '@/lib/agent/orchestrator'
 import type { AgentRun } from '@/lib/types'
+
+// TODO: Remplacer par import { isCronRequest } from '@/lib/auth/cron'
+//       une fois que lib/auth/cron.ts est créé par l'agent dédié.
+//       Laisser la copie locale en attendant pour éviter une erreur de compilation.
+import { timingSafeEqual } from 'crypto'
 
 // Vercel Pro — le run nocturne peut prendre plusieurs minutes
 export const maxDuration = 300
@@ -31,7 +35,10 @@ const RunBodySchema = z.object({
 // Helpers
 // ------------------------------------------------------------
 
-/** Vérifie que le header Authorization correspond au secret cron configuré. */
+/** Vérifie que le header Authorization correspond au secret cron configuré.
+ *  Copie locale de lib/auth/cron.ts#isCronRequest — à remplacer par l'import
+ *  dès que ce module est disponible.
+ */
 function isCronRequest(request: NextRequest): boolean {
   const cronSecret = process.env.CRON_SECRET
   if (!cronSecret) return false
@@ -198,6 +205,27 @@ export async function POST(request: NextRequest) {
   // Utiliser le client admin pour l'orchestrateur (bypass RLS — le run crée
   // des enregistrements pour l'user sans passer par les policies user)
   const supabaseAdmin = await createAdminClient()
+
+  // -- Vérification anti-concurrence : un seul run actif à la fois par user --
+  // Deux runs simultanés peuvent créer une condition de course sur daily_list_items
+  // (DELETE + INSERT concurrent). On retourne 409 si un run est déjà en cours.
+  const { data: existingRun } = await supabaseAdmin
+    .from('agent_runs')
+    .select('id')
+    .eq('user_id', targetUserId)
+    .eq('status', 'running')
+    .maybeSingle()
+
+  if (existingRun) {
+    return NextResponse.json(
+      {
+        error: 'Un run est déjà en cours',
+        code: 'RUN_IN_PROGRESS',
+        runId: existingRun.id,
+      },
+      { status: 409 },
+    )
+  }
 
   let run: AgentRun
   try {

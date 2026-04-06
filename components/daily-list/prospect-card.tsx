@@ -280,7 +280,7 @@ export function ProspectCard({ item, onFeedbackSubmit }: ProspectCardProps) {
       </div>
 
       {/* ── Infos contact ── */}
-      {(prospect.contact_nom || prospect.contact_prenom || prospect.contact_telephone || item.meilleur_creneau) && (
+      {(prospect.contact_nom || prospect.contact_prenom || prospect.contact_telephone || prospect.contact_email || item.meilleur_creneau) && (
         <div className="border-t border-gray-100 bg-gray-50/60 px-5 py-4 dark:border-gray-800 dark:bg-gray-800/20">
           <div className="flex flex-wrap gap-5">
             {(prospect.contact_nom || prospect.contact_prenom) && (
@@ -299,15 +299,15 @@ export function ProspectCard({ item, onFeedbackSubmit }: ProspectCardProps) {
               </div>
             )}
 
-            {prospect.contact_telephone && (
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">
-                  Téléphone
-                </p>
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">
+                Téléphone
+              </p>
+              {prospect.contact_telephone ? (
                 <a
                   href={`tel:${prospect.contact_telephone.replace(/\s/g, '')}`}
                   className="mt-1 inline-flex items-center gap-1.5 text-sm font-semibold text-green-600 transition-colors hover:text-green-700 dark:text-green-400 dark:hover:text-green-300"
-                  aria-label={`Appeler ${prospect.contact_telephone}`}
+                  aria-label={`Appeler le ${prospect.contact_telephone}`}
                 >
                   <svg
                     xmlns="http://www.w3.org/2000/svg"
@@ -325,8 +325,42 @@ export function ProspectCard({ item, onFeedbackSubmit }: ProspectCardProps) {
                   </svg>
                   {prospect.contact_telephone}
                 </a>
-              </div>
-            )}
+              ) : (
+                <p className="mt-1 text-sm text-gray-400 dark:text-gray-600">Non renseigné</p>
+              )}
+            </div>
+
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">
+                Email
+              </p>
+              {prospect.contact_email ? (
+                <a
+                  href={`mailto:${prospect.contact_email}`}
+                  className="mt-1 inline-flex items-center gap-1.5 text-sm font-semibold text-green-600 transition-colors hover:text-green-700 dark:text-green-400 dark:hover:text-green-300"
+                  aria-label={`Envoyer un email à ${prospect.contact_email}`}
+                >
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    width="14"
+                    height="14"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    aria-hidden="true"
+                  >
+                    <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" />
+                    <polyline points="22,6 12,13 2,6" />
+                  </svg>
+                  {prospect.contact_email}
+                </a>
+              ) : (
+                <p className="mt-1 text-sm text-gray-400 dark:text-gray-600">Non renseigné</p>
+              )}
+            </div>
 
             {item.meilleur_creneau && (
               <div>
@@ -341,6 +375,115 @@ export function ProspectCard({ item, onFeedbackSubmit }: ProspectCardProps) {
           </div>
         </div>
       )}
+
+      {/* ── Statut BEGES ── */}
+      <div className="border-t border-gray-100 bg-gray-50/40 px-5 py-3.5 dark:border-gray-800 dark:bg-gray-800/10">
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Badge état BEGES */}
+          {prospect.beges_publie && prospect.beges_valide ? (
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-green-200 bg-green-50 px-2.5 py-0.5 text-xs font-semibold text-green-700 dark:border-green-800 dark:bg-green-950/50 dark:text-green-400">
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="10"
+                height="10"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+              >
+                <polyline points="20 6 9 17 4 12" />
+              </svg>
+              BEGES publié
+            </span>
+          ) : prospect.beges_publie && !prospect.beges_valide ? (
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-orange-200 bg-orange-50 px-2.5 py-0.5 text-xs font-semibold text-orange-700 dark:border-orange-800 dark:bg-orange-950/50 dark:text-orange-400">
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="10"
+                height="10"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+              >
+                <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+                <line x1="12" y1="9" x2="12" y2="13" />
+                <line x1="12" y1="17" x2="12.01" y2="17" />
+              </svg>
+              BEGES expiré
+            </span>
+          ) : (
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-red-200 bg-red-50 px-2.5 py-0.5 text-xs font-semibold text-red-700 dark:border-red-800 dark:bg-red-950/50 dark:text-red-400">
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="10"
+                height="10"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+              >
+                <circle cx="12" cy="12" r="10" />
+                <line x1="15" y1="9" x2="9" y2="15" />
+                <line x1="9" y1="9" x2="15" y2="15" />
+              </svg>
+              BEGES absent
+            </span>
+          )}
+
+          {/* Badge obligation BEGES */}
+          {prospect.obligation_beges && (
+            <span className="inline-flex items-center gap-1 rounded-full border border-orange-200 bg-orange-50 px-2.5 py-0.5 text-xs font-medium text-orange-700 dark:border-orange-800 dark:bg-orange-950/40 dark:text-orange-400">
+              Obligation BEGES
+            </span>
+          )}
+
+          {/* Date de dernière publication */}
+          {prospect.beges_derniere_publication && (
+            <span className="text-xs text-gray-400 dark:text-gray-600">
+              Dernière publication : {new Intl.DateTimeFormat('fr-FR', { dateStyle: 'short' }).format(new Date(prospect.beges_derniere_publication))}
+            </span>
+          )}
+
+          {/* Lien vers le BEGES */}
+          {prospect.beges_url && (
+            <a
+              href={prospect.beges_url}
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label="Voir le BEGES sur bilans-ges.ademe.fr (ouvre dans un nouvel onglet)"
+              className="ml-auto inline-flex items-center gap-1 text-xs font-medium text-green-600 transition-colors hover:text-green-700 dark:text-green-400 dark:hover:text-green-300"
+            >
+              Voir le BEGES
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="11"
+                height="11"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+              >
+                <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+                <polyline points="15 3 21 3 21 9" />
+                <line x1="10" y1="14" x2="21" y2="3" />
+              </svg>
+            </a>
+          )}
+        </div>
+      </div>
 
       {/* ── Sections expandables ── */}
       <div className="space-y-2 px-5 py-4">

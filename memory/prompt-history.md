@@ -16,6 +16,280 @@ links:
 
 ---
 
+## 2026-04-06 — Debug dashboard : run échoué affiché, métriques du jour incorrectes
+
+**Type** : Bug Fix / Dashboard
+**Modele** : claude-sonnet-4-6
+**Score** : npx tsc --noEmit — exit code 0
+
+### Taches effectuees
+
+1. **`export const dynamic = 'force-dynamic'`** ajouté en tête de `dashboard/page.tsx` — interdit le cache SSR Next.js 15 qui servait un snapshot stale du run échoué.
+2. **`.limit(1)` supprimé** avant `.maybeSingle()` sur la requête `agent_runs` — `.maybeSingle()` impose déjà `LIMIT 1` en interne (postgrest-js v2), la combinaison était redondante.
+3. **`.order('ordre', { referencedTable: 'daily_list_items' })` supprimé** de la chaîne `daily_lists` — ce tri sur relation imbriquée peut faire retourner plusieurs lignes à postgrest et rend `.maybeSingle()` null silencieusement. Le tri est géré côté JS via `.sort()`.
+4. **`const nowDate = new Date()`** — instance unique pour `today` et `todayIso`, élimine le bug potentiel "à minuit".
+
+### Fichiers modifies
+- `app/(dashboard)/dashboard/page.tsx`
+
+---
+
+## 2026-04-06 — Fix pipeline : filtre INSEE Lucene, enrichissement téléphone, filtre BEGES sélection, refonte pitch
+
+**Type** : Backend / Bug Fix / Feature
+**Modele** : claude-sonnet-4-6
+**Score** : npx tsc --noEmit — exit code 0
+
+### Taches effectuees
+
+1. **Fix filtre INSEE Lucene vide** (`lib/agent/sourcing.ts`) : `nafCodes` vide après nettoyage produisait `activitePrincipaleEtablissement:()` → HTTP 400. Refactorisé en `queryParts[]` conditionnel : le filtre NAF n'est ajouté que si `cleanedNafCodes.length > 0`. Ajout `.trim().toUpperCase()` sur chaque code.
+2. **Enrichissement téléphone** (`lib/agent/sourcing.ts`) : Nouvelle fonction `rechercherTelephone(siren)` qui interroge l'API Recherche Entreprises (`siege.telephone` → `matching_etablissements[].telephone`). Appel dans `enrichirProspect()`, résultat stocké dans `contact_telephone`. Non bloquant — silencieux si indisponible.
+3. **Filtre BEGES dans phaseSelection** (`lib/agent/orchestrator.ts`) : Filtre `.or('beges_publie.eq.false,beges_valide.eq.false')` ajouté pour ne sélectionner que les prospects sans BEGES ou avec BEGES expiré. Les prospects conformes (`beges_valide = true`) sont exclus.
+4. **Refonte approche pitch** (`lib/agent/pitch-gen.ts`) : `SYSTEM_PROMPT` réorienté — gains financiers (10-30% économies, financements BPI/ADEME, appels d'offres) et image de marque en premier, réglementation en appui. `INSTRUCTIONS` dans `buildUserPrompt()` renforcées : accroche DOIT mentionner un gain concret, objections DOIVENT inclure une réponse chiffrée sur le ROI. Pitch fallback également mis à jour pour respecter cette approche.
+
+---
+
+## 2026-04-06 — Mise a jour UI : contact, BEGES, bouton generation
+
+**Type** : Feature / UI Enhancement
+**Modele** : claude-sonnet-4-6
+**Score** : npx tsc --noEmit — exit code 0
+
+### Taches effectuees
+
+1. **Email + telephone sur prospect-card** (`components/daily-list/prospect-card.tsx`) : Section contact enrichie avec champs email (`mailto:`) et telephone (`tel:`) toujours visibles (fallback "Non renseigné"). SVG inline, aria-label, design cohérent avec le reste de la carte.
+2. **Section statut BEGES** (`components/daily-list/prospect-card.tsx`) : Nouvelle section permanente avec badge coloré (vert/orange/rouge) selon `beges_publie` + `beges_valide`, badge "Obligation BEGES", date de dernière publication, lien "Voir le BEGES" (`beges_url`) avec `target="_blank" rel="noopener noreferrer"`.
+3. **Colonne BEGES dans table prospects** (`app/(dashboard)/prospects/page.tsx`) : Colonne BEGES insérée entre Score et Statut (visible `lg:`). Badge coloré cliquable si `beges_url` défini, affiche l'année de publication. ColSpan corrigé de 7 à 8.
+4. **Bouton generation contextuel** (`components/dashboard/generate-list-button.tsx`) : Nouvelles props optionnelles `listItemCount` et `dailyTarget`. Texte adaptatif — "Générer la liste du jour" / "Compléter la liste" / "Ajouter de nouveaux prospects". Texte d'aide affiché sous le bouton (appels effectués conservés). Bouton jamais désactivé (sauf loading).
+5. **Query Supabase daily-list** (`app/(dashboard)/daily-list/page.tsx`) : Ajout des colonnes `contact_email`, `beges_url`, `beges_valide`, `beges_derniere_publication` dans le SELECT nested prospects pour que les cards aient toutes les données.
+
+### Fichiers modifies
+- `components/daily-list/prospect-card.tsx`
+- `components/dashboard/generate-list-button.tsx`
+- `app/(dashboard)/prospects/page.tsx`
+- `app/(dashboard)/daily-list/page.tsx`
+
+### Validation
+- `npx tsc --noEmit` : exit code 0, aucune erreur TypeScript
+- Design cohérent Linear/Vercel, dark mode sur tous les badges
+- Accessibilité : aria-label sur tous les liens, target="_blank" avec rel="noopener noreferrer"
+
+---
+
+## 2026-04-06 — Correction API Routes (6 bugs — BUG-04/05/06/08 + IMP-03/04)
+
+**Type** : Bugfix / Security / Semantique HTTP
+**Modele** : claude-sonnet-4-6
+**Score** : npx tsc --noEmit — exit code 0
+
+### Taches effectuees
+
+1. **BUG-04 — Fire-and-forget** (`app/api/daily-list/route.ts`) : `runAgentNocturne` lancé en fire-and-forget tué par Vercel apres la reponse HTTP. Remplacé par `after()` (Next.js 15) qui garantit l'exécution post-réponse. Suppression du bloc `globalThis.waitUntil` + `@ts-expect-error`.
+2. **BUG-08 — Date inconsistency** (`app/api/daily-list/route.ts`) : `new Date()` appelé 3 fois séparément. Extraites en `const now = new Date()` / `const today` au debut du handler pour cohérence garantie à minuit.
+3. **IMP-03/BUG-05 — Merge settings incomplet** (`app/api/profile/settings/route.ts`) : `notification_email` et `target_postal_codes` valides par Zod mais jamais appliques dans le merge conditionnel → champs silencieusement ignores. Ajout des deux blocs `...(payload.X !== undefined && { X })` manquants. Cast `as any` remplacé par `as unknown as Json`.
+4. **IMP-04 — GET → POST notifications** (`app/api/notifications/daily/route.ts`) : Handler GET renommé POST. Un GET qui envoie des emails et modifie l'état en base viole la sémantique HTTP (idempotence). Ajout commentaire TODO pour import `@/lib/auth/cron` quand disponible.
+5. **BUG-06 — Regex UUID permissive** (`app/api/daily-list/[id]/feedback/route.ts`) : `/^[0-9a-f-]{36}$/` remplacée par `UUID_REGEX` RFC 4122 stricte validant variante (1-5) et variant bits ([89ab]).
+6. **Concurrence agent/run** (`app/api/agent/run/route.ts`) : Ajout SELECT `status=running` avant lancement manuel → retourne HTTP 409 `RUN_IN_PROGRESS` si run concurrent. Import `timingSafeEqual` repositionné + commentaire TODO `lib/auth/cron.ts`.
+
+### Fichiers modifies
+- `app/api/daily-list/route.ts`
+- `app/api/profile/settings/route.ts`
+- `app/api/notifications/daily/route.ts`
+- `app/api/daily-list/[id]/feedback/route.ts`
+- `app/api/agent/run/route.ts`
+
+### Validation
+- `npx tsc --noEmit` : exit code 0, aucune erreur TypeScript
+
+---
+
+## 2026-04-06 — Corrections majeures pipeline agent (8 correctifs)
+
+**Type** : Bugfix / Performance / Architecture
+**Modele** : claude-sonnet-4-6
+**Score** : tsc --noEmit exit code 0
+
+### Taches effectuees
+1. **BUG-01 CRITIQUE** — `lib/agent/sourcing.ts` : Remplacement endpoint ADEME CKAN mort par API Data Fair (`/data-fair/api/v1/datasets/bilan-ges/lines?q={siren}&size=5`)
+2. **Enrichissement contact ADEME** — `lib/agent/sourcing.ts` : `enrichirProspect()` remplit `contact_nom`, `contact_poste`, `contact_email`, `beges_url` depuis les données Data Fair
+3. **Validation BEGES** — `lib/agent/sourcing.ts` : calcul `beges_valide` (true si `annee_reporting >= année - 4`)
+4. **Scoring BEGES 3 niveaux** — `lib/agent/scoring.ts` : pas de BEGES = +20 pts / BEGES expiré = +15 pts / BEGES valide = 0 pts
+5. **CRIT-04 anti-concurrent** — `lib/agent/orchestrator.ts` : `phaseInit()` vérifie l'absence de run `status=running` avant INSERT
+6. **IMP-08 settings au sourcing** — `lib/agent/orchestrator.ts` : `phaseSourcing()` accepte `settings`, valide les codes NAF, les passe à `sourcerEntreprises()` et au fallback
+7. **Mode append daily list** — `lib/agent/orchestrator.ts` : supprime uniquement les items `called_at IS NULL`, conserve les appelés, continue la numérotation
+8. **ADEME_BATCH_SIZE 10 → 20** — `lib/agent/orchestrator.ts` : +perf enrichissement (-50% durée batch ADEME)
+9. **Bonus** — `app/api/daily-list/route.ts` : correction bug `<br>` parasite ligne 74 (TS1109 préexistant)
+
+### Fichiers modifies
+- `lib/agent/sourcing.ts`
+- `lib/agent/scoring.ts`
+- `lib/agent/orchestrator.ts`
+- `app/api/daily-list/route.ts` (fix bug préexistant)
+
+---
+
+## 2026-04-06 — Fix Pipeline + Premiere Generation de Prospects
+
+**Type** : Bugfix / Infrastructure / Integration
+**Modele** : claude-opus-4-6
+**Score** : non evalue
+
+### Tache effectuee
+Correction de 4 bugs bloquant le pipeline agent et premiere generation de prospects.
+
+### Bugs corriges
+1. **Middleware bloquait /api/* routes** — middleware.ts, ajout `isApiRoute` bypass
+2. **INSEE OAuth2 mort** — sourcing.ts, remplacement OAuth2 par API Key (`X-INSEE-Api-Key-Integration`), nouvelle URL `api.insee.fr/api-sirene/3.11/siret`
+3. **Fallback sourcing non declenche** — orchestrator.ts, fallback sur `etablissements.length === 0` (pas seulement sur throw)
+4. **Format NAF dans fallback** — sourcing.ts, l'API Recherche Entreprises veut NAF AVEC point (`49.41A`)
+
+### Fichiers modifies
+- `middleware.ts` — bypass auth redirect pour /api/*
+- `lib/agent/sourcing.ts` — supprime OAuth2, ajoute API Key, ajoute `sourcerEntreprisesFallback()`
+- `lib/agent/orchestrator.ts` — import fallback, trigger sur 0 resultats
+- `.env.local` — INSEE_CLIENT_ID/SECRET → INSEE_API_KEY
+
+### Resultats
+- Pipeline fonctionnel : 96 prospects sources, 96 qualifies, 15 pitchs generes
+- Daily list "ready" pour le 2026-04-06
+- Top prospects : Dassault Aviation (78), ArianeGroup (78), Airbus Atlantic (78)
+- 0 erreur TypeScript
+
+### Agents d'audit lances en parallele
+- code-reviewer, debugger, performance-engineer, security-engineer
+
+### Validation
+- `npx tsc --noEmit` : 0 erreur
+- `curl POST /api/agent/run` avec CRON_SECRET : succes, 96 prospects, liste generee
+- Top 15 pitchs verifies dans daily_list_items
+
+---
+
+## 2026-04-06 — Audit Performance Pipeline Agent Nocturne (performance-engineer)
+
+**Type** : Performance Engineering / Audit
+**Modele** : claude-sonnet-4-6
+**Score** : non evalué
+
+### Tache effectuee
+Audit complet du pipeline agent nocturne. Analyse du timing budget (7 phases), identification des 3 bottlenecks principaux, recommandation de 5 optimisations classées par impact/effort, analyse du frontend (First Load JS, middleware), analyse DB (index, RLS, pooling), et recommandations de scalabilité multi-user.
+
+### Résultats clés
+- Pipeline nominal : 62-93s / budget 300s (marge confortable)
+- Bottleneck 1 : Pitchs GPT-4o séquentiels = 55-75% du temps total → paralléliser en groupes de 5
+- Bottleneck 2 : Enrichissement ADEME 20 batchs séquentiels → doubler à batchs de 20
+- Bottleneck 3 : 9 updateRunInDB intercalés = 360ms frais généraux
+- Risque critique multi-user : token INSEE partagé + rate limit 30 req/min → blocage à partir de 5 users
+- Index DB : complet et optimisé, migration 003 couvre le cas phaseSelection
+
+### Fichiers analysés
+- lib/agent/orchestrator.ts
+- lib/agent/sourcing.ts
+- lib/agent/scoring.ts
+- lib/agent/pitch-gen.ts
+- app/api/agent/run/route.ts
+- supabase/migrations/001_initial.sql
+- supabase/migrations/003_perf_indexes.sql
+- middleware.ts
+- next.config.ts
+
+---
+
+## 2026-04-05 — Redesign complet Prospects, Pipeline, ProspectCard, DailyList, Settings, GenerateButton
+
+**Type** : Frontend / UI Redesign
+**Modele** : claude-sonnet-4-6
+**Score** : non evalue
+
+### Tache effectuee
+Refonte visuelle de 8 fichiers. Zero modification de la logique metier ou des queries Supabase.
+
+Fichiers modifies :
+- `app/(dashboard)/prospects/page.tsx` — table Linear-inspired, alternance lignes, badges avec dots, score barre coloree, pagination avec page active en vert, empty state illustre
+- `app/(dashboard)/pipeline/page.tsx` — en-tete avec legende rapide des colonnes + count par statut
+- `components/pipeline/pipeline-client.tsx` — colonnes rounded-xl + accent header, cards hover lift, modal avec bande couleur, score badge colore
+- `components/daily-list/prospect-card.tsx` — badges priorite avec dot, toggle grid 2 colonnes avec icones SVG, section contact fond gris, objections bicolores, badges resultats avec dot
+- `components/daily-list/daily-list-client.tsx` — stats avec barre de progression, separation visuelles, empty state illustre, message felicitations
+- `components/prospects/prospects-filters.tsx` — pills avec dots couleurs, search + spinner debounce, slider avec track visuel, pied de barre resume filtres
+- `components/settings/settings-form.tsx` — sections empilees avec icones colorees, checkboxes custom, character counter, slider track, toasts
+- `components/dashboard/generate-list-button.tsx` — CTA vert avec shimmer hover, icone eclair, etats soignes
+
+**Resultat** : 0 erreur TypeScript (npx tsc --noEmit exit code 0)
+
+---
+
+## 2026-04-05 — Redesign Dashboard UI (layout, sidebar, header, dashboard, daily-list, settings)
+
+**Type** : Frontend / UI Redesign
+**Modele** : claude-sonnet-4-6
+**Score** : non evalue
+
+### Tache effectuee
+Refonte visuelle complete du dashboard SaaS. Toutes les queries Supabase et la logique metier sont preservees. Seuls le JSX et les classes Tailwind ont ete modifies.
+
+1. **Sidebar** : indicateur actif (barre verte a gauche), transitions hover fluides, tab bar mobile avec indicateur horizontal en haut, section logo enrichie (sous-titre "Prospection IA"), icones unifiees a 18px.
+2. **DashboardHeader** : avatar avec gradient green, badge statut avec checkmark SVG, pulse ring quand l'agent est running, bouton play avec icone solid (fill), glass effect via backdrop-blur-sm.
+3. **Layout** : padding wrapper coherent, main scroll correct.
+4. **Dashboard page** : section welcome "Bonjour {firstName}", MetricCard redesignee (icone dans cercle colore + progress bar + % + tabular-nums), AgentPhaseTimeline (6 phases en segments colorés), stats grid dans cards grises, next calls avec badge numero rond et fleche slide hover, CTA generate avec gradient green, empty state avec icone dans cercle.
+5. **Daily-list page** : en-tete avec compteur appels, progress bar dans card separee avec %, etats vides avec icone dans cercle et texte hierarchise.
+6. **Settings page** : section compte avec avatar gradient + donnees structurees avec labels UPPERCASE tracking, header titre sous ligne separatrice.
+
+### Validation
+- `npx tsc --noEmit` : 0 erreur
+
+---
+
+## 2026-04-05 — Fix Tailwind v4 + Redesign Landing Page + Auth Pages
+
+**Type** : Frontend / Configuration / UI Redesign
+**Modele** : claude-sonnet-4-6
+**Score** : non evalue
+
+### Tache effectuee
+1. Corrige la configuration Tailwind CSS v4 : cree `postcss.config.mjs`, installe `@tailwindcss/postcss`, migre le theme de `tailwind.config.ts` vers `@theme` dans `globals.css`, supprime `tailwind.config.ts`.
+2. Refonte complete de la landing page (`app/page.tsx`) : hero avec gradient anime, statistiques, section "comment ca marche" en 3 etapes, grille de fonctionnalites, CTA final, footer.
+3. Refonte du layout auth (`app/(auth)/layout.tsx`) : split desktop (panneau gauche decoratif vert + formulaire droit), mobile-first (formulaire centre uniquement).
+4. Simplification des pages login (`app/(auth)/login/page.tsx`) et signup (`app/(auth)/signup/page.tsx`) : carte glass avec shadow, liens croise, design coherent avec le layout.
+5. Ajout des animations globales dans `globals.css` : gradient-shift, fade-in-up, float, classes animation-delay.
+
+### Fichiers modifies
+- `postcss.config.mjs` (NOUVEAU)
+- `app/globals.css` (refonte @theme + animations)
+- `tailwind.config.ts` (SUPPRIME — non utilise en Tailwind v4)
+- `app/page.tsx` (refonte complete)
+- `app/(auth)/layout.tsx` (refonte split layout)
+- `app/(auth)/login/page.tsx` (refonte card design)
+- `app/(auth)/signup/page.tsx` (refonte card design)
+
+### Validation
+- `npx tsc --noEmit` : 0 erreur TypeScript
+
+---
+
+## 2026-04-05 — Fix TypeScript après upgrade @supabase/supabase-js@2.101.1
+
+**Type** : Bugfix / TypeScript compilation
+**Modèle** : claude-sonnet-4-6
+**Score** : ⭐⭐⭐⭐⭐
+
+### Tâche effectuée
+Correction de toutes les erreurs TypeScript après l'upgrade @supabase/supabase-js → 2.101.1 et @supabase/postgrest-js → 2.101.1.
+
+### Fixes appliqués
+1. `database.types.ts` : `interface Database` → `type Database =`
+2. `server.ts` : export `SupabaseServerClient = ReturnType<typeof createServerClient<Database>>`
+3. `orchestrator.ts` : remplace `SupabaseClient<Database>` par `SupabaseServerClient`, casts `as unknown as` sur les frontières Json↔types métier, cast `updatePayload` pour les logs AgentLog[]
+4. Pages dashboard : `as Prospect[]` → `as unknown as Prospect[]`
+5. Route daily-list : `as DailyListItem[]` → `as unknown as DailyListItem[]`
+6. Route notifications : `as {...} | null` → `as unknown as {...} | null` (join profiles via auth.users)
+7. `next.config.ts` : `typedRoutes` sorti de `experimental`
+8. `package.json` : `@supabase/ssr` 0.6.1 → 0.10.0 (compatible @supabase/supabase-js@2.101.1)
+
+### Résultat
+`npx tsc --noEmit` — exit code 0, zéro erreur.
+
+---
+
 ## 2026-04-05 — Initialisation du projet
 
 **Type** : Initialisation / Setup

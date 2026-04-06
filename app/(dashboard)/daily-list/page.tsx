@@ -67,8 +67,8 @@ export default async function DailyListPage() {
   // Colonnes explicites pour éviter le SELECT * :
   // - daily_lists    : on exclut notified_at (inutile côté dashboard)
   // - daily_list_items : on exclut created_at, updated_at (non affichés)
-  // - prospects      : on exclut adresse, contact_*, score_details, signaux
-  //                    (colonnes lourdes non nécessaires pour la liste du jour)
+  // - prospects      : on inclut contact_email, beges_url, beges_valide, beges_derniere_publication
+  //                    pour les afficher dans les cartes prospect de la liste du jour
   const { data: dailyListData } = await supabase
     .from('daily_lists')
     .select(
@@ -83,8 +83,9 @@ export default async function DailyListPage() {
         prospect:prospects(
           id, siren, raison_sociale, secteur_naf, secteur_libelle,
           effectif_min, effectif_max, ville, code_postal,
-          contact_nom, contact_prenom, contact_poste, contact_telephone,
-          beges_publie, obligation_beges, score_priorite, statut
+          contact_nom, contact_prenom, contact_poste, contact_telephone, contact_email,
+          beges_publie, beges_derniere_publication, beges_url, beges_valide,
+          obligation_beges, score_priorite, statut
         )
       )
     `

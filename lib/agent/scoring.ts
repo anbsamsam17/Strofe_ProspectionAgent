@@ -15,8 +15,14 @@ const POINTS_OBLIGATION_BEGES = 30
 /** Points accordés si le secteur d'activité est prioritaire */
 const POINTS_SECTEUR_PRIORITAIRE = 20
 
-/** Points accordés si aucun BEGES n'a été publié sur ADEME */
+/** Points accordés si aucun BEGES n'a jamais été publié sur ADEME */
 const POINTS_BEGES_NON_PUBLIE = 20
+
+/**
+ * Points accordés si un BEGES a été publié mais est expiré (> 4 ans).
+ * Ces entreprises ont l'obligation de renouvellement — cible prioritaire.
+ */
+const POINTS_BEGES_EXPIRE = 15
 
 /** Points accordés si des signaux d'intention RSE ont été détectés */
 const POINTS_SIGNAUX_INTENTION = 15
@@ -164,7 +170,22 @@ function _computeDetails(
   const secteurPrioritaire = estSecteurPrioritaire(prospect.secteur_naf ?? '')
     ? POINTS_SECTEUR_PRIORITAIRE
     : 0
-  const begesNonPublie = !prospect.beges_publie ? POINTS_BEGES_NON_PUBLIE : 0
+
+  // Logique scoring BEGES à 3 niveaux :
+  // - Pas de BEGES du tout     → +20 pts (prospect vierge, fort potentiel)
+  // - BEGES publié mais expiré → +15 pts (obligation de renouvellement imminente)
+  // - BEGES publié et valide   →  +0 pts (à jour, moins urgent)
+  let begesNonPublie: number
+  if (!prospect.beges_publie) {
+    begesNonPublie = POINTS_BEGES_NON_PUBLIE
+  } else if (prospect.beges_valide === false) {
+    // beges_publie=true mais beges_valide=false → BEGES expiré (> 4 ans)
+    begesNonPublie = POINTS_BEGES_EXPIRE
+  } else {
+    // beges_publie=true et beges_valide=true (ou indéterminé) → BEGES à jour
+    begesNonPublie = 0
+  }
+
   const signauxIntention = _pointsSignaux(prospect)
   const tailleEntreprise = _pointsTaille(prospect)
   const contactTrouve = prospect.contact_telephone ? POINTS_CONTACT_TELEPHONE : 0

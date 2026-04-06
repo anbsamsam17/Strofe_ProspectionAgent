@@ -4,6 +4,10 @@ import { createClient } from '@/lib/supabase/server'
 import type { AgentRun, DailyList, DailyListItem, Prospect } from '@/lib/types'
 import { GenerateListButton } from '@/components/dashboard/generate-list-button'
 
+// Force le rendu dynamique à chaque requête — interdit tout cache SSR stale
+// qui afficherait un ancien run échoué même après un run réussi plus récent.
+export const dynamic = 'force-dynamic'
+
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 function formatDateTime(isoString: string): string {
@@ -228,7 +232,9 @@ export default async function DashboardPage() {
 
   if (!user) redirect('/login')
 
-  const today = new Date().toISOString().split('T')[0]
+  // Une seule instance de Date — évite le bug "à minuit" si deux new Date() donnent des jours différents
+  const nowDate = new Date()
+  const today = nowDate.toISOString().split('T')[0]
 
   // Récupération parallèle de toutes les données
   const [agentRunResult, dailyListResult, profileResult] = await Promise.all([
@@ -237,7 +243,6 @@ export default async function DashboardPage() {
       .select('id, user_id, status, phase, prospects_sourced, prospects_qualified, list_generated, error_message, started_at, completed_at')
       .eq('user_id', user.id)
       .order('started_at', { ascending: false })
-      .limit(1)
       .maybeSingle(),
     supabase
       .from('daily_lists')
@@ -250,7 +255,6 @@ export default async function DashboardPage() {
       `)
       .eq('user_id', user.id)
       .eq('date', today)
-      .order('ordre', { referencedTable: 'daily_list_items', ascending: true })
       .maybeSingle(),
     supabase
       .from('profiles')
@@ -278,7 +282,7 @@ export default async function DashboardPage() {
 
   const dailyTarget = 15
 
-  const todayIso = new Date().toISOString()
+  const todayIso = nowDate.toISOString()
   const firstName = profileData?.full_name?.split(' ')[0] ?? profileData?.email?.split('@')[0] ?? 'vous'
 
   return (

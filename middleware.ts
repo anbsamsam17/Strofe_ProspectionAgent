@@ -35,12 +35,17 @@ export async function middleware(request: NextRequest) {
   } = await supabase.auth.getUser()
 
   const { pathname } = request.nextUrl
+
+  // Les routes API gèrent leur propre authentification (Bearer token pour cron,
+  // session Supabase pour les appels manuels) — ne pas interférer depuis le middleware.
+  const isApiRoute = pathname.startsWith('/api/')
+
   const isPublicRoute = PUBLIC_ROUTES.some(
     (route) => pathname === route || pathname.startsWith('/auth/')
   )
 
-  // Redirige vers /login si non authentifié sur une route protégée
-  if (!user && !isPublicRoute) {
+  // Redirige vers /login si non authentifié sur une route protégée (hors API)
+  if (!user && !isPublicRoute && !isApiRoute) {
     const redirectUrl = request.nextUrl.clone()
     redirectUrl.pathname = '/login'
     redirectUrl.searchParams.set('redirect', pathname)
