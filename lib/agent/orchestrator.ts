@@ -18,6 +18,7 @@ import type {
 import { enrichirProspect, sourcerEntreprises, sourcerEntreprisesFallback } from './sourcing'
 import { calculerScore, determinerPriorite, getScoreDetails } from './scoring'
 import { genererPitchsBatch } from './pitch-gen'
+import { enrichirContact, getCreditsUsed } from './contact-enrichment'
 
 // ------------------------------------------------------------
 // CONSTANTES
@@ -409,6 +410,112 @@ async function phaseScoring(
 }
 
 // ------------------------------------------------------------
+// PHASE 4.5 : ENRICHISSEMENT CONTACTS (prospects prioritaires)
+// ------------------------------------------------------------
+
+/**
+ * Enrichit les contacts des prospects avec score > 70 qui n'ont pas encore
+ * d'email OU de téléphone, via Pappers + Hunter.io.
+ *
+ * Contraintes :
+ * - Max 10 prospects par run (quota API gratuits)
+ * - Appels séquentiels (pas de parallélisme) pour préserver les crédits
+ * - Phase NON-FATALE : une erreur ici ne bloque pas le pipeline
+ */
+async function phaseContactEnrichment(
+  run: AgentRun,
+  supabase: SupabaseServerClient,
+): Promise<void> {
+  run.phase = 'contact_enrichment'
+  log(run, 'contact_enrichment', 'Démarrage enrichissement contacts (prospects score > 70)', 'info')
+
+  // Charger les prospects avec score > 70 et contact incomplet
+  const { data: prospects, error } = await supabase
+    .from('prospects')
+    .select('id, siren, contact_email, contact_telephone, contact_nom, contact_prenom, contact_poste, contact_linkedin')
+    .eq('user_id', run.user_id)
+    .gt('score_priorite', 70)
+    .or('contact_email.is.null,contact_telephone.is.null')
+    .order('score_priorite', { ascending: false })
+    .limit(10)
+
+  if (error) {
+    log(run, 'contact_enrichment', 'Impossible de charger les prospects prioritaires', 'warn', {
+      error: error.message,
+    })
+    return
+  }
+
+  if (!prospects || prospects.length === 0) {
+    log(run, 'contact_enrichment', 'Aucun prospect prioritaire à enrichir (score > 70 avec contact complet ou aucun)', 'info')
+    return
+  }
+
+  log(run, 'contact_enrichment', `${prospects.length} prospects prioritaires à enrichir`, 'info')
+
+  let enrichis = 0
+
+  // Appels séquentiels — pas de batch parallèle pour préserver les quotas gratuits
+  for (const prospect of prospects) {
+    const existingContact = {
+      contact_nom:       prospect.contact_nom ?? undefined,
+      contact_prenom:    prospect.contact_prenom ?? undefined,
+      contact_poste:     prospect.contact_poste ?? undefined,
+      contact_telephone: prospect.contact_telephone ?? undefined,
+      contact_email:     prospect.contact_email ?? undefined,
+      contact_linkedin:  prospect.contact_linkedin ?? undefined,
+    }
+
+    let nouveauxChamps: Partial<typeof existingContact>
+    try {
+      nouveauxChamps = await enrichirContact(prospect.siren, existingContact)
+    } catch (err) {
+      log(run, 'contact_enrichment', `Erreur enrichissement SIREN ${prospect.siren}`, 'warn', {
+        siren: prospect.siren,
+        error: err instanceof Error ? err.message : String(err),
+      })
+      continue
+    }
+
+    // Rien de nouveau trouvé → passer au suivant
+    if (Object.keys(nouveauxChamps).length === 0) continue
+
+    // Construire le payload de mise à jour (null explicite pour Supabase)
+    const updatePayload: Record<string, string | null> = {}
+    for (const [key, value] of Object.entries(nouveauxChamps)) {
+      updatePayload[key] = value ?? null
+    }
+
+    const { error: updateError } = await supabase
+      .from('prospects')
+      .update(updatePayload)
+      .eq('id', prospect.id)
+
+    if (updateError) {
+      log(run, 'contact_enrichment', `Impossible de mettre à jour le contact SIREN ${prospect.siren}`, 'warn', {
+        siren: prospect.siren,
+        error: updateError.message,
+      })
+      continue
+    }
+
+    enrichis += 1
+    log(run, 'contact_enrichment', `Contact enrichi pour SIREN ${prospect.siren}`, 'info', {
+      siren: prospect.siren,
+      nouveaux_champs: Object.keys(nouveauxChamps),
+    })
+  }
+
+  const credits = getCreditsUsed()
+  log(run, 'contact_enrichment', `Enrichissement terminé`, 'info', {
+    prospects_enrichis: enrichis,
+    prospects_analyses: prospects.length,
+    credits_pappers: credits.pappers,
+    credits_hunter: credits.hunter,
+  })
+}
+
+// ------------------------------------------------------------
 // PHASE 5 : SÉLECTION TOP 15
 // ------------------------------------------------------------
 
@@ -718,6 +825,22 @@ export async function runAgentNocturne(
   } catch (err) {
     // Non-fatal : on peut continuer avec les prospects déjà en DB
     log(run, 'scoring', 'Scoring partiellement échoué — utilisation des prospects existants', 'warn', {
+      error: err instanceof Error ? err.message : String(err),
+    })
+  }
+
+  // --------------------------------------------------------
+  // PHASE 4.5 : ENRICHISSEMENT CONTACTS (prospects prioritaires)
+  // Phase NON-FATALE — une erreur ici ne bloque pas le pipeline.
+  // Enrichit les contacts des prospects score > 70 sans email/téléphone
+  // via Pappers (dirigeants + tel) + Hunter.io (emails).
+  // Sans PAPPERS_API_KEY ni HUNTER_API_KEY : phase ignorée silencieusement.
+  // --------------------------------------------------------
+  try {
+    await phaseContactEnrichment(run, supabaseAdmin)
+    await updateRunInDB(run, supabaseAdmin)
+  } catch (err) {
+    log(run, 'contact_enrichment', 'Enrichissement contacts échoué — pipeline non bloqué', 'warn', {
       error: err instanceof Error ? err.message : String(err),
     })
   }
