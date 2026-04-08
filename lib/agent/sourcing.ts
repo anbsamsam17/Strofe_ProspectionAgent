@@ -21,7 +21,7 @@ const INSEE_SIRET_URL = 'https://api.insee.fr/api-sirene/3.11/siret'
 // Nouvel endpoint : API Data Fair (v1), recherche full-text par SIREN.
 const ADEME_BEGES_URL = 'https://data.ademe.fr/data-fair/api/v1/datasets/bilan-ges/lines'
 
-// Codes NAF prioritaires (viticulture, aéro, logistique, agro-alimentaire, industrie)
+// Codes NAF prioritaires (viticulture, aéro, logistique, agro-alimentaire, industrie + secteurs élargis)
 const NAF_PRIORITAIRES = [
   '01.21Z', '01.22Z',        // Viticulture
   '30.30Z',                  // Construction aéronautique
@@ -29,6 +29,22 @@ const NAF_PRIORITAIRES = [
   '10.11Z', '10.13A', '10.32Z', '10.51A', '10.71A', // Agro-alimentaire
   '46.17B',                  // Commerce intermédiaire agro
   '49.41A', '49.41B', '52.21Z', // Transport routier / services annexes
+  // Secteurs élargis — pertinents pour le bilan carbone
+  '20.11Z', '20.14Z', '20.15Z', // Industrie chimique
+  '23.11Z', '23.13Z',        // Verre et produits en verre
+  '24.10Z', '24.20Z',        // Sidérurgie / tubes acier
+  '25.11Z', '25.29Z',        // Fabrication structures métalliques
+  '28.11Z', '28.15Z',        // Fabrication moteurs / engrenages
+  '35.11Z', '35.14Z',        // Production / commerce d'électricité
+  '38.11Z', '38.21Z',        // Collecte / traitement des déchets
+  '41.20A', '41.20B',        // Construction de bâtiments
+  '42.11Z', '42.13A',        // Construction routes / ponts
+  '43.21A', '43.22A',        // Travaux d'installation
+  '46.71Z', '46.72Z',        // Commerce gros combustibles / métaux
+  '47.30Z',                  // Commerce carburants
+  '55.10Z',                  // Hôtels
+  '56.10A',                  // Restauration
+  '86.10Z',                  // Activités hospitalières
 ]
 
 // Max 30 req/min sur Sirene → délai entre les pages
@@ -36,9 +52,10 @@ const SIRENE_DELAY_MS = 2_100   // ~28 req/min avec marge de sécurité
 const RETRY_ATTEMPTS = 2
 const RETRY_DELAY_MS = 1_000
 
-// Tranches d'effectifs INSEE correspondant à >= 200 salariés (31 = 200-249, 53 = 10 000+)
-// On cible tranche >= 31 pour avoir 200+ salariés
-const TRANCHE_MIN = '31'
+// Tranches d'effectifs INSEE correspondant à >= 50 salariés (21 = 50-99, 53 = 10 000+)
+// On cible tranche >= 21 pour avoir 50+ salariés : les 200+ ont une obligation BEGES légale,
+// mais les 50-199 sont des cibles pertinentes pour une démarche volontaire.
+const TRANCHE_MIN = '21'
 const TRANCHE_MAX = '53'
 
 // Département Gironde
@@ -55,6 +72,8 @@ export interface SourcingOptions {
   nafCodes?: string[]
   /** Code postal min/max sous forme "[33000 TO 33999]" */
   codePostalRange?: string
+  /** SIREN déjà en base à exclure des résultats (déduplication en amont du sourcing) */
+  excludeSirens?: Set<string>
 }
 
 /**
@@ -335,84 +354,107 @@ interface RechercheEntreprisesResult {
 /**
  * Sourcing fallback via l'API Recherche Entreprises (open data, pas de clé).
  * Convertit les résultats au format SireneEtablissement pour compatibilité.
+ *
+ * Pagination : parcourt TOUTES les pages disponibles pour chaque code NAF,
+ * avec un guard de MAX_PAGES_PER_NAF pour éviter les boucles infinies.
+ * Déduplication en amont : les SIREN présents dans options.excludeSirens sont
+ * skippés immédiatement sans attendre la phase de déduplication de l'orchestrateur.
  */
 export async function sourcerEntreprisesFallback(
   options: SourcingOptions = {},
 ): Promise<SireneEtablissement[]> {
-  const { maxResults = 200, nafCodes = NAF_PRIORITAIRES } = options
+  const { maxResults = 200, nafCodes = NAF_PRIORITAIRES, excludeSirens } = options
 
   const allEtablissements: SireneEtablissement[] = []
   const perPage = 25 // max par page de cette API
+  const MAX_PAGES_PER_NAF = 10 // guard anti-boucle infinie
 
   // L'API recherche-entreprises utilise le format NAF AVEC point (49.41A, pas 4941A).
   for (const naf of nafCodes) {
     if (allEtablissements.length >= maxResults) break
 
-    const url = new URL(RECHERCHE_ENTREPRISES_URL)
-    url.searchParams.set('activite_principale', naf)
-    url.searchParams.set('departement', '33')
-    url.searchParams.set('tranche_effectif_salarie', '31,32,41,42,51,52,53')
-    url.searchParams.set('etat_administratif', 'A')
-    url.searchParams.set('per_page', String(perPage))
-    url.searchParams.set('page', '1')
+    let page = 1
+    let hasMore = true
 
-    let response: Response
-    try {
-      response = await fetchWithRetry(url.toString(), {
-        headers: { Accept: 'application/json' },
-      })
-    } catch (err) {
-      console.log(JSON.stringify({
-        level: 'warn',
-        module: 'sourcing',
-        msg: `Recherche Entreprises fallback: erreur pour NAF ${naf}`,
-        error: err instanceof Error ? err.message : String(err),
-      }))
-      continue
-    }
+    while (hasMore && allEtablissements.length < maxResults && page <= MAX_PAGES_PER_NAF) {
+      const url = new URL(RECHERCHE_ENTREPRISES_URL)
+      url.searchParams.set('activite_principale', naf)
+      url.searchParams.set('departement', '33')
+      // Tranches 21+ = 50 salariés et plus (élargi depuis 31+ = 200+)
+      url.searchParams.set('tranche_effectif_salarie', '21,22,31,32,41,42,51,52,53')
+      url.searchParams.set('etat_administratif', 'A')
+      url.searchParams.set('per_page', String(perPage))
+      url.searchParams.set('page', String(page))
 
-    if (!response.ok) continue
-
-    let data: { results?: RechercheEntreprisesResult[] }
-    try {
-      data = await response.json()
-    } catch {
-      continue
-    }
-
-    const results = data?.results ?? []
-
-    for (const r of results) {
-      if (allEtablissements.length >= maxResults) break
-      if (!r.siren || !r.siege) continue
-
-      // Convertir au format SireneEtablissement pour compatibilité avec enrichirProspect
-      const etab: SireneEtablissement = {
-        siret: r.siege.siret,
-        siren: r.siren,
-        denominationUniteLegale: r.nom_raison_sociale || r.nom_complet,
-        codePostalEtablissement: r.siege.code_postal,
-        libelleCommuneEtablissement: r.siege.libelle_commune,
-        activitePrincipaleEtablissement: r.siege.activite_principale || r.activite_principale,
-        trancheEffectifsEtablissement: r.siege.tranche_effectif_salarie || r.tranche_effectif_salarie,
-        etatAdministratifEtablissement: 'A',
-        adresseEtablissement: {
-          libelleVoieEtablissement: r.siege.adresse,
-          codePostalEtablissement: r.siege.code_postal,
-          libelleCommuneEtablissement: r.siege.libelle_commune,
-        },
+      let response: Response
+      try {
+        response = await fetchWithRetry(url.toString(), {
+          headers: { Accept: 'application/json' },
+        })
+      } catch (err) {
+        console.log(JSON.stringify({
+          level: 'warn',
+          module: 'sourcing',
+          msg: `Recherche Entreprises fallback: erreur réseau pour NAF ${naf} page ${page}`,
+          error: err instanceof Error ? err.message : String(err),
+        }))
+        break // Arrêter la pagination pour ce NAF sur erreur réseau
       }
 
-      allEtablissements.push(etab)
-    }
+      if (!response.ok) break
 
-    console.log(JSON.stringify({
-      level: 'info',
-      module: 'sourcing',
-      msg: `Recherche Entreprises fallback: NAF ${naf}`,
-      resultats: results.length,
-      cumul: allEtablissements.length,
-    }))
+      let data: { results?: RechercheEntreprisesResult[] }
+      try {
+        data = await response.json()
+      } catch {
+        break
+      }
+
+      const results = data?.results ?? []
+
+      // Si la page retourne moins de perPage résultats, c'est la dernière page
+      if (results.length < perPage) {
+        hasMore = false
+      }
+
+      for (const r of results) {
+        if (allEtablissements.length >= maxResults) break
+        if (!r.siren || !r.siege) continue
+
+        // Déduplication en amont : skiper les SIREN déjà connus en base
+        if (excludeSirens?.has(r.siren)) continue
+
+        // Convertir au format SireneEtablissement pour compatibilité avec enrichirProspect
+        const etab: SireneEtablissement = {
+          siret: r.siege.siret,
+          siren: r.siren,
+          denominationUniteLegale: r.nom_raison_sociale || r.nom_complet,
+          codePostalEtablissement: r.siege.code_postal,
+          libelleCommuneEtablissement: r.siege.libelle_commune,
+          activitePrincipaleEtablissement: r.siege.activite_principale || r.activite_principale,
+          trancheEffectifsEtablissement: r.siege.tranche_effectif_salarie || r.tranche_effectif_salarie,
+          etatAdministratifEtablissement: 'A',
+          adresseEtablissement: {
+            libelleVoieEtablissement: r.siege.adresse,
+            codePostalEtablissement: r.siege.code_postal,
+            libelleCommuneEtablissement: r.siege.libelle_commune,
+          },
+        }
+
+        allEtablissements.push(etab)
+      }
+
+      console.log(JSON.stringify({
+        level: 'info',
+        module: 'sourcing',
+        msg: `Recherche Entreprises fallback: NAF ${naf} page ${page}`,
+        resultats: results.length,
+        nouveaux_apres_dedup: results.filter((r) => r.siren && !excludeSirens?.has(r.siren)).length,
+        cumul: allEtablissements.length,
+      }))
+
+      page++
+    }
   }
 
   return allEtablissements.slice(0, maxResults)

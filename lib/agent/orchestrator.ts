@@ -210,14 +210,31 @@ async function phaseLoadSettings(
 // ------------------------------------------------------------
 
 // NAF_PRIORITAIRES par défaut utilisés quand les settings ne fournissent pas de codes NAF valides.
-// Format sans point (API Sirene) — le format avec point est utilisé dans le fallback.
+// Format avec point (les deux APIs — Sirene et fallback — acceptent ce format ici,
+// sourcing.ts normalise le format en interne selon l'API cible).
 const NAF_PRIORITAIRES_DEFAULT = [
-  '01.21Z', '01.22Z',
-  '30.30Z',
-  '52.10B', '52.29A',
-  '10.11Z', '10.13A', '10.32Z', '10.51A', '10.71A',
-  '46.17B',
-  '49.41A', '49.41B', '52.21Z',
+  '01.21Z', '01.22Z',        // Viticulture
+  '30.30Z',                  // Construction aéronautique
+  '52.10B', '52.29A',        // Logistique / entreposage
+  '10.11Z', '10.13A', '10.32Z', '10.51A', '10.71A', // Agro-alimentaire
+  '46.17B',                  // Commerce intermédiaire agro
+  '49.41A', '49.41B', '52.21Z', // Transport routier / services annexes
+  // Secteurs élargis — pertinents pour le bilan carbone
+  '20.11Z', '20.14Z', '20.15Z', // Industrie chimique
+  '23.11Z', '23.13Z',        // Verre et produits en verre
+  '24.10Z', '24.20Z',        // Sidérurgie / tubes acier
+  '25.11Z', '25.29Z',        // Fabrication structures métalliques
+  '28.11Z', '28.15Z',        // Fabrication moteurs / engrenages
+  '35.11Z', '35.14Z',        // Production / commerce d'électricité
+  '38.11Z', '38.21Z',        // Collecte / traitement des déchets
+  '41.20A', '41.20B',        // Construction de bâtiments
+  '42.11Z', '42.13A',        // Construction routes / ponts
+  '43.21A', '43.22A',        // Travaux d'installation
+  '46.71Z', '46.72Z',        // Commerce gros combustibles / métaux
+  '47.30Z',                  // Commerce carburants
+  '55.10Z',                  // Hôtels
+  '56.10A',                  // Restauration
+  '86.10Z',                  // Activités hospitalières
 ]
 
 async function phaseSourcing(
@@ -277,7 +294,13 @@ async function phaseSourcing(
   if (etablissements.length === 0) {
     log(run, 'sourcing_sirene', 'Sirene: 0 résultats — bascule sur Recherche Entreprises (open data)', 'warn')
     try {
-      etablissements = await sourcerEntreprisesFallback({ maxResults: 200, nafCodes })
+      // Passer excludeSirens pour déduplication en amont : le fallback pagine à travers
+      // toutes les pages et skip les SIREN déjà connus, évitant le gaspillage de quota.
+      etablissements = await sourcerEntreprisesFallback({
+        maxResults: 200,
+        nafCodes,
+        excludeSirens: sirenSet,
+      })
       log(run, 'sourcing_sirene', `Fallback Recherche Entreprises: ${etablissements.length} établissements sourcés`, 'info')
     } catch (fallbackErr) {
       throw new Error(
@@ -289,9 +312,16 @@ async function phaseSourcing(
   run.prospects_sourced = etablissements.length
   log(run, 'sourcing_sirene', `${etablissements.length} établissements sourcés depuis Sirene`, 'info')
 
-  // Filtrer les doublons
+  // Filtrer les doublons (pour les résultats Sirene primaire — le fallback a déjà dédupliqué)
   const nouveaux = etablissements.filter((e) => !sirenSet.has(e.siren))
   log(run, 'sourcing_sirene', `${nouveaux.length} nouveaux établissements après déduplication`, 'info')
+
+  // Warnings sur le volume de nouveaux prospects
+  if (nouveaux.length === 0) {
+    log(run, 'sourcing_sirene', 'ATTENTION : tous les prospects sont déjà en base — élargir les critères ou le périmètre géographique', 'warn')
+  } else if (nouveaux.length < (settings.daily_call_target ?? 15)) {
+    log(run, 'sourcing_sirene', `Seulement ${nouveaux.length} nouveaux prospects trouvés (objectif: ${settings.daily_call_target ?? 15})`, 'warn')
+  }
 
   // Enrichir chaque établissement (appel ADEME par établissement)
   // Parallélisation par batch de 20 (augmenté depuis 10 — perf audit recommandation #3) :
