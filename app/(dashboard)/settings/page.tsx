@@ -3,6 +3,10 @@ import { createClient } from '@/lib/supabase/server'
 import type { Profile, ProfileSettings } from '@/lib/types'
 import { SettingsForm } from '@/components/settings/settings-form'
 
+// Force le rendu dynamique — les settings doivent toujours refléter la valeur
+// actuelle en base (pas de version cached servie après une mise à jour récente)
+export const dynamic = 'force-dynamic'
+
 const SECTEURS_DISPONIBLES = [
   'Industrie manufacturière',
   'Transport et logistique',

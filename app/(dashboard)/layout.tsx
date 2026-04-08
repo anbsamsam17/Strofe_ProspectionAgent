@@ -4,6 +4,11 @@ import { Sidebar } from '@/components/layout/sidebar'
 import { DashboardHeader } from '@/components/layout/dashboard-header'
 import type { AgentRun, DailyList } from '@/lib/types'
 
+// Force le rendu dynamique sur TOUT le layout dashboard :
+// le statut de l'agent (running/completed/failed) et la daily list du jour
+// sont des données temps-réel qui ne doivent jamais être mises en cache par Next.js.
+export const dynamic = 'force-dynamic'
+
 async function getAgentStatus(userId: string): Promise<{
   agentRun: AgentRun | null
   dailyList: DailyList | null
@@ -17,14 +22,18 @@ async function getAgentStatus(userId: string): Promise<{
       .select('*')
       .eq('user_id', userId)
       .order('started_at', { ascending: false })
-      .limit(1)
-      .single(),
+      // BUG-FIX : .maybeSingle() au lieu de .single()
+      // .single() throw une erreur PGRST116 si aucun run n'existe encore
+      // .maybeSingle() retourne null proprement dans ce cas
+      .maybeSingle(),
     supabase
       .from('daily_lists')
       .select('*')
       .eq('user_id', userId)
       .eq('date', today)
-      .single(),
+      // BUG-FIX : .maybeSingle() au lieu de .single()
+      // .single() crash si aucune liste n'a encore été générée aujourd'hui
+      .maybeSingle(),
   ])
 
   return {
@@ -55,7 +64,9 @@ export default async function DashboardLayout({
     .from('profiles')
     .select('full_name, email')
     .eq('id', authenticatedUser.id)
-    .single()
+    // .single() est correct ici : le profil est créé automatiquement par trigger
+    // dès l'inscription. Si absent (état incohérent), on gère null proprement.
+    .maybeSingle()
 
   const profileData = profile as { full_name: string | null; email: string } | null
 

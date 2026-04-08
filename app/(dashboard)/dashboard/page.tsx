@@ -274,10 +274,11 @@ export default async function DashboardPage() {
   const totalInterested = items.filter((i) => i.call_result === 'interested').length
   const totalRdv = items.filter((i) => i.call_result === 'interested' && i.prospect?.statut === 'rdv').length
 
-  // 3 prochains appels non effectués
+  // 3 prochains appels non effectués — triés par score_priorite DESC (meilleurs en premier)
+  // prospect peut être null si la relation n'est pas résolue (sécurité : fallback 0)
   const nextCalls = items
     .filter((i) => !i.called_at)
-    .sort((a, b) => a.ordre - b.ordre)
+    .sort((a, b) => (b.prospect?.score_priorite ?? 0) - (a.prospect?.score_priorite ?? 0))
     .slice(0, 3)
 
   const dailyTarget = 15

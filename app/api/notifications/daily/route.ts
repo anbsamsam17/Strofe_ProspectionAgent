@@ -167,9 +167,12 @@ export async function POST(request: NextRequest) {
     }
 
     const items = (list.daily_list_items as ItemRow[]) ?? []
+    // BUG-FIX : trier par score DESC côté JS pour obtenir les 3 VRAIS meilleurs prospects
+    // (pas les 3 premiers selon l'ordre d'insertion qui peut être arbitraire en mode cumulatif).
     const topProspects = items
-      .slice(0, 3)
       .filter((item) => item.prospect !== null)
+      .sort((a, b) => (b.prospect?.score_priorite ?? 0) - (a.prospect?.score_priorite ?? 0))
+      .slice(0, 3)
       .map((item) => ({
         raison_sociale: item.prospect!.raison_sociale,
         secteur_libelle: item.prospect!.secteur_libelle ?? 'Secteur inconnu',

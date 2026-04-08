@@ -674,6 +674,18 @@ async function phaseCreateDailyList(
 
   const dailyList = listData as DailyList
 
+  // BUG-FIX : vérifier la cohérence entre pitchs[] et prospects[] avant construction des items.
+  // Si un batch GPT a partiellement échoué et retourné moins de pitchs que de prospects,
+  // les items excédentaires auront des pitchs vides (les fallbacks du batch gèrent déjà ça,
+  // mais on log un warn explicite pour faciliter le debug).
+  if (pitchs.length < prospects.length) {
+    log(run, 'construction_liste', 'ATTENTION : pitchs.length < prospects.length — certains items auront des pitchs vides', 'warn', {
+      pitchs_count: pitchs.length,
+      prospects_count: prospects.length,
+      manquants: prospects.length - pitchs.length,
+    })
+  }
+
   // Construire les items (type Record pour l'insert Supabase — null vs undefined)
   type DailyListInsert = {
     daily_list_id: string

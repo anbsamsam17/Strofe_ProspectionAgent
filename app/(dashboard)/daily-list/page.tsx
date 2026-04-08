@@ -3,6 +3,10 @@ import { createClient } from '@/lib/supabase/server'
 import type { DailyList, DailyListItem, Prospect } from '@/lib/types'
 import { DailyListClient } from '@/components/daily-list/daily-list-client'
 
+// Force le rendu dynamique — la daily list doit toujours être fraîche
+// (données temps-réel : appels effectués, nouveaux prospects ajoutés)
+export const dynamic = 'force-dynamic'
+
 function formatDateFr(isoDate: string): string {
   return new Intl.DateTimeFormat('fr-FR', { dateStyle: 'full' }).format(
     new Date(isoDate)
@@ -62,22 +66,42 @@ export default async function DailyListPage() {
 
   if (!user) redirect('/login')
 
+  // Une seule instance de Date — évite le bug "à minuit"
   const today = new Date().toISOString().split('T')[0]
 
-  // Colonnes explicites pour éviter le SELECT * :
-  // - daily_lists    : on exclut notified_at (inutile côté dashboard)
-  // - daily_list_items : on exclut created_at, updated_at (non affichés)
-  // - prospects      : on inclut contact_email, beges_url, beges_valide, beges_derniere_publication
-  //                    pour les afficher dans les cartes prospect de la liste du jour
+  // BUG-FIX : Afficher les TOP 15 non appelés triés par score parmi TOUS les items
+  // de la liste du jour (pas seulement les 15 derniers ajoutés).
+  //
+  // Stratégie en 2 requêtes :
+  //  1. Récupérer la daily_list du jour pour obtenir son statut global
+  //  2. Récupérer les items non appelés (called_at IS NULL) triés par score DESC + LIMIT 15
+  //     ET les items déjà appelés (pour afficher la progression complète)
+  //
+  // BUG-FIX .order(referencedTable) + .maybeSingle() : combinaison incompatible documentée
+  // dans hindsight.md. On utilise .maybeSingle() SANS .order(referencedTable) et on trie JS.
+
+  // Requête 1 : statut de la daily_list du jour
   const { data: dailyListData } = await supabase
     .from('daily_lists')
-    .select(
-      `
-      id, user_id, date, status, generated_at, created_at,
-      items:daily_list_items(
+    .select('id, user_id, date, status, generated_at, created_at')
+    .eq('user_id', user.id)
+    .eq('date', today)
+    .maybeSingle()
+
+  const dailyList = dailyListData as DailyList | null
+
+  // Requête 2 : items de la daily_list du jour avec leurs prospects
+  // On récupère TOUS les items (appelés + non appelés) pour la barre de progression.
+  // Le tri par score se fait côté JS pour éviter le piège .order(referencedTable) + maybeSingle.
+  let allItems: (DailyListItem & { prospect: Prospect })[] = []
+
+  if (dailyList) {
+    const { data: itemsData } = await supabase
+      .from('daily_list_items')
+      .select(`
         id, daily_list_id, user_id, prospect_id,
         ordre, priorite, meilleur_creneau,
-        accroche, pitch,
+        accroche, pitch, created_at,
         signaux_detectes, objections_reponses, contact_type,
         call_result, callback_date, call_notes, called_at,
         prospect:prospects(
@@ -87,25 +111,40 @@ export default async function DailyListPage() {
           beges_publie, beges_derniere_publication, beges_url, beges_valide,
           obligation_beges, score_priorite, statut
         )
-      )
-    `
-    )
-    .eq('user_id', user.id)
-    .eq('date', today)
-    .order('ordre', { referencedTable: 'daily_list_items', ascending: true })
-    .maybeSingle()
+      `)
+      .eq('daily_list_id', dailyList.id)
+      .eq('user_id', user.id)
 
-  type DailyListWithItems = DailyList & {
-    items: (DailyListItem & { prospect: Prospect })[]
+    allItems = (itemsData ?? []) as unknown as (DailyListItem & { prospect: Prospect })[]
   }
 
-  const dailyList = dailyListData as DailyListWithItems | null
+  // BUG-FIX : Trier côté JS par score DESC
+  // - Items non appelés (called_at IS NULL) : triés par score DESC — ce sont les TOP 15 à appeler
+  // - Items appelés (called_at NOT NULL) : triés par called_at ASC — historique des appels effectués
+  //
+  // La page affiche EN PREMIER les non-appelés triés par score (l'essentiel),
+  // puis les appelés en dessous (historique consultatif).
+  const uncalledItems = allItems
+    .filter((i) => !i.called_at)
+    .sort((a, b) => (b.prospect?.score_priorite ?? 0) - (a.prospect?.score_priorite ?? 0))
 
-  // Le tri est délégué à PostgreSQL via .order('ordre') — ce fallback est une sécurité.
-  const items = dailyList?.items ?? []
+  const calledItems = allItems
+    .filter((i) => i.called_at)
+    .sort((a, b) => {
+      // Tri par called_at ASC — les premiers appels en haut de l'historique
+      if (!a.called_at || !b.called_at) return 0
+      return new Date(a.called_at).getTime() - new Date(b.called_at).getTime()
+    })
 
-  const calledCount = items.filter((i) => i.called_at).length
-  const progressPercent = items.length > 0 ? (calledCount / items.length) * 100 : 0
+  // items = non-appelés (top 15 par score) puis appelés (historique)
+  const items: (DailyListItem & { prospect: Prospect })[] = [...uncalledItems, ...calledItems]
+
+  const calledCount = calledItems.length
+  const totalCount = items.length
+  const progressPercent = totalCount > 0 ? (calledCount / totalCount) * 100 : 0
+
+  // Statut de la liste pour le badge — dailyList est déjà DailyList | null
+  const listStatus = dailyList?.status ?? null
 
   return (
     <div className="mx-auto max-w-4xl space-y-6">
@@ -120,19 +159,19 @@ export default async function DailyListPage() {
             {formatDateFr(today)}
           </p>
         </div>
-        {dailyList && (
+        {dailyList && listStatus && (
           <div className="flex items-center gap-3">
             <span className="text-sm text-gray-500 dark:text-gray-400">
               <span className="font-semibold text-gray-900 dark:text-white">{calledCount}</span>
-              /{items.length} appels
+              /{totalCount} appels
             </span>
-            <StatusBadge status={dailyList.status} />
+            <StatusBadge status={listStatus} />
           </div>
         )}
       </div>
 
       {/* ── Barre de progression ─────────────────────────────── */}
-      {dailyList && items.length > 0 && (
+      {dailyList && totalCount > 0 && (
         <div
           className="rounded-xl border border-gray-100 bg-white p-4 shadow-sm dark:border-gray-800/60 dark:bg-gray-900"
           aria-label="Progression des appels"
@@ -152,12 +191,12 @@ export default async function DailyListPage() {
               role="progressbar"
               aria-valuenow={calledCount}
               aria-valuemin={0}
-              aria-valuemax={items.length}
+              aria-valuemax={totalCount}
             />
           </div>
           <div className="mt-2 flex items-center gap-4 text-xs text-gray-400 dark:text-gray-600">
             <span>{calledCount} effectués</span>
-            <span>{items.length - calledCount} restants</span>
+            <span>{uncalledItems.length} restants</span>
           </div>
         </div>
       )}
@@ -192,7 +231,7 @@ export default async function DailyListPage() {
       )}
 
       {/* ── En génération ────────────────────────────────────── */}
-      {dailyList?.status === 'generating' && items.length === 0 && (
+      {listStatus === 'generating' && totalCount === 0 && (
         <div className="flex flex-col items-center justify-center rounded-xl border border-yellow-200 bg-yellow-50 py-20 dark:border-yellow-900/40 dark:bg-yellow-950/20">
           <div className="flex h-14 w-14 items-center justify-center rounded-full bg-yellow-100 dark:bg-yellow-950/40">
             <svg

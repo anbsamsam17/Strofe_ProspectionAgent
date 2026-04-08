@@ -3,6 +3,10 @@ import { createClient } from '@/lib/supabase/server'
 import type { Prospect, ProspectStatus } from '@/lib/types'
 import { PipelineClient } from '@/components/pipeline/pipeline-client'
 
+// Force le rendu dynamique — le Kanban pipeline change après chaque appel
+// (statut prospect mis à jour via PATCH /api/daily-list/[id]/feedback)
+export const dynamic = 'force-dynamic'
+
 // Colonnes Kanban dans l'ordre logique du pipeline
 const PIPELINE_COLUMNS: { status: ProspectStatus; label: string; color: string }[] = [
   { status: 'sourced', label: 'Sourcé', color: 'gray' },

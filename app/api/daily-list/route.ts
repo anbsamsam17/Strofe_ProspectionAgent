@@ -77,6 +77,10 @@ export async function GET(request: NextRequest) {
   const targetDate = parsed.data.date ?? today
 
   // -- Récupérer la liste du jour avec items + prospects --
+  // BUG-FIX : supprimer .order(referencedTable) avant .maybeSingle()
+  // Trier une relation imbriquée via referencedTable sur une requête .maybeSingle() peut
+  // provoquer une multiplication des lignes retournées par postgrest → .maybeSingle() retourne null
+  // au lieu de la liste (erreur PGRST116 silencieuse). Tri délégué au JS après la réponse.
   const { data: listData, error: listError } = await supabase
     .from('daily_lists')
     .select(
@@ -90,7 +94,6 @@ export async function GET(request: NextRequest) {
     )
     .eq('user_id', user.id)
     .eq('date', targetDate)
-    .order('ordre', { referencedTable: 'daily_list_items', ascending: true })
     .maybeSingle()
 
   if (listError) {
@@ -150,6 +153,15 @@ export async function GET(request: NextRequest) {
   }
 
   // -- Mapper la réponse DB vers le type DailyListWithItems --
+  // BUG-FIX : tri des items côté JS (ordre ASC) car .order(referencedTable) a été supprimé
+  // pour éviter l'incompatibilité avec .maybeSingle() (voir hindsight 2026-04-06).
+  const rawItems = ((listData.items as unknown as DailyListItem[]) ?? [])
+    .map((item) => ({
+      ...item,
+      prospect: item.prospect as unknown as Prospect,
+    }))
+    .sort((a, b) => a.ordre - b.ordre)
+
   const list: DailyListWithItems = {
     id: listData.id as string,
     user_id: listData.user_id as string,
@@ -159,10 +171,7 @@ export async function GET(request: NextRequest) {
     notified_at: (listData.notified_at as string | null) ?? undefined,
     created_at: listData.created_at as string,
     updated_at: listData.updated_at as string,
-    items: ((listData.items as unknown as DailyListItem[]) ?? []).map((item) => ({
-      ...item,
-      prospect: item.prospect as unknown as Prospect,
-    })),
+    items: rawItems,
   }
 
   return NextResponse.json({ list }, { status: 200 })

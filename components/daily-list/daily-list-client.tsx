@@ -60,8 +60,18 @@ export function DailyListClient({ initialItems }: DailyListClientProps) {
   const callbackCount = calledItems.filter((i) => i.call_result === 'callback').length
 
   // Séparation appels effectués / à faire
-  const pendingItems = items.filter((item) => !item.called_at)
-  const doneItems = items.filter((item) => Boolean(item.called_at))
+  // pendingItems : meilleurs scores en premier (score_priorite DESC) — prospect peut être null (sécurité)
+  const pendingItems = items
+    .filter((item) => !item.called_at)
+    .sort((a, b) => (b.prospect?.score_priorite ?? 0) - (a.prospect?.score_priorite ?? 0))
+  // doneItems : plus récemment appelé en haut (called_at DESC)
+  const doneItems = items
+    .filter((item) => Boolean(item.called_at))
+    .sort((a, b) => {
+      const dateA = a.called_at ? new Date(a.called_at).getTime() : 0
+      const dateB = b.called_at ? new Date(b.called_at).getTime() : 0
+      return dateB - dateA
+    })
 
   if (totalItems === 0) {
     return (

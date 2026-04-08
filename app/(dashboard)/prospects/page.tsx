@@ -4,6 +4,10 @@ import { createClient } from '@/lib/supabase/server'
 import type { Prospect, ProspectStatus } from '@/lib/types'
 import { ProspectsFilters } from '@/components/prospects/prospects-filters'
 
+// Force le rendu dynamique — la table prospects change à chaque run agent
+// et après chaque feedback d'appel (statut mis à jour)
+export const dynamic = 'force-dynamic'
+
 // ── Constants ─────────────────────────────────────────────────────────────────
 
 const PAGE_SIZE = 20

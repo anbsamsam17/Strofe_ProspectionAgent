@@ -372,4 +372,58 @@ Trier une relation imbriquée via `.order('colonne', { referencedTable: 'table_e
 - Postgrest : `.maybeSingle()` = pas de `.limit(1)`, pas de `.order(referencedTable)`
 - Tri des relations imbriquées : toujours côté JS via `.sort()`, jamais via la chaîne postgrest
 
+## 2026-04-06 — Enrichissement contacts : compteur crédits en mémoire module + AbortSignal.timeout()
+
+**Règle à retenir** :
+- Pour les APIs avec quotas gratuits (Hunter 50/mois, Pappers 100 total), un compteur en mémoire module (`let _credits = {...}`) est la solution appropriée sur Vercel warm instances. Il se réinitialise à chaque cold start mais couvre les runs intra-session.
+- `AbortSignal.timeout(ms)` est disponible nativement en Node.js 18+ et Next.js 15 — préférer à `AbortController` + `setTimeout` pour les timeouts sur fetch. Plus concis et sans fuite mémoire.
+- Un accès `process.env.PAPPERS_API_KEY` retourne `undefined` (pas une erreur) si la variable n'est pas définie — utiliser `Boolean(process.env.X)` pour les guards de mode dégradé.
+- Les champs contact Supabase peuvent être `null` (valeur DB) mais TypeScript les type comme `string | null`. Lors du passage à `enrichirContact()`, utiliser `?? undefined` pour convertir `null` → `undefined` (le type attendu par `Partial<EnrichedContact>`).
+
+**Comment l'éviter** :
+- Avant tout module qui appelle des APIs tierces avec quota, définir le compteur dès la conception et exposer `getCreditsUsed()` pour le logging.
+- Toujours vérifier si `AbortSignal.timeout()` est disponible avant d'opter pour la version longue avec AbortController.
+
+## 2026-04-06 — Sourcing fallback : pagination page=1 seulement + déduplication post-fetch
+
+**Erreur commise** : `sourcerEntreprisesFallback()` ne paginait qu'une seule page par code NAF (`page=1` fixe). Avec 13 codes NAF et ~7 résultats/page en Gironde, le plafond était ~96 entreprises. Après le 1er run, tous étaient en base → 0 nouveaux → daily list piochait dans les existants.
+
+**Règle à retenir** :
+- Tout sourcing qui pagine doit avoir : (1) une boucle `while (hasMore && count < maxResults && page <= MAX_PAGES)`, (2) un guard anti-boucle infinie (ex: `MAX_PAGES_PER_NAF = 10`), (3) la condition de fin `results.length < perPage → hasMore = false`.
+- La déduplication doit se faire EN AMONT du sourcing (passer `excludeSirens: Set<string>` au fallback), pas après. Sinon on fetche des pages entières pour les jeter, et on ne continue pas à paginer pour trouver des nouvelles.
+- Le seuil d'effectif doit être calibré selon la densité locale : 200+ salariés en Gironde = ~96 entreprises total tous secteurs confondus. Baisser à 50+ (tranche 21) multiplie le bassin par 5-10x.
+
+**Comment l'éviter** :
+- Avant de lancer un sourcing géographiquement ciblé, estimer la taille du bassin : `N codes NAF × résultats/code × pages attendues`. Si < 3× le daily_call_target, élargir les critères avant d'implémenter.
+- Tester le fallback indépendamment avec `nafCodes = ['49.41A']` et vérifier que la pagination remonte bien la page 2 quand page 1 = 25 résultats.
+
+## 2026-04-06 — Audit complet pipeline + frontend : 8 corrections
+
+**Erreurs confirmées lors de l'audit** :
+
+**1. `force-dynamic` manquant sur toutes les pages dashboard (5 fichiers + layout)**
+- `daily-list/page.tsx`, `prospects/page.tsx`, `pipeline/page.tsx`, `settings/page.tsx` et `layout.tsx` n'avaient pas `export const dynamic = 'force-dynamic'`.
+- Next.js 15 peut mettre en cache les Server Components même si `cookies()` est utilisé indirectement dans un module importé.
+- Règle : toute page dashboard lisant des données temps-réel (agent_runs, daily_lists, prospects) doit avoir `force-dynamic` comme première ligne après les imports.
+
+**2. `.single()` au lieu de `.maybeSingle()` dans le layout — crash pour les nouveaux utilisateurs**
+- Le layout utilisait `.single()` sur `agent_runs` et `daily_lists` — PGRST116 si aucun run n'existe.
+- Règle : `.single()` uniquement quand la ligne est GARANTIE par un trigger ou une contrainte DB. Pour toute table qui peut être vide, utiliser `.maybeSingle()`.
+
+**3. `.order(referencedTable)` + `.maybeSingle()` — pattern détecté dans 2 fichiers**
+- `api/daily-list/route.ts` + ancienne `daily-list/page.tsx` avaient ce pattern.
+- Ce bug est documenté dans hindsight depuis le 2026-04-06 mais continue d'apparaître.
+- Règle de vérification avant commit : grepper `.order.*referencedTable` dans tout fichier utilisant `.maybeSingle()`.
+
+**4. `topProspects` email non triés par score**
+- La route notifications prenait `items.slice(0, 3)` sans trier — l'email montrait les 3 premiers items insérés, pas les 3 meilleurs. En mode cumulatif, les plus anciens (moins bons scores) apparaissaient.
+- Règle : dans tout contexte "top N", trier par score DESC AVANT de slicer.
+
+**Comment l'éviter** :
+- Checklist avant merge d'une page/route dashboard :
+  1. `export const dynamic = 'force-dynamic'` présent ?
+  2. Toutes les queries Supabase utilisent `.maybeSingle()` (sauf lignes garanties par trigger) ?
+  3. Aucun `.order(referencedTable)` avant `.maybeSingle()` ?
+  4. Tous les "top N" triés explicitement par score avant slice ?
+
 <!-- Les entrées suivantes seront ajoutées automatiquement par Claude après chaque session -->

@@ -16,6 +16,70 @@ links:
 
 ---
 
+## 2026-04-06 — Audit complet pipeline + frontend (8 corrections)
+
+**Tâche** : Audit et correction de tous les bugs pipeline et frontend identifiés dans la consigne.
+
+**Bugs corrigés** :
+1. `daily-list/page.tsx` — Ajout `export const dynamic = 'force-dynamic'` + refonte query en 2 requêtes séparées (statut daily_list + items directs) pour afficher les TOP 15 non appelés triés par score parmi TOUS les items (pas seulement les 15 derniers ajoutés). Tri JS score DESC sur uncalledItems.
+2. `layout.tsx` — `.single()` → `.maybeSingle()` sur `agent_runs` ET `daily_lists` (crash PGRST116 si aucun run ou liste n'existe). Ajout `export const dynamic = 'force-dynamic'` sur le layout.
+3. `prospects/page.tsx` — Ajout `export const dynamic = 'force-dynamic'`
+4. `pipeline/page.tsx` — Ajout `export const dynamic = 'force-dynamic'`
+5. `settings/page.tsx` — Ajout `export const dynamic = 'force-dynamic'`
+6. `api/daily-list/route.ts` — Suppression `.order(referencedTable)` + `.maybeSingle()` (incompatibles — retourne null silencieusement). Tri JS côté JS après réponse.
+7. `api/notifications/daily/route.ts` — `topProspects` trié par score DESC (pas par ordre d'insertion).
+8. `orchestrator.ts` — Warning log si `pitchs.length < prospects.length` dans `phaseCreateDailyList`.
+
+**Fichiers modifiés** :
+- `app/(dashboard)/daily-list/page.tsx`
+- `app/(dashboard)/layout.tsx`
+- `app/(dashboard)/prospects/page.tsx`
+- `app/(dashboard)/pipeline/page.tsx`
+- `app/(dashboard)/settings/page.tsx`
+- `app/api/daily-list/route.ts`
+- `app/api/notifications/daily/route.ts`
+- `lib/agent/orchestrator.ts`
+
+**Résultat** : 0 erreur TypeScript (`npx tsc --noEmit` exit 0)
+
+---
+
+## 2026-04-06 — Tri daily list par score prospect décroissant
+
+**Objectif** : La daily list doit toujours afficher les meilleurs prospects (score_priorite DESC) en haut, quelle que soit l'ordre d'insertion.
+
+**Fichiers modifiés** :
+- `app/(dashboard)/daily-list/page.tsx` — suppression de `.order('ordre', { referencedTable: 'daily_list_items' })` (piège postgrest + maybeSingle), ajout tri JS `score_priorite DESC`
+- `components/daily-list/daily-list-client.tsx` — `pendingItems` triés par `score_priorite DESC`, `doneItems` triés par `called_at DESC`
+- `app/(dashboard)/dashboard/page.tsx` — `nextCalls` triés par `score_priorite DESC` (au lieu de `ordre ASC`)
+
+**Résultat** : 0 erreur TypeScript (`tsc --noEmit` exit 0)
+
+---
+
+## 2026-04-06 — Fix sourcing : pagination fallback + seuil effectif 50+ + 30 NAF + excludeSirens
+
+**Tâche** : Corriger le problème de sourcing retournant toujours les mêmes ~96 prospects (fallback pagine 1 seule page, critères trop restrictifs, pas de déduplication en amont).
+
+**Fichiers modifiés** :
+- `lib/agent/sourcing.ts` — pagination fallback (max 10 pages/NAF), TRANCHE_MIN 31→21, 30 codes NAF ajoutés, `excludeSirens` dans SourcingOptions, filtre tranche 21,22 dans fallback
+- `lib/agent/orchestrator.ts` — NAF_PRIORITAIRES_DEFAULT élargi, `excludeSirens: sirenSet` passé au fallback, warnings `nouveaux.length === 0` et `< daily_call_target`
+
+**Résultat** : 0 erreur TypeScript. Pipeline peut sourcer 2× à 3× plus de prospects (50+ salariés au lieu de 200+, 36 codes NAF au lieu de 13). Déduplication en amont évite les pages inutiles.
+
+---
+
+## 2026-04-06 — Module enrichissement contacts (Pappers + Hunter.io)
+
+**Tâche** : Créer `lib/agent/contact-enrichment.ts` et intégrer la phase 4.5 dans l'orchestrateur.
+
+**Fichiers créés** : `lib/agent/contact-enrichment.ts`
+**Fichiers modifiés** : `lib/agent/orchestrator.ts`
+
+**Résultat** : 0 erreur TypeScript. Cascade Pappers → Hunter Domain Search → Hunter Email Finder. Compteur crédits en mémoire (Pappers: 100, Hunter: 50). Mode dégradé silencieux sans API keys. Phase 4.5 non-fatale insérée après phaseScoring.
+
+---
+
 ## 2026-04-06 — Page détail prospect + contact rapide carte daily list
 
 **Tâche** : Créer la page `/prospects/{id}` (Server Component) et ajouter le bloc contact visible en haut de la carte daily list.
