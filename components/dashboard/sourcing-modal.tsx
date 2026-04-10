@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef, useCallback } from 'react'
+import { createPortal } from 'react-dom'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -45,9 +46,18 @@ export function SourcingModal({ isOpen, onClose }: SourcingModalProps) {
   const [selectedSectors, setSelectedSectors] = useState<Set<number>>(new Set())
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // Portal : on ne rend le modal qu'après le mount côté client (pas de SSR)
+  // pour éviter les mismatches d'hydratation et permettre l'accès à document.body.
+  const [mounted, setMounted] = useState(false)
 
   const dialogRef = useRef<HTMLDivElement>(null)
   const firstFocusableRef = useRef<HTMLButtonElement>(null)
+
+  // Setup mount flag une seule fois côté client
+  useEffect(() => {
+    setMounted(true)
+    return () => setMounted(false)
+  }, [])
 
   // Fermer avec Escape
   const handleKeyDown = useCallback(
@@ -159,12 +169,16 @@ export function SourcingModal({ isOpen, onClose }: SourcingModalProps) {
     }
   }
 
-  if (!isOpen) return null
+  if (!isOpen || !mounted) return null
 
-  return (
+  // Portal : rend la modal directement sur document.body pour éviter que des
+  // ancêtres avec backdrop-filter/transform/filter ne créent un containing block
+  // pour position: fixed (cf. DashboardHeader qui a backdrop-blur-sm).
+  // Sans portal, fixed inset-0 est contraint à la taille du header (64px).
+  const modalContent = (
     // Overlay — scroll vertical pour que le contenu long reste accessible
     <div
-      className="fixed inset-0 z-50 overflow-y-auto bg-black/60 backdrop-blur-sm"
+      className="fixed inset-0 z-[9999] overflow-y-auto bg-black/60 backdrop-blur-sm"
       role="presentation"
       onClick={handleOverlayClick}
       aria-hidden={!isOpen}
@@ -460,4 +474,6 @@ export function SourcingModal({ isOpen, onClose }: SourcingModalProps) {
       </div>
     </div>
   )
+
+  return createPortal(modalContent, document.body)
 }
