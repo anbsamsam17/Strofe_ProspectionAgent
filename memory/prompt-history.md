@@ -16,6 +16,51 @@ links:
 
 ---
 
+## 2026-04-06 — Bug fix : contacts enrichis absents dans la daily list (api_token Pappers)
+
+**Tâche** : Diagnostiquer et corriger pourquoi les emails et téléphones n'apparaissaient pas dans la daily list malgré les clés API Pappers/Hunter configurées sur Vercel.
+
+**Cause racine identifiée** : `contact-enrichment.ts` utilisait `api_key=` comme query param Pappers alors que Pappers.fr exige `api_token=`. Réponse 401 capturée silencieusement → cascade enrichissement interrompue → zéro contact enrichi.
+
+**Vérification** : `curl "https://api.pappers.fr/v2/entreprise?siren=552032534&api_key=test"` retourne `{"message":"Veuillez indiquer votre api_token"}`.
+
+**Autres points vérifiés sans bug** :
+- `daily-list-generator.ts` : import `enrichirContact` présent, appel sur les N prospects, UPDATE DB correct, mise à jour en mémoire correcte.
+- `daily-list/page.tsx` : query Supabase joint `prospects` et sélectionne tous les champs `contact_*`.
+- `prospect-card.tsx` : affiche `contact_telephone` (lien `tel:`) et `contact_email` (lien `mailto:`) correctement.
+- `daily-list-client.tsx` : passe les items intacts au ProspectCard.
+
+**Corrections apportées à `lib/agent/contact-enrichment.ts`** :
+1. `api_key` → `api_token` dans `fetchPappers()` (fix critique)
+2. Logs `level: info` ajoutés au démarrage de `enrichirContact()` (état des clés, champs déjà connus)
+3. Log de résumé final dans `enrichirContact()` (new_fields_count, email_enriched, telephone_enriched)
+4. Logs d'appel avant le fetch Pappers
+5. Logs de résultat parsé Pappers (telephone_found, domain_found, dirigeant_found, nb_representants)
+6. Log sur URL site web invalide Pappers (erreur JSON.parse silencieuse → maintenant loggée)
+7. Logs body d'erreur HTTP (Pappers + Hunter domain-search) pour diagnostics Vercel
+8. Logs Hunter domain-search : total emails, personal emails, message si aucun bon email
+9. Logs Hunter email-finder : message si aucun email trouvé
+10. Log si Hunter ignoré faute de domaine
+
+**Validation** : `npx tsc --noEmit` exit code 0.
+
+---
+
+## 2026-04-06 — Bug fix : dashboard affichait "Bonjour, Utilisateur" au lieu du prénom
+
+**Tâche** : Corriger l'affichage "Bonjour, Utilisateur" dans `dashboard/page.tsx` alors que le nom "Samir Anbri" était visible dans `/settings`.
+
+**Cause racine** : `.single()` au lieu de `.maybeSingle()` sur la query profil dans le `Promise.all()` du dashboard. Quand `.single()` retourne une erreur PGRST116 (profil absent ou état transitoire), `profileResult.data` est `null` et le fallback `'Utilisateur'` s'applique.
+
+**Livraisons** :
+- `app/(dashboard)/dashboard/page.tsx` — deux changements :
+  1. `.single()` → `.maybeSingle()` sur la query `profiles`
+  2. Fallback supplémentaire sur `user.user_metadata?.full_name` (source Supabase Auth, même source que le trigger `handle_new_user`)
+
+**Validation** : `npx tsc --noEmit` exit code 0.
+
+---
+
 ## 2026-04-06 — Refonte architecture pipeline : séparation sourcing / daily list
 
 **Tâche** : Refondre l'architecture du pipeline agent pour séparer le sourcing pur de la génération de la daily list.

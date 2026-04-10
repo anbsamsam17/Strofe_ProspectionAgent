@@ -155,13 +155,34 @@ interface PappersResult {
  */
 async function fetchPappers(siren: string): Promise<PappersResult | null> {
   const apiKey = process.env.PAPPERS_API_KEY
-  if (!apiKey) return null
+  if (!apiKey) {
+    console.log(
+      JSON.stringify({
+        level: 'warn',
+        module: 'contact-enrichment',
+        msg: 'Pappers: PAPPERS_API_KEY non configurée — enrichissement désactivé',
+      }),
+    )
+    return null
+  }
 
   if (!consumeCredit('pappers')) return null
 
+  // BUG-FIX 2026-04-06 : Pappers exige "api_token" (pas "api_key")
+  // Preuve : réponse 401 "Veuillez indiquer votre api_token" avec api_key
   const url = new URL(`https://api.pappers.fr/v2/entreprise`)
   url.searchParams.set('siren', siren)
-  url.searchParams.set('api_key', apiKey)
+  url.searchParams.set('api_token', apiKey)
+
+  console.log(
+    JSON.stringify({
+      level: 'info',
+      module: 'contact-enrichment',
+      msg: `Pappers: appel API pour SIREN ${siren}`,
+      siren,
+      url_path: '/v2/entreprise',
+    }),
+  )
 
   let response: Response
   try {
@@ -176,6 +197,7 @@ async function fetchPappers(siren: string): Promise<PappersResult | null> {
         level: 'warn',
         module: 'contact-enrichment',
         msg: `Pappers: erreur réseau pour SIREN ${siren}`,
+        siren,
         error: err instanceof Error ? err.message : String(err),
       }),
     )
@@ -183,11 +205,17 @@ async function fetchPappers(siren: string): Promise<PappersResult | null> {
   }
 
   if (!response.ok) {
+    // Lire le body pour donner un message d'erreur précis dans les logs
+    let errorBody = ''
+    try { errorBody = await response.text() } catch { /* ignore */ }
     console.log(
       JSON.stringify({
         level: 'warn',
         module: 'contact-enrichment',
         msg: `Pappers: HTTP ${response.status} pour SIREN ${siren}`,
+        siren,
+        status: response.status,
+        body: errorBody.slice(0, 300),
       }),
     )
     return null
@@ -196,7 +224,16 @@ async function fetchPappers(siren: string): Promise<PappersResult | null> {
   let data: PappersEntreprise
   try {
     data = (await response.json()) as PappersEntreprise
-  } catch {
+  } catch (err) {
+    console.log(
+      JSON.stringify({
+        level: 'warn',
+        module: 'contact-enrichment',
+        msg: `Pappers: impossible de parser la réponse JSON pour SIREN ${siren}`,
+        siren,
+        error: err instanceof Error ? err.message : String(err),
+      }),
+    )
     return null
   }
 
@@ -216,7 +253,15 @@ async function fetchPappers(siren: string): Promise<PappersResult | null> {
       const parsed = new URL(normalized)
       result.domain = parsed.hostname.replace(/^www\./, '')
     } catch {
-      // URL invalide — ignorer silencieusement
+      console.log(
+        JSON.stringify({
+          level: 'warn',
+          module: 'contact-enrichment',
+          msg: `Pappers: URL site web invalide pour SIREN ${siren}`,
+          siren,
+          site_web: siteWeb,
+        }),
+      )
     }
   }
 
@@ -235,6 +280,22 @@ async function fetchPappers(siren: string): Promise<PappersResult | null> {
     if (dirigeant.nom?.trim()) result.contact_nom = dirigeant.nom.trim()
     if (dirigeant.prenom?.trim()) result.contact_prenom = dirigeant.prenom.trim()
   }
+
+  console.log(
+    JSON.stringify({
+      level: 'info',
+      module: 'contact-enrichment',
+      msg: `Pappers: réponse parsée pour SIREN ${siren}`,
+      siren,
+      telephone_found: Boolean(result.telephone),
+      domain_found: Boolean(result.domain),
+      domain: result.domain ?? null,
+      dirigeant_found: Boolean(result.contact_nom),
+      nom: result.contact_nom ?? null,
+      prenom: result.contact_prenom ?? null,
+      nb_representants: representants.length,
+    }),
+  )
 
   return result
 }
@@ -283,11 +344,16 @@ async function fetchHunterDomainSearch(domain: string): Promise<{
   }
 
   if (!response.ok) {
+    let errorBody = ''
+    try { errorBody = await response.text() } catch { /* ignore */ }
     console.log(
       JSON.stringify({
         level: 'warn',
         module: 'contact-enrichment',
         msg: `Hunter domain-search: HTTP ${response.status} pour domaine ${domain}`,
+        domain,
+        status: response.status,
+        body: errorBody.slice(0, 300),
       }),
     )
     return null
@@ -296,18 +362,48 @@ async function fetchHunterDomainSearch(domain: string): Promise<{
   let data: HunterDomainSearchResponse
   try {
     data = (await response.json()) as HunterDomainSearchResponse
-  } catch {
+  } catch (err) {
+    console.log(
+      JSON.stringify({
+        level: 'warn',
+        module: 'contact-enrichment',
+        msg: `Hunter domain-search: impossible de parser la réponse JSON pour domaine ${domain}`,
+        domain,
+        error: err instanceof Error ? err.message : String(err),
+      }),
+    )
     return null
   }
 
   const emails = data.data?.emails ?? []
+
+  console.log(
+    JSON.stringify({
+      level: 'info',
+      module: 'contact-enrichment',
+      msg: `Hunter domain-search: ${emails.length} emails trouvés pour domaine ${domain}`,
+      domain,
+      total_emails: emails.length,
+      personal_emails: emails.filter((e) => e.type === 'personal').length,
+    }),
+  )
 
   // Chercher le premier email personnel avec confidence > 50
   const best = emails
     .filter((e) => e.type === 'personal' && (e.confidence ?? 0) > 50 && e.value)
     .sort((a, b) => (b.confidence ?? 0) - (a.confidence ?? 0))[0]
 
-  if (!best?.value) return null
+  if (!best?.value) {
+    console.log(
+      JSON.stringify({
+        level: 'info',
+        module: 'contact-enrichment',
+        msg: `Hunter domain-search: aucun email personnel avec confidence > 50 pour domaine ${domain}`,
+        domain,
+      }),
+    )
+    return null
+  }
 
   return {
     email: best.value,
@@ -432,7 +528,32 @@ export async function enrichirContact(
   // Court-circuit : aucune API key configurée → mode dégradé silencieux
   const hasPappersKey = Boolean(process.env.PAPPERS_API_KEY)
   const hasHunterKey  = Boolean(process.env.HUNTER_API_KEY)
-  if (!hasPappersKey && !hasHunterKey) return {}
+
+  console.log(
+    JSON.stringify({
+      level: 'info',
+      module: 'contact-enrichment',
+      msg: `enrichirContact: démarrage pour SIREN ${siren}`,
+      siren,
+      has_pappers_key: hasPappersKey,
+      has_hunter_key: hasHunterKey,
+      already_has_email: Boolean(existingContact.contact_email),
+      already_has_phone: Boolean(existingContact.contact_telephone),
+      already_has_nom: Boolean(existingContact.contact_nom),
+    }),
+  )
+
+  if (!hasPappersKey && !hasHunterKey) {
+    console.log(
+      JSON.stringify({
+        level: 'warn',
+        module: 'contact-enrichment',
+        msg: 'enrichirContact: aucune API key configurée (PAPPERS_API_KEY, HUNTER_API_KEY) — enrichissement désactivé',
+        siren,
+      }),
+    )
+    return {}
+  }
 
   const result: Partial<EnrichedContact> = {}
 
@@ -553,8 +674,43 @@ export async function enrichirContact(
           domain: resolvedDomain,
         }),
       )
+    } else {
+      console.log(
+        JSON.stringify({
+          level: 'info',
+          module: 'contact-enrichment',
+          msg: `Hunter email-finder: aucun email trouvé pour ${resolvedPrenom} ${resolvedNom} @ ${resolvedDomain}`,
+          siren,
+        }),
+      )
     }
+  } else if (hasHunterKey && !resolvedDomain) {
+    console.log(
+      JSON.stringify({
+        level: 'info',
+        module: 'contact-enrichment',
+        msg: `Hunter: domaine introuvable pour SIREN ${siren} — Hunter domain-search et email-finder ignorés`,
+        siren,
+        has_nom: Boolean(resolvedNom),
+        has_prenom: Boolean(resolvedPrenom),
+      }),
+    )
   }
+
+  // Log de résumé final
+  console.log(
+    JSON.stringify({
+      level: 'info',
+      module: 'contact-enrichment',
+      msg: `enrichirContact: terminé pour SIREN ${siren}`,
+      siren,
+      new_fields_count: Object.keys(result).length,
+      new_fields: Object.keys(result),
+      email_enriched: Boolean(result.contact_email),
+      telephone_enriched: Boolean(result.contact_telephone),
+      nom_enriched: Boolean(result.contact_nom),
+    }),
+  )
 
   return result
 }

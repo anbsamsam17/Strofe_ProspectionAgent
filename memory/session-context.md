@@ -16,10 +16,10 @@ links:
 
 ---
 
-## Session du : 2026-04-05 (mise a jour — Fix Tailwind v4 + Redesign Landing & Auth)
+## Session du : 2026-04-06 — Bug fix : contacts enrichis absents dans la daily list
 
 ## Objectif de cette session
-Corriger la configuration Tailwind CSS v4 (app inaccessible — raw text sans styles) et refondre la landing page + les pages auth pour un rendu SaaS moderne de niveau production.
+Diagnostiquer pourquoi les emails et téléphones des contacts n'apparaissent pas dans la daily list malgré les clés API Pappers et Hunter configurées. Corriger le bug et améliorer les logs de traçabilité.
 
 ---
 
@@ -589,3 +589,25 @@ Refondre l'UI pour la nouvelle architecture backend : modal sourcing avec formul
 
 ## Etat en fin de session
 5 fichiers modifiés, 2 nouveaux créés. 0 nouvelle erreur TypeScript. Modal sourcing avec form complet et accessibilité. Bouton "Générer" pointe sur `/api/daily-list/generate`. Bouton "+ Ajouter" disponible sur chaque prospect. firstName capitalisé avec fallback "Utilisateur".
+
+---
+
+## Session du : 2026-04-06 — Bug fix dashboard : "Bonjour, Utilisateur" au lieu du prénom
+
+## Objectif de cette session
+Corriger l'affichage "Bonjour, Utilisateur" dans `dashboard/page.tsx` alors que le nom "Samir Anbri" était visible dans `/settings`.
+
+## Cause racine identifiée
+`dashboard/page.tsx` utilisait `.single()` sur la query profiles dans le `Promise.all()`. Quand `.single()` retourne une erreur PGRST116 (profil non trouvé ou état transitoire post-inscription), `profileResult.data` est `null`. La chaîne de fallback `?? 'Utilisateur'` s'appliquait même si `profiles.full_name = 'Samir Anbri'` existait en base. Le layout (`layout.tsx`) utilisant `.maybeSingle()` était correct et affichait le nom dans le header — d'où l'incohérence.
+
+## Corrections apportées
+- `app/(dashboard)/dashboard/page.tsx` :
+  1. `.single()` remplacé par `.maybeSingle()` sur la query `profiles`
+  2. Fallback supplémentaire `metaFullName = user.user_metadata?.full_name` (Supabase Auth)
+  3. Chaîne de fallback étendue : `profileData.full_name ?? metaFullName ?? profileData.email ?? user.email ?? 'Utilisateur'`
+
+## Validation
+- `npx tsc --noEmit` : exit code 0
+
+## Etat en fin de session
+1 fichier modifié. 0 erreur TypeScript. Le dashboard affichera "Bonjour, Samir" pour l'utilisateur "Samir Anbri".

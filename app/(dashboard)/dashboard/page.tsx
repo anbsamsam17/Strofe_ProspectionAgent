@@ -260,12 +260,19 @@ export default async function DashboardPage() {
       .from('profiles')
       .select('full_name, email')
       .eq('id', user.id)
-      .single(),
+      // maybeSingle() au lieu de single() : single() lève une erreur PGRST116
+      // si le profil n'existe pas encore (état transitoire juste après inscription)
+      // ou si la RLS bloque la row — dans les deux cas profileResult.data vaudrait
+      // null et le fallback "Utilisateur" s'appliquait à tort.
+      .maybeSingle(),
   ])
 
   const agentRun = agentRunResult.data as AgentRun | null
   const dailyList = dailyListResult.data as (DailyList & { items: (DailyListItem & { prospect: Prospect })[] }) | null
+  // Fallback sur user_metadata.full_name (Supabase Auth) si profiles.full_name est null.
+  // C'est la même source que le trigger handle_new_user utilise à l'inscription.
   const profileData = profileResult.data as { full_name: string | null; email: string | null } | null
+  const metaFullName = (user.user_metadata?.full_name as string | null | undefined) ?? null
 
   // Calcul métriques
   const items = dailyList?.items ?? []
@@ -286,7 +293,9 @@ export default async function DashboardPage() {
   const todayIso = nowDate.toISOString()
   const rawFirstName =
     profileData?.full_name?.split(' ')[0] ??
+    metaFullName?.split(' ')[0] ??
     profileData?.email?.split('@')[0] ??
+    user.email?.split('@')[0] ??
     'Utilisateur'
   const firstName =
     rawFirstName.charAt(0).toUpperCase() + rawFirstName.slice(1).toLowerCase()

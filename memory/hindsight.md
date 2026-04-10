@@ -447,4 +447,33 @@ Trier une relation imbriquée via `.order('colonne', { referencedTable: 'table_e
   3. Aucun `.order(referencedTable)` avant `.maybeSingle()` ?
   4. Tous les "top N" triés explicitement par score avant slice ?
 
+## 2026-04-06 — Dashboard "Bonjour, Utilisateur" : .single() silencieux masque le profil
+
+**Erreur commise** : `dashboard/page.tsx` utilisait `.single()` pour récupérer le profil utilisateur dans le `Promise.all()`, alors que `layout.tsx` (qui affiche correctement le nom dans le header) utilisait `.maybeSingle()`. Quand `.single()` ne trouve pas de row (profil inexistant, état transitoire post-inscription, ou RLS temporaire), il retourne une erreur PGRST116 et `profileResult.data` vaut `null`. Le fallback `'Utilisateur'` s'appliquait alors même si `profiles.full_name` avait une valeur correcte en base.
+
+**Règle à retenir** :
+- `.single()` dans Supabase PostgREST lève une erreur si 0 row ou plus de 1 row. Si `profileResult.data` est null, toujours vérifier aussi `profileResult.error` pour distinguer "pas de profil" de "la query a planté".
+- `maybeSingle()` est le bon choix pour la table `profiles` : le profil est créé par trigger à l'inscription, mais dans les ms qui suivent l'inscription le profil peut ne pas exister encore.
+- En fallback défensif, utiliser `user.user_metadata?.full_name` (Supabase Auth) — c'est la même source que le trigger `handle_new_user` utilise, donc toujours cohérent.
+
+**Comment l'éviter** :
+- Règle checklist : quand deux composants (layout + page) font la même query Supabase, ils doivent utiliser le même terminateur (`.single()` vs `.maybeSingle()`). Divergence = bug potentiel.
+- Ajouter à la checklist de review : "Si la query retourne null inattendu, est-ce `.single()` vs `.maybeSingle()` ?"
+
+## 2026-04-06 — Pappers API : `api_key` vs `api_token` — bug silencieux causant 0 contact enrichi
+
+**Erreur commise** : Le module `contact-enrichment.ts` passait la clé Pappers en query param `api_key=...` alors que Pappers.fr exige `api_token=...`. La réponse HTTP 401 était capturée, loggée comme warn, puis retournée `null` — silencieusement. Résultat : aucun téléphone, aucun nom de dirigeant, aucun domaine pour Hunter.io, et donc zéro contact enrichi malgré des clés API valides configurées sur Vercel.
+
+**Preuve** : `curl "https://api.pappers.fr/v2/entreprise?siren=552032534&api_key=test"` retourne `{"message":"Veuillez indiquer votre api_token"}`.
+
+**Règle à retenir** :
+- L'API Pappers.fr exige le paramètre **`api_token`** (pas `api_key`) dans les query params.
+- Avant d'implémenter tout appel API tiers, tester l'endpoint en curl avec une fausse clé pour lire le message d'erreur exact — il indique le bon nom de paramètre.
+- Les 401 silencieux dans une cascade best-effort sont les bugs les plus difficiles à détecter : tout semble "fonctionner" (pas d'exception) mais les données ne s'enrichissent jamais.
+
+**Comment l'éviter** :
+- Toujours lire la documentation officielle de l'API pour le nom exact du paramètre d'authentification avant de coder.
+- Ajouter des logs `level: info` au démarrage de chaque appel API (avant le fetch) et après (avec le résultat parsé) — un log "0 champs enrichis sur N prospects" aurait immédiatement révélé le problème.
+- Les logs de type `HTTP 401 pour SIREN X` dans les warn Vercel doivent être traités comme des bugs critiques (pas des warnings mineurs) quand ils apparaissent sur 100% des prospects.
+
 <!-- Les entrées suivantes seront ajoutées automatiquement par Claude après chaque session -->
