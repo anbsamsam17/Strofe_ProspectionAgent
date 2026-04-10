@@ -162,22 +162,25 @@ export function SourcingModal({ isOpen, onClose }: SourcingModalProps) {
   if (!isOpen) return null
 
   return (
-    // Overlay
+    // Overlay — scroll vertical pour que le contenu long reste accessible
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
+      className="fixed inset-0 z-50 overflow-y-auto bg-black/60 backdrop-blur-sm"
       role="presentation"
       onClick={handleOverlayClick}
       aria-hidden={!isOpen}
     >
-      {/* Dialog */}
-      <div
-        ref={dialogRef}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="sourcing-modal-title"
-        aria-describedby="sourcing-modal-description"
-        className="relative w-full max-w-md overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-xl dark:border-gray-700 dark:bg-gray-900"
-      >
+      {/* Wrapper flex pour centrer — min-h-full + py pour garantir l'espace en haut/bas */}
+      <div className="flex min-h-full items-center justify-center p-4 py-8">
+        {/* Dialog — max-h contraint, flex-col pour header sticky + body scrollable */}
+        <div
+          ref={dialogRef}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="sourcing-modal-title"
+          aria-describedby="sourcing-modal-description"
+          className="relative flex w-full max-w-md flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-xl dark:border-gray-700 dark:bg-gray-900"
+          style={{ maxHeight: 'calc(100vh - 4rem)' }}
+        >
         {/* En-tête */}
         <div className="border-b border-gray-100 px-6 py-5 dark:border-gray-800">
           <div className="flex items-start justify-between gap-3">
@@ -242,9 +245,9 @@ export function SourcingModal({ isOpen, onClose }: SourcingModalProps) {
           </div>
         </div>
 
-        {/* Formulaire */}
-        <form onSubmit={handleSubmit} noValidate>
-          <div className="max-h-[60vh] overflow-y-auto px-6 py-5">
+        {/* Formulaire — flex-1 pour occuper l'espace, min-h-0 pour autoriser le shrink */}
+        <form onSubmit={handleSubmit} noValidate className="flex min-h-0 flex-1 flex-col">
+          <div className="flex-1 overflow-y-auto px-6 py-5">
             <div className="space-y-5">
 
               {/* Effectif */}
@@ -453,6 +456,7 @@ export function SourcingModal({ isOpen, onClose }: SourcingModalProps) {
             </button>
           </div>
         </form>
+        </div>
       </div>
     </div>
   )
