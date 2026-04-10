@@ -462,7 +462,7 @@ async function phaseContactEnrichment(
   // Charger les prospects avec score > 70 et contact incomplet
   const { data: prospects, error } = await supabase
     .from('prospects')
-    .select('id, siren, contact_email, contact_telephone, contact_nom, contact_prenom, contact_poste, contact_linkedin')
+    .select('id, siren, raison_sociale, contact_email, contact_telephone, contact_nom, contact_prenom, contact_poste, contact_linkedin')
     .eq('user_id', run.user_id)
     .gt('score_priorite', 70)
     .or('contact_email.is.null,contact_telephone.is.null')
@@ -498,7 +498,7 @@ async function phaseContactEnrichment(
 
     let nouveauxChamps: Partial<typeof existingContact>
     try {
-      nouveauxChamps = await enrichirContact(prospect.siren, existingContact)
+      nouveauxChamps = await enrichirContact(prospect.siren, existingContact, prospect.raison_sociale ?? '')
     } catch (err) {
       log(run, 'contact_enrichment', `Erreur enrichissement SIREN ${prospect.siren}`, 'warn', {
         siren: prospect.siren,

@@ -278,7 +278,7 @@ export async function generateDailyList(
 
       let nouveauxChamps: Partial<typeof existingContact>
       try {
-        nouveauxChamps = await enrichirContact(prospect.siren, existingContact)
+        nouveauxChamps = await enrichirContact(prospect.siren, existingContact, prospect.raison_sociale ?? '')
       } catch (err) {
         logs.push(log(correlationId, userId, 'generate_enrich', `Erreur enrichissement SIREN ${prospect.siren}`, 'warn', {
           siren: prospect.siren,

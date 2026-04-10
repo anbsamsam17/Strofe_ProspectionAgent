@@ -171,7 +171,7 @@ export async function POST(request: NextRequest) {
     }
 
     try {
-      const nouveauxChamps = await enrichirContact(prospect.siren, existingContact)
+      const nouveauxChamps = await enrichirContact(prospect.siren, existingContact, prospect.raison_sociale ?? '')
 
       if (Object.keys(nouveauxChamps).length > 0) {
         const updatePayload: Record<string, string | null> = {}

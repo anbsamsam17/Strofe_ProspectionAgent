@@ -3,16 +3,16 @@
 // Enrichissement des contacts prospects via APIs tierces
 //
 // Cascade (s'arrête dès qu'on a email + téléphone) :
-//   1. ADEME (déjà fait dans sourcing — données pré-existantes)
-//   2. Pappers.fr  — dirigeants + téléphone standard + site web
-//   3. Hunter.io Domain Search  — emails par domaine
-//   4. Hunter.io Email Finder   — email nominatif si on a un nom
+//   1. API Recherche Entreprises (api.gouv.fr) — dirigeants (gratuit, illimité)
+//   2. Pappers.fr — téléphone standard + site web (optionnel, désactivé si crédits épuisés)
+//   3. Hunter.io Domain Search par company= — domaine + emails (si pas de domaine via Pappers)
+//   4. Hunter.io Email Finder — email nominatif si nom connu + domaine validé
 //
 // Toutes les sources sont best-effort et silencieuses sur erreur.
 // Fonctionne sans API keys (mode dégradé — retourne {} pour chaque prospect).
 //
 // Variables d'environnement (optionnelles) :
-//   PAPPERS_API_KEY  — pappers.fr/api, 100 crédits gratuits
+//   PAPPERS_API_KEY  — pappers.fr/api, crédits one-shot
 //   HUNTER_API_KEY   — hunter.io, 50 crédits/mois gratuits
 // ============================================================
 
@@ -45,6 +45,13 @@ const _credits: Record<'pappers' | 'hunter', CreditCounter> = {
   pappers: { used: 0, limit: 100, warnAt: 80 },
   hunter:  { used: 0, limit: 50,  warnAt: 40 },
 }
+
+/**
+ * Flag de session : une fois que Pappers retourne HTTP 401 (crédits épuisés),
+ * on désactive Pappers pour tous les appels suivants dans ce process.
+ * Réinitialisé uniquement lors d'un cold start.
+ */
+let _pappersDisabled = false
 
 /**
  * Incrémente le compteur et logge un warning si on approche de la limite.
@@ -93,6 +100,66 @@ export function getCreditsUsed(): { pappers: number; hunter: number } {
 }
 
 // ------------------------------------------------------------
+// HELPER : NORMALISATION NOM ENTREPRISE
+// Utilisé pour valider le match Hunter domain-search by company
+// ------------------------------------------------------------
+
+const LEGAL_FORMS = [
+  'sas', 'sa', 'sarl', 'sasu', 'eurl', 'sci', 'sca', 'snc', 'scp',
+  'sel', 'selarl', 'selas', 'selafa', 'selca',
+  'gmbh', 'ltd', 'inc', 'llc', 'bv', 'nv', 'ag',
+  'groupe', 'group', 'holding', 'france', 'international',
+]
+
+/**
+ * Normalise un nom d'entreprise pour la comparaison :
+ * - Minuscules
+ * - Retire les accents
+ * - Retire les formes juridiques courantes
+ * - Retire la ponctuation
+ * - Compacte les espaces multiples
+ */
+export function normalizeCompanyName(name: string): string {
+  if (!name) return ''
+
+  let normalized = name.toLowerCase()
+
+  // Retire les accents
+  normalized = normalized.normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+
+  // Retire les formes juridiques (entourées d'espace ou en début/fin)
+  for (const form of LEGAL_FORMS) {
+    normalized = normalized.replace(new RegExp(`\\b${form}\\b`, 'g'), ' ')
+  }
+
+  // Retire la ponctuation (sauf tirets internes)
+  normalized = normalized.replace(/[^\w\s-]/g, ' ')
+
+  // Compacte les espaces multiples
+  normalized = normalized.replace(/\s+/g, ' ').trim()
+
+  return normalized
+}
+
+/**
+ * Calcule le score de similarité entre deux noms d'entreprises normalisés.
+ * Retourne une valeur entre 0 et 1 (proportion de mots en commun / mots totaux union).
+ */
+function companySimilarityScore(a: string, b: string): number {
+  if (!a || !b) return 0
+
+  const wordsA = new Set(a.split(' ').filter(Boolean))
+  const wordsB = new Set(b.split(' ').filter(Boolean))
+
+  if (wordsA.size === 0 || wordsB.size === 0) return 0
+
+  const intersection = new Set([...wordsA].filter((w) => wordsB.has(w)))
+  const union = new Set([...wordsA, ...wordsB])
+
+  return intersection.size / union.size
+}
+
+// ------------------------------------------------------------
 // TYPES INTERNES API PAPPERS
 // ------------------------------------------------------------
 
@@ -110,6 +177,26 @@ interface PappersEntreprise {
 }
 
 // ------------------------------------------------------------
+// TYPES INTERNES API RECHERCHE ENTREPRISES (api.gouv.fr)
+// ------------------------------------------------------------
+
+interface RechercheEntreprisesDirigeant {
+  nom: string
+  prenoms: string
+  qualite: string
+  type_dirigeant: string
+}
+
+interface RechercheEntreprisesResult {
+  dirigeants?: RechercheEntreprisesDirigeant[]
+}
+
+interface RechercheEntreprisesResponse {
+  results?: RechercheEntreprisesResult[]
+  total_results?: number
+}
+
+// ------------------------------------------------------------
 // TYPES INTERNES API HUNTER.IO
 // ------------------------------------------------------------
 
@@ -119,12 +206,15 @@ interface HunterEmail {
   confidence?: number
   first_name?: string
   last_name?: string
+  position?: string
+  linkedin?: string
 }
 
 interface HunterDomainSearchResponse {
   data?: {
     emails?: HunterEmail[]
     domain?: string
+    organization?: string
   }
 }
 
@@ -138,8 +228,146 @@ interface HunterEmailFinderResponse {
 }
 
 // ------------------------------------------------------------
-// SOURCE 1 : PAPPERS
-// Dirigeants, téléphone standard, site web
+// SOURCE 1 : API RECHERCHE ENTREPRISES (api.gouv.fr)
+// Gratuit, illimité — retourne les dirigeants (personnes physiques)
+// ------------------------------------------------------------
+
+const QUALITES_PRIORITAIRES = ['président', 'directeur général', 'directeur general', 'gérant', 'gerant']
+
+/**
+ * Récupère les dirigeants (personnes physiques) depuis l'API Recherche Entreprises de l'État.
+ * Priorise Président > Directeur Général > Gérant > premier dirigeant disponible.
+ * Retourne null en cas d'erreur réseau ou si aucun dirigeant trouvé.
+ */
+async function fetchRechercheEntreprisesDirigeant(siren: string): Promise<{
+  nom: string
+  prenoms: string
+  qualite: string
+} | null> {
+  const url = new URL('https://recherche-entreprises.api.gouv.fr/search')
+  url.searchParams.set('q', siren)
+  url.searchParams.set('per_page', '1')
+
+  console.log(
+    JSON.stringify({
+      level: 'info',
+      module: 'contact-enrichment',
+      msg: `RechercheEntreprises: appel API pour SIREN ${siren}`,
+      siren,
+    }),
+  )
+
+  let response: Response
+  try {
+    response = await fetch(url.toString(), {
+      headers: { Accept: 'application/json' },
+      signal: AbortSignal.timeout(10_000),
+    })
+  } catch (err) {
+    console.log(
+      JSON.stringify({
+        level: 'warn',
+        module: 'contact-enrichment',
+        msg: `RechercheEntreprises: erreur réseau pour SIREN ${siren}`,
+        siren,
+        error: err instanceof Error ? err.message : String(err),
+      }),
+    )
+    return null
+  }
+
+  if (!response.ok) {
+    let errorBody = ''
+    try { errorBody = await response.text() } catch { /* ignore */ }
+    console.log(
+      JSON.stringify({
+        level: 'warn',
+        module: 'contact-enrichment',
+        msg: `RechercheEntreprises: HTTP ${response.status} pour SIREN ${siren}`,
+        siren,
+        status: response.status,
+        body: errorBody.slice(0, 200),
+      }),
+    )
+    return null
+  }
+
+  let data: RechercheEntreprisesResponse
+  try {
+    data = (await response.json()) as RechercheEntreprisesResponse
+  } catch (err) {
+    console.log(
+      JSON.stringify({
+        level: 'warn',
+        module: 'contact-enrichment',
+        msg: `RechercheEntreprises: impossible de parser la réponse JSON pour SIREN ${siren}`,
+        siren,
+        error: err instanceof Error ? err.message : String(err),
+      }),
+    )
+    return null
+  }
+
+  const entreprise = data.results?.[0]
+  if (!entreprise) {
+    console.log(
+      JSON.stringify({
+        level: 'info',
+        module: 'contact-enrichment',
+        msg: `RechercheEntreprises: aucun résultat pour SIREN ${siren}`,
+        siren,
+      }),
+    )
+    return null
+  }
+
+  // Filtre uniquement les personnes physiques
+  const personnesPhysiques = (entreprise.dirigeants ?? []).filter(
+    (d) => d.type_dirigeant === 'personne physique' && d.nom?.trim(),
+  )
+
+  if (personnesPhysiques.length === 0) {
+    console.log(
+      JSON.stringify({
+        level: 'info',
+        module: 'contact-enrichment',
+        msg: `RechercheEntreprises: aucune personne physique trouvée pour SIREN ${siren}`,
+        siren,
+        total_dirigeants: entreprise.dirigeants?.length ?? 0,
+      }),
+    )
+    return null
+  }
+
+  // Priorise par qualité : Président > DG > Gérant > premier
+  const dirigeant =
+    personnesPhysiques.find((d) =>
+      QUALITES_PRIORITAIRES.some((q) => d.qualite?.toLowerCase().includes(q)),
+    ) ?? personnesPhysiques[0]
+
+  console.log(
+    JSON.stringify({
+      level: 'info',
+      module: 'contact-enrichment',
+      msg: `RechercheEntreprises: dirigeant trouvé pour SIREN ${siren}`,
+      siren,
+      nom: dirigeant.nom,
+      prenoms: dirigeant.prenoms,
+      qualite: dirigeant.qualite,
+      nb_personnes_physiques: personnesPhysiques.length,
+    }),
+  )
+
+  return {
+    nom: dirigeant.nom.trim(),
+    prenoms: (dirigeant.prenoms ?? '').trim(),
+    qualite: (dirigeant.qualite ?? '').trim(),
+  }
+}
+
+// ------------------------------------------------------------
+// SOURCE 2 : PAPPERS (OPTIONNELLE — désactivée si crédits épuisés)
+// Téléphone standard + site web
 // ------------------------------------------------------------
 
 interface PappersResult {
@@ -150,8 +378,9 @@ interface PappersResult {
 }
 
 /**
- * Requête Pappers pour récupérer les dirigeants, le téléphone standard et le site web.
- * Retourne null si PAPPERS_API_KEY n'est pas configurée ou en cas d'erreur.
+ * Requête Pappers pour récupérer le téléphone standard, le site web et les dirigeants.
+ * Détecte HTTP 401 comme "crédits épuisés" et désactive Pappers pour la session.
+ * Retourne null si PAPPERS_API_KEY n'est pas configurée, crédits épuisés, ou en cas d'erreur.
  */
 async function fetchPappers(siren: string): Promise<PappersResult | null> {
   const apiKey = process.env.PAPPERS_API_KEY
@@ -166,11 +395,22 @@ async function fetchPappers(siren: string): Promise<PappersResult | null> {
     return null
   }
 
+  if (_pappersDisabled) {
+    console.log(
+      JSON.stringify({
+        level: 'info',
+        module: 'contact-enrichment',
+        msg: 'Pappers: désactivé pour cette session (crédits épuisés)',
+        siren,
+      }),
+    )
+    return null
+  }
+
   if (!consumeCredit('pappers')) return null
 
   // BUG-FIX 2026-04-06 : Pappers exige "api_token" (pas "api_key")
-  // Preuve : réponse 401 "Veuillez indiquer votre api_token" avec api_key
-  const url = new URL(`https://api.pappers.fr/v2/entreprise`)
+  const url = new URL('https://api.pappers.fr/v2/entreprise')
   url.searchParams.set('siren', siren)
   url.searchParams.set('api_token', apiKey)
 
@@ -188,7 +428,6 @@ async function fetchPappers(siren: string): Promise<PappersResult | null> {
   try {
     response = await fetch(url.toString(), {
       headers: { Accept: 'application/json' },
-      // Timeout explicite : AbortController pour éviter les requêtes pendantes
       signal: AbortSignal.timeout(10_000),
     })
   } catch (err) {
@@ -205,9 +444,25 @@ async function fetchPappers(siren: string): Promise<PappersResult | null> {
   }
 
   if (!response.ok) {
-    // Lire le body pour donner un message d'erreur précis dans les logs
     let errorBody = ''
     try { errorBody = await response.text() } catch { /* ignore */ }
+
+    // HTTP 401 = crédits épuisés → désactiver Pappers pour le reste de la session
+    if (response.status === 401) {
+      _pappersDisabled = true
+      console.log(
+        JSON.stringify({
+          level: 'warn',
+          module: 'contact-enrichment',
+          msg: 'Pappers désactivé : crédits épuisés (HTTP 401)',
+          siren,
+          status: 401,
+          body: errorBody.slice(0, 300),
+        }),
+      )
+      return null
+    }
+
     console.log(
       JSON.stringify({
         level: 'warn',
@@ -248,7 +503,6 @@ async function fetchPappers(siren: string): Promise<PappersResult | null> {
   const siteWeb = data.sites_internet?.[0]?.trim()
   if (siteWeb) {
     try {
-      // Normalise "www.exemple.fr" ou "https://www.exemple.fr" → "exemple.fr"
       const normalized = siteWeb.startsWith('http') ? siteWeb : `https://${siteWeb}`
       const parsed = new URL(normalized)
       result.domain = parsed.hostname.replace(/^www\./, '')
@@ -265,12 +519,10 @@ async function fetchPappers(siren: string): Promise<PappersResult | null> {
     }
   }
 
-  // Dirigeant prioritaire : Président ou Directeur général
+  // Dirigeant (fallback si Recherche Entreprises n'a pas trouvé)
+  const representants = data.representants ?? []
   const QUALITES_CIBLES = ['président', 'directeur général', 'directeur general', 'gérant', 'gerant']
 
-  const representants = data.representants ?? []
-
-  // Chercher en priorité Président/DG, sinon prendre le premier représentant
   const dirigeant =
     representants.find((r) =>
       QUALITES_CIBLES.some((q) => r.qualite?.toLowerCase().includes(q)),
@@ -301,19 +553,199 @@ async function fetchPappers(siren: string): Promise<PappersResult | null> {
 }
 
 // ------------------------------------------------------------
-// SOURCE 2 : HUNTER.IO DOMAIN SEARCH
-// Emails associés au domaine (département executive)
+// SOURCE 3 : HUNTER.IO DOMAIN SEARCH PAR COMPANY NAME
+// Domaine + emails (sans avoir besoin d'un domaine préalable)
 // ------------------------------------------------------------
 
-/**
- * Recherche des emails liés à un domaine via Hunter.io Domain Search.
- * Retourne le premier email de type "personal" avec confidence > 50.
- * Retourne null si HUNTER_API_KEY n'est pas configurée ou en cas d'erreur.
- */
-async function fetchHunterDomainSearch(domain: string): Promise<{
+interface HunterDomainSearchResult {
+  domain: string
+  organization: string
   email?: string
   first_name?: string
   last_name?: string
+  position?: string
+  linkedin?: string
+}
+
+/**
+ * Recherche des emails via Hunter.io Domain Search en utilisant le nom d'entreprise.
+ * Valide que le résultat correspond bien à l'entreprise demandée (anti-mismatch).
+ * Retourne null si HUNTER_API_KEY n'est pas configurée, si le résultat ne matche pas,
+ * ou en cas d'erreur.
+ */
+async function fetchHunterDomainSearchByCompany(
+  raisonSociale: string,
+): Promise<HunterDomainSearchResult | null> {
+  const apiKey = process.env.HUNTER_API_KEY
+  if (!apiKey) return null
+
+  if (!consumeCredit('hunter')) return null
+
+  const url = new URL('https://api.hunter.io/v2/domain-search')
+  url.searchParams.set('company', raisonSociale)
+  url.searchParams.set('department', 'executive')
+  url.searchParams.set('api_key', apiKey)
+
+  console.log(
+    JSON.stringify({
+      level: 'info',
+      module: 'contact-enrichment',
+      msg: `Hunter domain-search (by company): appel API pour "${raisonSociale}"`,
+      raison_sociale: raisonSociale,
+    }),
+  )
+
+  let response: Response
+  try {
+    response = await fetch(url.toString(), {
+      headers: { Accept: 'application/json' },
+      signal: AbortSignal.timeout(10_000),
+    })
+  } catch (err) {
+    console.log(
+      JSON.stringify({
+        level: 'warn',
+        module: 'contact-enrichment',
+        msg: `Hunter domain-search: erreur réseau pour company "${raisonSociale}"`,
+        error: err instanceof Error ? err.message : String(err),
+      }),
+    )
+    return null
+  }
+
+  if (!response.ok) {
+    let errorBody = ''
+    try { errorBody = await response.text() } catch { /* ignore */ }
+    console.log(
+      JSON.stringify({
+        level: 'warn',
+        module: 'contact-enrichment',
+        msg: `Hunter domain-search: HTTP ${response.status} pour company "${raisonSociale}"`,
+        raison_sociale: raisonSociale,
+        status: response.status,
+        body: errorBody.slice(0, 300),
+      }),
+    )
+    return null
+  }
+
+  let data: HunterDomainSearchResponse
+  try {
+    data = (await response.json()) as HunterDomainSearchResponse
+  } catch (err) {
+    console.log(
+      JSON.stringify({
+        level: 'warn',
+        module: 'contact-enrichment',
+        msg: `Hunter domain-search: impossible de parser la réponse JSON pour "${raisonSociale}"`,
+        error: err instanceof Error ? err.message : String(err),
+      }),
+    )
+    return null
+  }
+
+  const domain = data.data?.domain
+  const organization = data.data?.organization ?? ''
+  const emails = data.data?.emails ?? []
+
+  if (!domain) {
+    console.log(
+      JSON.stringify({
+        level: 'info',
+        module: 'contact-enrichment',
+        msg: `Hunter domain-search: aucun domaine retourné pour "${raisonSociale}"`,
+        raison_sociale: raisonSociale,
+      }),
+    )
+    return null
+  }
+
+  // Validation anti-mismatch : vérifier que l'organisation retournée correspond bien
+  const orgNormalized = normalizeCompanyName(organization)
+  const expectedNormalized = normalizeCompanyName(raisonSociale)
+
+  const isContained = orgNormalized.includes(expectedNormalized) ||
+    expectedNormalized.includes(orgNormalized)
+  const similarity = companySimilarityScore(orgNormalized, expectedNormalized)
+  const isValid = isContained || similarity >= 0.6
+
+  if (!isValid) {
+    console.log(
+      JSON.stringify({
+        level: 'warn',
+        module: 'contact-enrichment',
+        msg: `Hunter: mismatch organization — résultat rejeté`,
+        organization_reçu: organization,
+        organization_normalisé: orgNormalized,
+        attendu: raisonSociale,
+        attendu_normalisé: expectedNormalized,
+        similarity_score: Math.round(similarity * 100) / 100,
+        domain_rejeté: domain,
+      }),
+    )
+    return null
+  }
+
+  console.log(
+    JSON.stringify({
+      level: 'info',
+      module: 'contact-enrichment',
+      msg: `Hunter domain-search: domaine validé pour "${raisonSociale}"`,
+      domain,
+      organization,
+      similarity_score: Math.round(similarity * 100) / 100,
+      total_emails: emails.length,
+      personal_emails: emails.filter((e) => e.type === 'personal').length,
+    }),
+  )
+
+  // Meilleur email personnel avec confidence >= 60
+  const best = emails
+    .filter((e) => e.type === 'personal' && (e.confidence ?? 0) >= 60 && e.value)
+    .sort((a, b) => (b.confidence ?? 0) - (a.confidence ?? 0))[0]
+
+  if (!best?.value) {
+    console.log(
+      JSON.stringify({
+        level: 'info',
+        module: 'contact-enrichment',
+        msg: `Hunter domain-search: aucun email personnel avec confidence >= 60 pour domaine ${domain}`,
+        domain,
+      }),
+    )
+    // Retourne quand même le domaine validé (utile pour email-finder)
+    return {
+      domain,
+      organization,
+    }
+  }
+
+  return {
+    domain,
+    organization,
+    email: best.value,
+    first_name: best.first_name ?? undefined,
+    last_name: best.last_name ?? undefined,
+    position: best.position ?? undefined,
+    linkedin: best.linkedin ?? undefined,
+  }
+}
+
+// ------------------------------------------------------------
+// SOURCE 3-BIS : HUNTER.IO DOMAIN SEARCH PAR DOMAINE (legacy)
+// Utilisé si on a un domaine depuis Pappers
+// ------------------------------------------------------------
+
+/**
+ * Recherche des emails liés à un domaine connu via Hunter.io Domain Search.
+ * Retourne le premier email de type "personal" avec confidence > 50.
+ * Retourne null si HUNTER_API_KEY n'est pas configurée ou en cas d'erreur.
+ */
+async function fetchHunterDomainSearchByDomain(domain: string): Promise<{
+  email?: string
+  first_name?: string
+  last_name?: string
+  linkedin?: string
 } | null> {
   const apiKey = process.env.HUNTER_API_KEY
   if (!apiKey) return null
@@ -336,7 +768,7 @@ async function fetchHunterDomainSearch(domain: string): Promise<{
       JSON.stringify({
         level: 'warn',
         module: 'contact-enrichment',
-        msg: `Hunter domain-search: erreur réseau pour domaine ${domain}`,
+        msg: `Hunter domain-search (by domain): erreur réseau pour domaine ${domain}`,
         error: err instanceof Error ? err.message : String(err),
       }),
     )
@@ -381,14 +813,13 @@ async function fetchHunterDomainSearch(domain: string): Promise<{
     JSON.stringify({
       level: 'info',
       module: 'contact-enrichment',
-      msg: `Hunter domain-search: ${emails.length} emails trouvés pour domaine ${domain}`,
+      msg: `Hunter domain-search (by domain): ${emails.length} emails trouvés pour domaine ${domain}`,
       domain,
       total_emails: emails.length,
       personal_emails: emails.filter((e) => e.type === 'personal').length,
     }),
   )
 
-  // Chercher le premier email personnel avec confidence > 50
   const best = emails
     .filter((e) => e.type === 'personal' && (e.confidence ?? 0) > 50 && e.value)
     .sort((a, b) => (b.confidence ?? 0) - (a.confidence ?? 0))[0]
@@ -409,18 +840,19 @@ async function fetchHunterDomainSearch(domain: string): Promise<{
     email: best.value,
     first_name: best.first_name ?? undefined,
     last_name: best.last_name ?? undefined,
+    linkedin: best.linkedin ?? undefined,
   }
 }
 
 // ------------------------------------------------------------
-// SOURCE 3 : HUNTER.IO EMAIL FINDER
-// Email nominatif quand on a déjà prénom + nom + domaine
+// SOURCE 4 : HUNTER.IO EMAIL FINDER
+// Email nominatif quand on a prénom + nom + domaine validé
 // ------------------------------------------------------------
 
 /**
  * Trouve l'email d'une personne précise via Hunter.io Email Finder.
  * Nécessite un prénom, un nom et un domaine.
- * Retourne null si HUNTER_API_KEY n'est pas configurée, si les paramètres sont insuffisants,
+ * Retourne null si HUNTER_API_KEY n'est pas configurée, paramètres insuffisants,
  * ou si la confidence est trop faible (< 50).
  */
 async function fetchHunterEmailFinder(
@@ -439,6 +871,17 @@ async function fetchHunterEmailFinder(
   url.searchParams.set('first_name', firstName)
   url.searchParams.set('last_name', lastName)
   url.searchParams.set('api_key', apiKey)
+
+  console.log(
+    JSON.stringify({
+      level: 'info',
+      module: 'contact-enrichment',
+      msg: `Hunter email-finder: appel pour ${firstName} ${lastName} @ ${domain}`,
+      domain,
+      first_name: firstName,
+      last_name: lastName,
+    }),
+  )
 
   let response: Response
   try {
@@ -479,8 +922,19 @@ async function fetchHunterEmailFinder(
   const email = data.data?.email
   const score = data.data?.score ?? 0
 
-  // Confiance insuffisante → on préfère ne pas retourner un email douteux
-  if (!email || score < 50) return null
+  if (!email || score < 50) {
+    console.log(
+      JSON.stringify({
+        level: 'info',
+        module: 'contact-enrichment',
+        msg: `Hunter email-finder: confiance insuffisante pour ${firstName} ${lastName} @ ${domain}`,
+        score,
+        threshold: 50,
+        email_found: Boolean(email),
+      }),
+    )
+    return null
+  }
 
   return email
 }
@@ -490,23 +944,30 @@ async function fetchHunterEmailFinder(
 // ------------------------------------------------------------
 
 /**
- * Enrichit les contacts d'un prospect via APIs tierces (Pappers + Hunter.io).
- * Cascade : ADEME (déjà fait dans sourcing) → Pappers → Hunter.io Domain Search → Hunter.io Email Finder
+ * Enrichit les contacts d'un prospect via APIs tierces.
+ *
+ * Cascade :
+ *   1. API Recherche Entreprises (gratuit, illimité) — dirigeants
+ *   2. Pappers (optionnel, désactivé si HTTP 401) — téléphone + domaine
+ *   3. Hunter domain-search by company — domaine validé + emails
+ *   4. Hunter domain-search by domain — emails si domaine connu via Pappers
+ *   5. Hunter email-finder — email nominatif si nom + domaine disponibles
  *
  * Règles :
  * - Ne remplace JAMAIS les champs déjà renseignés (données ADEME ou sourcing préexistantes).
  * - Retourne uniquement les champs NOUVEAUX à mettre à jour en DB.
  * - Toutes les sources sont best-effort : une erreur ne bloque pas les autres.
- * - Les appels sont séquentiels (pas de parallélisme) pour préserver les quotas gratuits.
- * - Si PAPPERS_API_KEY et HUNTER_API_KEY sont absentes → retourne {} immédiatement.
+ * - Les appels sont séquentiels pour préserver les quotas gratuits.
  *
- * @param siren - SIREN de l'entreprise (9 chiffres)
+ * @param siren          - SIREN de l'entreprise (9 chiffres)
  * @param existingContact - Champs contact déjà renseignés (depuis ADEME ou sourcing)
+ * @param raisonSociale  - Raison sociale (nécessaire pour Hunter company search)
  * @returns Champs contact NOUVEAUX uniquement (à merger en DB)
  */
 export async function enrichirContact(
   siren: string,
   existingContact: Partial<EnrichedContact>,
+  raisonSociale: string,
 ): Promise<Partial<EnrichedContact>> {
   // Validation SIREN
   if (!siren || !/^\d{9}$/.test(siren)) {
@@ -525,9 +986,8 @@ export async function enrichirContact(
     return {}
   }
 
-  // Court-circuit : aucune API key configurée → mode dégradé silencieux
-  const hasPappersKey = Boolean(process.env.PAPPERS_API_KEY)
-  const hasHunterKey  = Boolean(process.env.HUNTER_API_KEY)
+  const hasHunterKey = Boolean(process.env.HUNTER_API_KEY)
+  const hasPappersKey = Boolean(process.env.PAPPERS_API_KEY) && !_pappersDisabled
 
   console.log(
     JSON.stringify({
@@ -535,7 +995,9 @@ export async function enrichirContact(
       module: 'contact-enrichment',
       msg: `enrichirContact: démarrage pour SIREN ${siren}`,
       siren,
+      raison_sociale: raisonSociale,
       has_pappers_key: hasPappersKey,
+      pappers_disabled: _pappersDisabled,
       has_hunter_key: hasHunterKey,
       already_has_email: Boolean(existingContact.contact_email),
       already_has_phone: Boolean(existingContact.contact_telephone),
@@ -543,23 +1005,10 @@ export async function enrichirContact(
     }),
   )
 
-  if (!hasPappersKey && !hasHunterKey) {
-    console.log(
-      JSON.stringify({
-        level: 'warn',
-        module: 'contact-enrichment',
-        msg: 'enrichirContact: aucune API key configurée (PAPPERS_API_KEY, HUNTER_API_KEY) — enrichissement désactivé',
-        siren,
-      }),
-    )
-    return {}
-  }
-
   const result: Partial<EnrichedContact> = {}
 
-  // Contexte courant (fusionner avec ce qu'on trouve au fil de la cascade)
-  // On maintient localement les valeurs pour que les sources suivantes
-  // puissent s'appuyer sur ce que les précédentes ont trouvé.
+  // Contexte courant (fusionné au fil de la cascade pour que les sources suivantes
+  // bénéficient de ce que les précédentes ont trouvé)
   let resolvedNom    = existingContact.contact_nom
   let resolvedPrenom = existingContact.contact_prenom
   let resolvedEmail  = existingContact.contact_email
@@ -567,19 +1016,43 @@ export async function enrichirContact(
   let resolvedDomain: string | undefined
 
   // --------------------------------------------------------
-  // SOURCE 1 : PAPPERS
+  // SOURCE 1 : API RECHERCHE ENTREPRISES (toujours appelée, gratuite)
+  // Objectif : obtenir le nom du dirigeant pour cibler email-finder
   // --------------------------------------------------------
-  if (hasPappersKey && !(_credits.pappers.used >= _credits.pappers.limit)) {
+  if (!resolvedNom || !resolvedPrenom) {
+    const dirigeant = await fetchRechercheEntreprisesDirigeant(siren)
+
+    if (dirigeant) {
+      if (!resolvedNom && dirigeant.nom) {
+        result.contact_nom = dirigeant.nom
+        resolvedNom = dirigeant.nom
+      }
+      if (!resolvedPrenom && dirigeant.prenoms) {
+        // Prend le premier prénom uniquement (ex: "Guillaume Jean" → "Guillaume")
+        const premierPrenom = dirigeant.prenoms.split(' ')[0]
+        result.contact_prenom = premierPrenom
+        resolvedPrenom = premierPrenom
+      }
+      if (!existingContact.contact_poste && !result.contact_poste && dirigeant.qualite) {
+        result.contact_poste = dirigeant.qualite
+      }
+    }
+  }
+
+  // --------------------------------------------------------
+  // SOURCE 2 : PAPPERS (optionnelle — si crédits disponibles)
+  // Objectif : téléphone standard + domaine web
+  // --------------------------------------------------------
+  if (hasPappersKey && !resolvedPhone) {
     const pappers = await fetchPappers(siren)
 
     if (pappers) {
-      // Téléphone : ne prend que si absent
       if (!resolvedPhone && pappers.telephone) {
         result.contact_telephone = pappers.telephone
         resolvedPhone = pappers.telephone
       }
 
-      // Dirigeant : ne prend que les champs absents
+      // Dirigeant Pappers — fallback si Recherche Entreprises n'a rien trouvé
       if (!resolvedNom && pappers.contact_nom) {
         result.contact_nom = pappers.contact_nom
         resolvedNom = pappers.contact_nom
@@ -589,50 +1062,44 @@ export async function enrichirContact(
         resolvedPrenom = pappers.contact_prenom
       }
 
-      // Domaine pour Hunter (usage interne, non stocké directement)
+      // Domaine web (usage interne pour Hunter)
       resolvedDomain = pappers.domain
-
-      console.log(
-        JSON.stringify({
-          level: 'info',
-          module: 'contact-enrichment',
-          msg: `Pappers: enrichissement partiel pour SIREN ${siren}`,
-          telephone_found: Boolean(pappers.telephone),
-          domain_found: Boolean(pappers.domain),
-          dirigeant_found: Boolean(pappers.contact_nom),
-        }),
-      )
     }
   }
 
   // Court-circuit post-Pappers : email ET téléphone trouvés
-  if (resolvedEmail && resolvedPhone) return result
+  if (resolvedEmail && resolvedPhone) {
+    logSummary(siren, result)
+    return result
+  }
 
   // --------------------------------------------------------
-  // SOURCE 2 : HUNTER.IO DOMAIN SEARCH
+  // SOURCE 3A : HUNTER DOMAIN SEARCH PAR DOMAINE (si Pappers a fourni un domaine)
   // --------------------------------------------------------
   if (hasHunterKey && resolvedDomain && !resolvedEmail) {
-    const hunterSearch = await fetchHunterDomainSearch(resolvedDomain)
+    const hunterByDomain = await fetchHunterDomainSearchByDomain(resolvedDomain)
 
-    if (hunterSearch?.email) {
-      result.contact_email = hunterSearch.email
-      resolvedEmail = hunterSearch.email
+    if (hunterByDomain?.email) {
+      result.contact_email = hunterByDomain.email
+      resolvedEmail = hunterByDomain.email
 
-      // Renseigner prénom/nom si trouvés par Hunter et absents
-      if (!resolvedNom && hunterSearch.last_name) {
-        result.contact_nom = hunterSearch.last_name
-        resolvedNom = hunterSearch.last_name
+      if (!resolvedNom && hunterByDomain.last_name) {
+        result.contact_nom = hunterByDomain.last_name
+        resolvedNom = hunterByDomain.last_name
       }
-      if (!resolvedPrenom && hunterSearch.first_name) {
-        result.contact_prenom = hunterSearch.first_name
-        resolvedPrenom = hunterSearch.first_name
+      if (!resolvedPrenom && hunterByDomain.first_name) {
+        result.contact_prenom = hunterByDomain.first_name
+        resolvedPrenom = hunterByDomain.first_name
+      }
+      if (!existingContact.contact_linkedin && !result.contact_linkedin && hunterByDomain.linkedin) {
+        result.contact_linkedin = hunterByDomain.linkedin
       }
 
       console.log(
         JSON.stringify({
           level: 'info',
           module: 'contact-enrichment',
-          msg: `Hunter domain-search: email trouvé pour domaine ${resolvedDomain}`,
+          msg: `Hunter domain-search (by domain): email trouvé pour domaine ${resolvedDomain}`,
           siren,
           email_found: true,
         }),
@@ -641,11 +1108,65 @@ export async function enrichirContact(
   }
 
   // Court-circuit : email trouvé
-  if (resolvedEmail) return result
+  if (resolvedEmail) {
+    logSummary(siren, result)
+    return result
+  }
 
   // --------------------------------------------------------
-  // SOURCE 3 : HUNTER.IO EMAIL FINDER
-  // Uniquement si on a un nom (Pappers ou ADEME) mais pas encore d'email
+  // SOURCE 3B : HUNTER DOMAIN SEARCH PAR COMPANY NAME
+  // Appelée si pas de domaine via Pappers ET pas encore d'email
+  // --------------------------------------------------------
+  if (hasHunterKey && !resolvedDomain && !resolvedEmail && raisonSociale) {
+    const hunterByCompany = await fetchHunterDomainSearchByCompany(raisonSociale)
+
+    if (hunterByCompany) {
+      // Le domaine validé devient disponible pour email-finder
+      resolvedDomain = hunterByCompany.domain
+
+      if (hunterByCompany.email) {
+        result.contact_email = hunterByCompany.email
+        resolvedEmail = hunterByCompany.email
+
+        // Enrichir prénom/nom depuis Hunter si absents
+        if (!resolvedNom && hunterByCompany.last_name) {
+          result.contact_nom = hunterByCompany.last_name
+          resolvedNom = hunterByCompany.last_name
+        }
+        if (!resolvedPrenom && hunterByCompany.first_name) {
+          result.contact_prenom = hunterByCompany.first_name
+          resolvedPrenom = hunterByCompany.first_name
+        }
+        if (!existingContact.contact_poste && !result.contact_poste && hunterByCompany.position) {
+          result.contact_poste = hunterByCompany.position
+        }
+        if (!existingContact.contact_linkedin && !result.contact_linkedin && hunterByCompany.linkedin) {
+          result.contact_linkedin = hunterByCompany.linkedin
+        }
+
+        console.log(
+          JSON.stringify({
+            level: 'info',
+            module: 'contact-enrichment',
+            msg: `Hunter domain-search (by company): email trouvé pour "${raisonSociale}"`,
+            siren,
+            domain: resolvedDomain,
+            email_found: true,
+          }),
+        )
+      }
+    }
+  }
+
+  // Court-circuit : email trouvé
+  if (resolvedEmail) {
+    logSummary(siren, result)
+    return result
+  }
+
+  // --------------------------------------------------------
+  // SOURCE 4 : HUNTER EMAIL FINDER
+  // Ciblage nominatif : uniquement si on a nom + prénom + domaine validé
   // --------------------------------------------------------
   if (
     hasHunterKey &&
@@ -689,20 +1210,29 @@ export async function enrichirContact(
       JSON.stringify({
         level: 'info',
         module: 'contact-enrichment',
-        msg: `Hunter: domaine introuvable pour SIREN ${siren} — Hunter domain-search et email-finder ignorés`,
+        msg: `Hunter: domaine introuvable pour SIREN ${siren} — email-finder ignoré`,
         siren,
         has_nom: Boolean(resolvedNom),
         has_prenom: Boolean(resolvedPrenom),
+        raison_sociale: raisonSociale,
       }),
     )
   }
 
-  // Log de résumé final
+  logSummary(siren, result)
+  return result
+}
+
+// ------------------------------------------------------------
+// HELPER INTERNE : LOG DE RÉSUMÉ FINAL
+// ------------------------------------------------------------
+
+function logSummary(siren: string, result: Partial<EnrichedContact>): void {
   console.log(
     JSON.stringify({
       level: 'info',
       module: 'contact-enrichment',
-      msg: `enrichirContact: terminé pour SIREN ${siren}`,
+      msg: `enrichirContact: terminé`,
       siren,
       new_fields_count: Object.keys(result).length,
       new_fields: Object.keys(result),
@@ -711,6 +1241,4 @@ export async function enrichirContact(
       nom_enriched: Boolean(result.contact_nom),
     }),
   )
-
-  return result
 }
