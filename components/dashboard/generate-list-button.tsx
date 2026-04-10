@@ -4,9 +4,9 @@ import { useState } from 'react'
 
 interface GenerateListButtonProps {
   hasExistingList: boolean
-  /** Nombre total d'items dans la liste du jour (mode cumulatif) */
+  /** Nombre total d'items dans la liste du jour */
   listItemCount?: number
-  /** Objectif de nouveaux prospects ajoutés à chaque run (ex: 15) */
+  /** Nombre cible de prospects à générer (ex: 15) */
   dailyTarget?: number
 }
 
@@ -25,16 +25,17 @@ export function GenerateListButton({
     setSuccess(false)
 
     try {
-      const response = await fetch('/api/agent/run', {
+      const response = await fetch('/api/daily-list/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ target: 'tomorrow' }),
+        body: JSON.stringify({ targetCount: dailyTarget }),
       })
       if (!response.ok) {
         const data = await response.json() as { error?: string }
         throw new Error(data.error ?? 'Erreur lors de la génération')
       }
       setSuccess(true)
+      window.location.reload()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erreur inconnue')
     } finally {
@@ -42,15 +43,11 @@ export function GenerateListButton({
     }
   }
 
-  // Mode cumulatif : chaque run ajoute dailyTarget nouveaux prospects.
-  // Le libellé reflète ce comportement d'accumulation.
-  const buttonLabel = !hasExistingList
-    ? 'Générer la liste du jour'
-    : `Ajouter ${dailyTarget} prospects`
+  const buttonLabel = 'Générer la liste du jour'
 
-  const ariaLabel = !hasExistingList
-    ? 'Générer la liste du jour'
-    : `Ajouter ${dailyTarget} nouveaux prospects à la liste (${listItemCount} appels programmés actuellement)`
+  const ariaLabel = hasExistingList
+    ? `Régénérer la liste du jour (${listItemCount} appel${listItemCount > 1 ? 's' : ''} actuellement)`
+    : 'Générer la liste du jour'
 
   // Texte d'aide : affiche le total courant uniquement si une liste existe
   const helpText = hasExistingList

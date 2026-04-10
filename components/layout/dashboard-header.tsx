@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import type { AgentRun, DailyList, DailyListStatus } from '@/lib/types'
+import { SourcingModal } from '@/components/dashboard/sourcing-modal'
 
 interface DashboardHeaderProps {
   userName: string
@@ -61,34 +62,15 @@ function AgentStatusBadge({ status }: { status: DailyListStatus | null }) {
 }
 
 export function DashboardHeader({ userName, agentRun, dailyList }: DashboardHeaderProps) {
-  const [isRunning, setIsRunning] = useState(false)
-  const [runError, setRunError] = useState<string | null>(null)
+  const [isModalOpen, setIsModalOpen] = useState(false)
 
-  async function handleLaunchAgent() {
-    setIsRunning(true)
-    setRunError(null)
-    try {
-      const response = await fetch('/api/agent/run', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({}),
-      })
-      if (!response.ok) {
-        const data = await response.json() as { error?: string }
-        throw new Error(data.error ?? "Erreur lors du lancement de l'agent")
-      }
-      // Recharge la page pour refléter le nouveau statut
-      window.location.reload()
-    } catch (err) {
-      setRunError(err instanceof Error ? err.message : 'Erreur inconnue')
-    } finally {
-      setIsRunning(false)
-    }
+  function handleLaunchAgent() {
+    setIsModalOpen(true)
   }
 
   const dailyListStatus = dailyList?.status ?? null
   const isAgentRunning = agentRun?.status === 'running'
-  const isDisabled = isRunning || isAgentRunning
+  const isDisabled = isAgentRunning
 
   // Initiale de l'utilisateur pour l'avatar
   const userInitial = userName.charAt(0).toUpperCase()
@@ -121,21 +103,12 @@ export function DashboardHeader({ userName, agentRun, dailyList }: DashboardHead
         </div>
       </div>
 
-      {/* Droite : erreur + bouton */}
+      {/* Droite : bouton */}
       <div className="flex items-center gap-3">
-        {runError && (
-          <p
-            className="hidden max-w-xs truncate text-xs text-red-600 dark:text-red-400 sm:block"
-            role="alert"
-          >
-            {runError}
-          </p>
-        )}
-
         <button
           onClick={handleLaunchAgent}
           disabled={isDisabled}
-          aria-label={isDisabled ? "Agent en cours d'exécution" : "Lancer l'agent de prospection"}
+          aria-label={isAgentRunning ? "Agent en cours d'exécution" : "Lancer l'agent de prospection"}
           className={`relative inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold text-white shadow-sm transition-all duration-150 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60 dark:focus:ring-offset-gray-950 ${
             isDisabled
               ? 'bg-green-600'
@@ -147,7 +120,7 @@ export function DashboardHeader({ userName, agentRun, dailyList }: DashboardHead
             <span className="absolute -inset-0.5 rounded-lg animate-pulse bg-green-500/20" aria-hidden="true" />
           )}
 
-          {isRunning || isAgentRunning ? (
+          {isAgentRunning ? (
             <>
               <svg
                 className="animate-spin"
@@ -184,6 +157,12 @@ export function DashboardHeader({ userName, agentRun, dailyList }: DashboardHead
           )}
         </button>
       </div>
+
+      {/* Modal de configuration du sourcing */}
+      <SourcingModal
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+      />
     </header>
   )
 }

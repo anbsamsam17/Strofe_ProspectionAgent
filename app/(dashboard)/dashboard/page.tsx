@@ -284,7 +284,12 @@ export default async function DashboardPage() {
   const dailyTarget = 15
 
   const todayIso = nowDate.toISOString()
-  const firstName = profileData?.full_name?.split(' ')[0] ?? profileData?.email?.split('@')[0] ?? 'vous'
+  const rawFirstName =
+    profileData?.full_name?.split(' ')[0] ??
+    profileData?.email?.split('@')[0] ??
+    'Utilisateur'
+  const firstName =
+    rawFirstName.charAt(0).toUpperCase() + rawFirstName.slice(1).toLowerCase()
 
   return (
     <div className="mx-auto max-w-5xl space-y-6">

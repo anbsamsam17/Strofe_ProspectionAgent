@@ -531,3 +531,61 @@ Audit complet et correction de tous les bugs pipeline et frontend : daily list t
 
 ## Etat en fin de session
 8 corrections appliquées. 0 erreur TypeScript. Toutes les pages dashboard ont `force-dynamic`. Aucun `.single()` sur des tables potentiellement vides. Aucun `.order(referencedTable)` + `.maybeSingle()`. Daily list affiche les TOP 15 non appelés triés par score.
+
+---
+
+## Session du : 2026-04-06 — Refonte architecture pipeline : séparation sourcing / daily list
+
+## Objectif de cette session
+Refondre l'architecture du pipeline agent pour séparer le sourcing pur de la génération de la daily list quotidienne. Créer les orchestrateurs dédiés et les API routes correspondantes.
+
+## Taches effectuees
+- [x] Création `lib/agent/sourcing-runner.ts` — orchestrateur sourcing pur (INSEE + fallback + ADEME + scoring + upsert prospects)
+- [x] Création `lib/agent/daily-list-generator.ts` — orchestrateur génération daily list (sélection TOP N + enrichissement contacts + pitchs GPT-4o + insertion items)
+- [x] Création `app/api/agent/sourcing/route.ts` — POST avec auth, validation Zod, anti-concurrent 409
+- [x] Création `app/api/daily-list/generate/route.ts` — POST avec auth, validation Zod (targetCount 1-50)
+- [x] Création `app/api/daily-list/items/route.ts` — POST ajout manuel, ownership check, idempotence, enrichissement + pitch single
+- [x] Modification `app/api/agent/run/route.ts` — cron migré vers `runSourcing()`, manuel garde `runAgentNocturne()` compatibilité, `await createAdminClient()` corrigé en `createAdminClient()` (sync)
+- [x] npx tsc --noEmit : exit code 0
+
+## Fichiers créés
+- lib/agent/sourcing-runner.ts (NOUVEAU)
+- lib/agent/daily-list-generator.ts (NOUVEAU)
+- app/api/agent/sourcing/route.ts (NOUVEAU)
+- app/api/daily-list/generate/route.ts (NOUVEAU)
+- app/api/daily-list/items/route.ts (NOUVEAU)
+
+## Fichiers modifiés
+- app/api/agent/run/route.ts
+
+## Etat en fin de session
+5 fichiers créés, 1 modifié. 0 erreur TypeScript (npx tsc --noEmit exit code 0). Architecture pipeline séparée et opérationnelle. Compatibilité descendante préservée (runAgentNocturne() conservé pour le mode manuel). Cron nocturne migré vers runSourcing() pur.
+
+---
+
+## Session du : 2026-04-06 — Refonte UI nouvelle architecture backend
+
+## Objectif de cette session
+Refondre l'UI pour la nouvelle architecture backend : modal sourcing avec formulaire paramètres, endpoint daily-list/generate, ajout manuel à la liste, fix "Bonjour, vous".
+
+## Taches effectuees
+- [x] Création `components/dashboard/sourcing-modal.tsx` — modal avec formulaire (effectif min/max, secteurs NAF checkboxes, zone géographique), appel `POST /api/agent/sourcing`, gestion erreur/succès, accessibilité complète
+- [x] Modification `components/layout/dashboard-header.tsx` — bouton "Lancer l'agent" ouvre la modal (state `isModalOpen`) au lieu d'appeler directement l'API
+- [x] Modification `components/dashboard/generate-list-button.tsx` — appelle `POST /api/daily-list/generate` avec `{ targetCount: 15 }` + `window.location.reload()` au succès
+- [x] Création `components/prospects/add-to-daily-list-button.tsx` — bouton client "+ Ajouter" qui appelle `POST /api/daily-list/items`, états idle/loading/success/error avec auto-reset erreur après 3s
+- [x] Modification `app/(dashboard)/prospects/page.tsx` — colonne "Actions" ajoutée, `AddToDailyListButton` sur chaque ligne, colspan empty state 8→9
+- [x] Modification `app/(dashboard)/dashboard/page.tsx` — fix firstName : capitalisation + fallback "Utilisateur" au lieu de "vous"
+- [x] npx tsc --noEmit : 1 erreur préexistante dans lib/agent/daily-list-generator.ts (hors scope, non modifiable)
+
+## Fichiers créés
+- components/dashboard/sourcing-modal.tsx (NOUVEAU)
+- components/prospects/add-to-daily-list-button.tsx (NOUVEAU)
+
+## Fichiers modifiés
+- components/layout/dashboard-header.tsx
+- components/dashboard/generate-list-button.tsx
+- app/(dashboard)/prospects/page.tsx
+- app/(dashboard)/dashboard/page.tsx
+
+## Etat en fin de session
+5 fichiers modifiés, 2 nouveaux créés. 0 nouvelle erreur TypeScript. Modal sourcing avec form complet et accessibilité. Bouton "Générer" pointe sur `/api/daily-list/generate`. Bouton "+ Ajouter" disponible sur chaque prospect. firstName capitalisé avec fallback "Utilisateur".

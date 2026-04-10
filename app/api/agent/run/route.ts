@@ -12,6 +12,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { createAdminClient, createClient } from '@/lib/supabase/server'
 import { runAgentNocturne } from '@/lib/agent/orchestrator'
+import { runSourcing } from '@/lib/agent/sourcing-runner'
 import type { AgentRun } from '@/lib/types'
 
 // TODO: Remplacer par import { isCronRequest } from '@/lib/auth/cron'
@@ -62,6 +63,14 @@ function buildRunStats(run: AgentRun) {
   }
 }
 
+/** Construit la réponse stats normalisée à partir d'un résultat runSourcing. */
+function buildSourcingStats(result: { prospectsNew: number; prospectsUpdated: number }) {
+  return {
+    prospectsNew: result.prospectsNew,
+    prospectsUpdated: result.prospectsUpdated,
+  }
+}
+
 // ------------------------------------------------------------
 // Handler POST
 // ------------------------------------------------------------
@@ -104,7 +113,7 @@ export async function POST(request: NextRequest) {
     // --------------------------------------------------------
     // MODE CRON : run pour tous les users onboardés
     // --------------------------------------------------------
-    const supabaseAdmin = await createAdminClient()
+    const supabaseAdmin = createAdminClient()
 
     // Récupérer tous les utilisateurs ayant complété l'onboarding
     const { data: profiles, error: profilesError } = await supabaseAdmin
@@ -130,26 +139,26 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Lancer les runs en parallèle — chaque run reçoit son propre client admin
-    // pour éviter la contention sur le pool de connexions d'une instance partagée.
-    // createAdminClient() est async, on résout tous les clients d'abord puis on
-    // lance les runs afin que les Promise.allSettled ne se mélangent pas.
-    const adminClients = await Promise.all(userIds.map(() => createAdminClient()))
+    // Lancer les runs de sourcing en parallèle — chaque user reçoit son propre
+    // client admin pour éviter la contention sur le pool de connexions.
+    // Le cron nocturne alimente uniquement le pipeline de prospects.
+    // La daily list est générée séparément via POST /api/daily-list/generate.
+    const adminClients = userIds.map(() => createAdminClient())
 
     const results = await Promise.allSettled(
       userIds.map((userId, index) =>
-        runAgentNocturne(userId, adminClients[index]),
+        runSourcing(userId, adminClients[index]),
       ),
     )
 
     const runs = results.map((result, index) => {
       if (result.status === 'fulfilled') {
-        const run = result.value
+        const sourcing = result.value
         return {
           userId: userIds[index],
-          runId: run.id,
-          status: run.status,
-          stats: buildRunStats(run),
+          runId: sourcing.runId,
+          status: 'completed',
+          stats: buildSourcingStats(sourcing),
         }
       }
       // Ne jamais logger le userId brut en cas d'erreur (PII)
@@ -204,7 +213,7 @@ export async function POST(request: NextRequest) {
 
   // Utiliser le client admin pour l'orchestrateur (bypass RLS — le run crée
   // des enregistrements pour l'user sans passer par les policies user)
-  const supabaseAdmin = await createAdminClient()
+  const supabaseAdmin = createAdminClient()
 
   // -- Vérification anti-concurrence : un seul run actif à la fois par user --
   // Deux runs simultanés peuvent créer une condition de course sur daily_list_items
@@ -227,6 +236,10 @@ export async function POST(request: NextRequest) {
     )
   }
 
+  // MODE MANUEL : compatibilité descendante — appelle runAgentNocturne()
+  // (sourcing + daily list en un seul run, pour les utilisateurs qui l'utilisaient déjà).
+  // Pour un sourcing pur avec paramètres : POST /api/agent/sourcing
+  // Pour générer la daily list seule : POST /api/daily-list/generate
   let run: AgentRun
   try {
     run = await runAgentNocturne(targetUserId, supabaseAdmin)

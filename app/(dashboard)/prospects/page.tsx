@@ -3,6 +3,7 @@ import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import type { Prospect, ProspectStatus } from '@/lib/types'
 import { ProspectsFilters } from '@/components/prospects/prospects-filters'
+import { AddToDailyListButton } from '@/components/prospects/add-to-daily-list-button'
 
 // Force le rendu dynamique — la table prospects change à chaque run agent
 // et après chaque feedback d'appel (statut mis à jour)
@@ -293,6 +294,9 @@ export default async function ProspectsPage({
                     <SortIcon column="updated_at" currentSort={params.sort} currentOrder={params.order} />
                   </Link>
                 </th>
+                <th scope="col" className={th}>
+                  <span className="sr-only">Actions</span>
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -444,12 +448,20 @@ export default async function ProspectsPage({
                           dateStyle: 'short',
                         }).format(new Date(prospect.updated_at))}
                       </td>
+
+                      {/* Actions */}
+                      <td className="px-4 py-3.5 text-right">
+                        <AddToDailyListButton
+                          prospectId={prospect.id}
+                          prospectName={prospect.raison_sociale}
+                        />
+                      </td>
                     </tr>
                   )
                 })
               ) : (
                 <tr>
-                  <td colSpan={8} className="px-4 py-16 text-center">
+                  <td colSpan={9} className="px-4 py-16 text-center">
                     <div className="flex flex-col items-center gap-3">
                       <div className="flex h-12 w-12 items-center justify-center rounded-full bg-gray-100 dark:bg-gray-800">
                         <svg

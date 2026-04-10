@@ -129,6 +129,27 @@ Claude doit ajouter une entrée à la fin de chaque session significative :
 
 ---
 
+## 2026-04-06 — Séparation sourcing / daily list : deux types de clients Supabase
+
+**Ce qui a bien marché** :
+- Utiliser `SupabaseAdminClient` (retour de `createAdminClient()`) dans les nouveaux runners est correct et cohérent — les orchestrateurs n'ont pas besoin des cookies de session.
+- Définir un `correlationId` via `crypto.randomUUID()` dans `generateDailyList()` permet de tracer chaque génération dans les logs sans avoir un `agent_run` en DB pour chaque opération.
+- Le pattern de logging `AgentLog[]` accumulés + `updateRunInDB()` périodique évite les appels DB superflus.
+
+**Erreur commise** :
+- Cast `(prospect as Record<string, unknown>)` rejeté par TypeScript car `Prospect` est une interface sans index signature. Fix : `(prospect as unknown as Record<string, unknown>)`.
+- `await createAdminClient()` dans `app/api/agent/run/route.ts` — `createAdminClient()` est synchrone (pas de `async`), le `await` était erroné même s'il ne causait pas d'erreur runtime (await sur une valeur non-Promise retourne la valeur telle quelle). Supprimé pour la cohérence.
+
+**Règle à retenir** :
+- Pour muter dynamiquement les champs d'une interface TypeScript nommée, toujours utiliser le double cast `as unknown as Record<string, unknown>` — le cast direct `as Record<string, unknown>` est refusé si le type source n'a pas d'index signature.
+- Avant d'écrire `await f()`, vérifier que `f()` est bien `async` ou retourne une `Promise`. Un `createAdminClient()` synchrone wrappé dans `await` ne plante pas mais crée une confusion de lecture.
+
+**Comment l'éviter** :
+- Toujours relire la signature de la fonction appelée (async/sync) avant d'écrire `await`.
+- Préférer `Object.assign(prospect, nouveauxChamps)` ou un objet mutable intermédiaire plutôt qu'un cast dynamique.
+
+---
+
 ## 2026-04-05 — Apostrophes typographiques dans les string literals TypeScript
 
 **Erreur commise** : Les descriptions dans les tableaux STEPS et TIPS du template welcome.tsx contenaient des apostrophes typographiques (`'` U+2019) à l'intérieur de string literals délimités par des apostrophes ASCII (`'`). TypeScript parse ces caractères comme la fin de la string, générant des erreurs TS1005 et TS1002 en cascade.

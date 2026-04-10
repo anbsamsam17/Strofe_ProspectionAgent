@@ -16,6 +16,52 @@ links:
 
 ---
 
+## 2026-04-06 — Refonte architecture pipeline : séparation sourcing / daily list
+
+**Tâche** : Refondre l'architecture du pipeline agent pour séparer le sourcing pur de la génération de la daily list.
+
+**Livraisons** :
+1. `lib/agent/sourcing-runner.ts` (NOUVEAU) — orchestrateur de sourcing pur. Crée un `agent_run` phase=`sourcing`, déduplique via SIREN existants, appelle INSEE + fallback Recherche Entreprises, enrichit ADEME BEGES par batch de 20, calcule les scores, upsert dans `prospects`. Ne touche pas à la daily list.
+2. `lib/agent/daily-list-generator.ts` (NOUVEAU) — orchestrateur de génération daily list. Récupère/crée la daily list du jour, supprime les items non appelés, sélectionne les TOP N par score (avec filtre BEGES), enrichit les contacts UNIQUEMENT sur ces N prospects, génère les pitchs GPT-4o, insère les `daily_list_items`, passe en `ready`.
+3. `app/api/agent/sourcing/route.ts` (NOUVEAU) — `POST /api/agent/sourcing` avec auth Supabase, validation Zod (`effectifMax`, `effectifMin`, `targetSectors`, `targetRegion`), protection anti-concurrent (409 si run en cours), appelle `runSourcing()`.
+4. `app/api/daily-list/generate/route.ts` (NOUVEAU) — `POST /api/daily-list/generate` avec auth Supabase, validation Zod (`targetCount` 1-50, défaut 15), appelle `generateDailyList()`.
+5. `app/api/daily-list/items/route.ts` (NOUVEAU) — `POST /api/daily-list/items` pour ajout manuel. Ownership check, idempotence (409 si déjà dans la liste), enrichissement contact, pitch single GPT-4o, insert avec `ordre = max + 1`.
+6. `app/api/agent/run/route.ts` (MODIFIÉ) — mode cron migré vers `runSourcing()` (sans params = defaults), mode manuel garde `runAgentNocturne()` pour compatibilité descendante. Import `runSourcing` ajouté.
+
+**Validation** : `npx tsc --noEmit` exit code 0.
+
+**Architecture finale** :
+- Cron nocturne → `/api/agent/run` (Bearer) → `runSourcing()` → alimente `prospects`
+- Dashboard → `/api/agent/sourcing` (session) → `runSourcing(params)` → sourcing ciblé
+- Dashboard → `/api/daily-list/generate` (session) → `generateDailyList()` → daily list prête
+- Page prospects → `/api/daily-list/items` (session) → ajout manuel d'un prospect
+
+---
+
+## 2026-04-06 — Refonte UI nouvelle architecture backend
+
+**Tâche** : Refondre l'UI pour la nouvelle architecture backend (endpoints `/api/agent/sourcing`, `/api/daily-list/generate`, `/api/daily-list/items`).
+
+**Livraisons** :
+1. `components/dashboard/sourcing-modal.tsx` (NOUVEAU) — modal Client Component avec form complet : effectif min/max, checkboxes secteurs NAF (9 secteurs, 34 codes NAF), zone géographique, validation, loading/error states, accessibilité ARIA, Escape + click overlay pour fermer
+2. `components/layout/dashboard-header.tsx` — bouton "Lancer l'agent" → `setIsModalOpen(true)` + rendu `<SourcingModal>`. Suppression du fetch direct `/api/agent/run`
+3. `components/dashboard/generate-list-button.tsx` — endpoint `/api/agent/run` → `/api/daily-list/generate` avec `{ targetCount: 15 }`. `window.location.reload()` au succès. Label simplifié "Générer la liste du jour"
+4. `components/prospects/add-to-daily-list-button.tsx` (NOUVEAU) — bouton Client Component "+ Ajouter" sur chaque prospect, `POST /api/daily-list/items`, états idle/loading/success/error, auto-reset erreur 3s
+5. `app/(dashboard)/prospects/page.tsx` — import `AddToDailyListButton`, colonne "Actions" en header (sr-only), cell `<AddToDailyListButton>` sur chaque row, colSpan 8→9
+6. `app/(dashboard)/dashboard/page.tsx` — firstName capitalisé (`charAt(0).toUpperCase() + slice(1).toLowerCase()`), fallback "Utilisateur" au lieu de "vous"
+
+**Fichiers créés** :
+- `components/dashboard/sourcing-modal.tsx`
+- `components/prospects/add-to-daily-list-button.tsx`
+
+**Fichiers modifiés** :
+- `components/layout/dashboard-header.tsx`
+- `components/dashboard/generate-list-button.tsx`
+- `app/(dashboard)/prospects/page.tsx`
+- `app/(dashboard)/dashboard/page.tsx`
+
+---
+
 ## 2026-04-06 — Audit complet pipeline + frontend (8 corrections)
 
 **Tâche** : Audit et correction de tous les bugs pipeline et frontend identifiés dans la consigne.
