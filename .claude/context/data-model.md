@@ -126,3 +126,13 @@ Index : `(user_id, started_at DESC)`, partiel `(user_id, status) WHERE status='r
 5. Disqualification éventuelle
    → UPDATE prospects (statut='rejected') → -50 pts au prochain scoring
 ```
+
+À chaque run de sourcing, `profiles.sourcing_state` est mis à jour : `curseur`/`curseurSuivant` pour la reprise Sirene, `filters_signature` (hash des filtres), `last_total`, `exhausted_at` et `last_run_at`. Si l'utilisateur change ses filtres (NAF, ville, effectifs…), la signature change et le curseur est reset à `'*'` au prochain run — l'univers Sirene est donc re-parcouru depuis le début.
+
+## Indexes & contraintes ajoutés par migration 005
+
+- `profiles.sourcing_state` : **pas d'index** (lookup toujours par `id` PK lors du run).
+- `agent_runs.*` (6 nouvelles colonnes) : **pas d'index** — le filtre principal reste `(user_id, started_at DESC)` déjà créé en 001/003.
+- JSONB `sourcing_state` interrogeable au besoin via les opérateurs `->`, `->>`, `@>` (pas d'usage actuel hors lecture full-row côté orchestrator).
+
+**Conformité RLS** : les policies existantes (`auth.uid() = id` sur `profiles`, `auth.uid() = user_id` sur `agent_runs`) couvrent automatiquement les nouvelles colonnes — aucune migration de policy nécessaire.

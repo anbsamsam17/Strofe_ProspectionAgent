@@ -42,7 +42,7 @@ Le score est clampé `[0, 100]` après somme.
 
 | Constante | Valeur | Usage |
 |-----------|--------|-------|
-| `SCORE_QUALIFICATION_SEUIL` (orchestrator) | **20** | Score min pour passer `statut='qualified'` |
+| `SCORE_QUALIFICATION_SEUIL` (orchestrator) | **20** | Score min pour passer `statut='qualified'`. Sert aussi de seuil de comptage `qualifiedCount` dans la boucle adaptative (`lib/agent/sourcing-runner.ts:632,636`). À noter : la **boucle stoppe sur les candidats post-dedup** (`max(daily × 3, 50)`), pas sur les qualifiés — ce seuil ne pilote pas la pagination, il classe les prospects après scoring. |
 | `SEUIL_PRIORITE_HAUTE` (scoring) | **60** | `priorite='haute'` dans daily_list_items |
 | `SEUIL_PRIORITE_NORMALE` (scoring) | **30** | ≥30 → `normale`, sinon `basse` |
 

@@ -15,9 +15,27 @@ Définis dans `vercel.json`. Deux jobs, tous les deux protégés par `CRON_SECRE
 
 - **Path** : `POST /api/agent/run`.
 - **Schedule** : `0 22 * * *` (heure du serveur Vercel = UTC ; ajuster mentalement = 23h Paris l'hiver, 00h l'été).
-- **Action** : mode cron → boucle sur tous les `profiles.onboarded=true`, lance `runSourcing` puis (en mode manuel) `runAgentNocturne`. Voir `pipeline-nightly.md`.
-- **Durée** : `export const maxDuration = 300` (5 min, plan Vercel Pro requis si plusieurs users).
+- **Action** : mode cron → boucle sur tous les `profiles.onboarded=true`, lance `runSourcing` en `Promise.allSettled` (PARALLÈLE, pas séquentiel). Voir `pipeline-nightly.md`. Note : le cron 22h alimente uniquement le pipeline de prospects (sourcing pur) ; la daily list est générée séparément via `POST /api/daily-list/generate`.
+- **Durée** : `export const maxDuration = 300` (5 min, cf. `app/api/agent/run/route.ts:24`). Plan Vercel Pro requis.
 - **Authentification** : Vercel injecte automatiquement `Authorization: Bearer ${CRON_SECRET}`. Le handler appelle `isCronRequest()` qui fait une comparaison timing-safe (cf. `security.md`).
+
+### Cap durée par run (Wave 4.3)
+
+Boucle adaptative (`runPipelineSourcing` dans `lib/agent/sourcing-runner.ts`) :
+- `HARD_CAP_PAGES = 50` (l.130) — stop après 50 pages Sirene.
+- `HARD_CAP_DURATION_MS = 4 * 60 * 1000` (l.131) — stop après 4 min.
+- Cap durée par user ≈ **4 min** (sourcing pur ; pitchs et enrichissement contact sont hors cron 22h).
+
+Comme le cron lance les N users en `Promise.allSettled` parallèle, la durée totale du cron ≈ **max(durée par user) ≈ 4 min**, pas N × 4 min. Buffer vs `maxDuration=300s` = **~60s** (🟡 marge serrée mais OK).
+
+Verdict actuel : 🟢 OK pour le timeout Vercel. Points de vigilance :
+- 🟡 Si N users grand (>10), saturation possible APIs externes (Sirene, ADEME) → throttling/erreurs même si le timeout est respecté → envisager un sémaphore (`p-limit`) plutôt que `allSettled` non bornée.
+- 🟡 Si on rebascule un jour vers `runAgentNocturne` dans le cron (pitchs + contact enrichment), ajouter ~60s/user → 5 min/user → buffer disparaît.
+
+Mitigations possibles si pression future :
+- Augmenter `maxDuration` à 600s (max 800s plan Pro).
+- Partitionner : `0 22 * * *` user1, `5 22 * * *` user2, etc.
+- Borner la concurrence avec `p-limit` pour éviter saturation API.
 
 ## 7h30 jours ouvrés (lun-ven) — notification
 

@@ -25,7 +25,7 @@ Toutes les intégrations sortantes du pipeline. Variables d'env à configurer da
 - **URL base** : `https://recherche-entreprises.api.gouv.fr/search` (à confirmer dans le code).
 - **Auth** : aucune. Open data.
 - **Rate limit** : ~7 req/s documenté, illimité en volume quotidien.
-- **Utilisation** : déclenchée si Sirene KO. Pagine en interne ; `excludeSirens` passé pour skip les SIREN déjà connus de l'user (économie de quota).
+- **Utilisation** : **filet de sécurité** déclenché par la boucle adaptative à la 1ère page si Sirene throw `SireneApiError` (cf. `lib/agent/sourcing-runner.ts:473-494`). Un seul appel (pas de curseur) → l'univers est marqué `exhausted=true` après. `excludeSirens` passé pour skip les SIREN déjà connus de l'user.
 - **Variables d'env** : aucune.
 
 ## ADEME BEGES (enrichissement)

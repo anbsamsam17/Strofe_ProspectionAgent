@@ -120,6 +120,7 @@ Si le cron tourne 2× la même nuit (Vercel retry sur non-200, ou trigger manuel
 2. Sinon, à `phaseSelection` les prospects déjà dans la liste sont exclus → pas de doublons.
 3. À `phaseCreateDailyList` l'upsert `daily_lists` est idempotent ; les items ajoutés continuent la numérotation `ordre` (mode append).
 4. Conséquence : 2 runs successifs **agrandissent** la liste si de nouveaux prospects qualifiés existent.
+5. **Curseur jamais perdu** : `runPipelineSourcing` (`lib/agent/sourcing-runner.ts:830-880`) enveloppe boucle + enrich + upsert dans `try/finally` → `persistSourcingState` est appelé même si enrich/upsert throw, tant que la boucle a produit un `outcome` (curseur consommé toujours écrit en base).
 
 ## Compteurs typiques (post-Wave 2.2)
 

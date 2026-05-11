@@ -21,7 +21,7 @@ Index des notes de contexte. Une entrée = un fichier ciblé. Le contenu vit dan
 - [Sécurité](context/security.md) — RLS, service_role, secrets, Sentry PII, SSRF, Zod
 
 ## Initiatives en cours
-- [TODO sourcing-fix](TODO-sourcing-fix.md) — refonte pagination Sirene + observabilité, dispatch par vagues parallèles via l'orchestrator
+- [TODO sourcing-fix](TODO-sourcing-fix.md) — refonte pagination Sirene + observabilité, dispatch par vagues parallèles. Branche `fix/sourcing-pagination` **complétée** (Wave 1→4) : pagination curseur, boucle adaptative, persistance idempotente, fallback Recherche Entreprises. Tests 97/97 verts.
 
 ---
 
