@@ -201,14 +201,28 @@ export interface SireneEtablissement {
   etatAdministratifEtablissement?: string
 }
 
+/**
+ * Header retourné par l'API Sirene INSEE v3.11.
+ * Depuis 2024, l'INSEE expose la pagination par CURSEUR (`curseur` / `curseurSuivant`).
+ * Les champs legacy `debut` / `nombre` (offset pagination) restent renvoyés mais ne
+ * doivent plus être utilisés pour piloter la pagination — voir `sourcerEntreprises`.
+ */
+export interface SireneHeader {
+  statut: number
+  message: string
+  total: number
+  /** Legacy offset (pagination par `debut`). Conservé pour rétrocompat. */
+  debut?: number
+  /** Legacy taille de page. Conservé pour rétrocompat. */
+  nombre?: number
+  /** Curseur courant (envoyé dans la requête). `*` pour la première page. */
+  curseur?: string
+  /** Curseur à passer à la requête suivante. Si égal au curseur courant → fin. */
+  curseurSuivant?: string
+}
+
 export interface SireneResponse {
-  header: {
-    statut: number
-    message: string
-    total: number
-    debut: number
-    nombre: number
-  }
+  header: SireneHeader
   etablissements: SireneEtablissement[]
 }
 

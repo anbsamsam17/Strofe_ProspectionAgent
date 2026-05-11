@@ -10,6 +10,36 @@ import type {
 } from '@/lib/types'
 
 // ------------------------------------------------------------
+// ERREURS TYPÉES
+// ------------------------------------------------------------
+
+/**
+ * Erreur émise quand l'API Sirene répond avec un statut HTTP fatal
+ * (>= 500 après retries) ou quand la réponse ne peut pas être parsée.
+ * Le caller (orchestrator) doit l'attraper pour basculer en mode dégradé
+ * (fallback Recherche Entreprises).
+ */
+export class SireneApiError extends Error {
+  public readonly status?: number
+  constructor(message: string, status?: number) {
+    super(message)
+    this.name = 'SireneApiError'
+    this.status = status
+  }
+}
+
+/**
+ * Erreur de validation des paramètres d'entrée de `sourcerEntreprises`.
+ * Throw avant tout appel réseau pour signaler un mauvais usage côté caller.
+ */
+export class SireneValidationError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'SireneValidationError'
+  }
+}
+
+// ------------------------------------------------------------
 // CONSTANTES
 // ------------------------------------------------------------
 
@@ -62,6 +92,37 @@ const TRANCHE_MAX = '53'
 const CODE_POSTAL_QUERY = 'codePostalEtablissement:[33000 TO 33999]'
 
 // ------------------------------------------------------------
+// CONSTANTES — DÉFAUTS PARAMETRABLES
+// ------------------------------------------------------------
+
+/**
+ * Codes tranche INSEE valides (variable `trancheEffectifsEtablissement`).
+ * `NN` = "Non précisé" (à exclure par défaut, voir mapping spec §1.4).
+ */
+const VALID_TRANCHE_CODES: ReadonlySet<string> = new Set([
+  'NN', '00', '01', '02', '03',
+  '11', '12',
+  '21', '22',
+  '31', '32',
+  '41', '42',
+  '51', '52', '53',
+])
+
+/** Défaut tranches : 50+ salariés (cible BEGES, cohérent avec comportement legacy). */
+const DEFAULT_EFFECTIF_TRANCHES: readonly string[] = [
+  '21', '22', '31', '32', '41', '42', '51', '52', '53',
+]
+
+/** Défaut géographie : Gironde (compat legacy). */
+const DEFAULT_CODE_POSTAL_RANGE: readonly [string, string] = ['33000', '33999']
+const DEFAULT_DEPARTEMENTS: readonly string[] = ['33']
+
+/** Limites API Sirene. */
+const SIRENE_MAX_PAGE_SIZE = 1000
+const DEFAULT_PAGE_SIZE = 100
+const DEFAULT_MAX_PAGES = 5
+
+// ------------------------------------------------------------
 // TYPES INTERNES
 // ------------------------------------------------------------
 
@@ -77,11 +138,55 @@ export interface SourcingOptions {
 }
 
 /**
+ * Paramètres de l'API pagination curseur de `sourcerEntreprises`.
+ * Tous les champs sont optionnels avec des défaults compatibles avec l'historique
+ * (50+ salariés, Gironde, NAF prioritaires).
+ */
+export type SourcerEntreprisesParams = {
+  /** Codes NAF à cibler. Format avec point ('01.21Z') — sera nettoyé en interne. Défaut : NAF_PRIORITAIRES. */
+  nafCodes?: string[]
+  /** Codes tranche INSEE (ex. ['21','22','31','32']). Défaut : 50+ salariés. */
+  effectifTranches?: string[]
+  /** Bornes lexicographiques code postal [min, max]. Défaut : Gironde ['33000','33999']. */
+  codePostalRange?: [string, string]
+  /** Codes département (utilisé uniquement par le fallback Recherche Entreprises). Défaut : ['33']. */
+  departements?: string[]
+  /** Curseur Sirene officiel (`*` pour la première page). Défaut : `*`. */
+  curseur?: string
+  /** Taille d'une page Sirene. Clampé à [1, 1000]. Défaut : 100. */
+  pageSize?: number
+  /** Nombre max de pages à charger en un appel (safety cap). Défaut : 5. */
+  maxPages?: number
+  /** SIREN à filtrer côté code après fetch (post-pagination — l'API ne supporte pas NOT IN). */
+  excludeSirens?: Set<string>
+}
+
+/**
+ * Résultat d'un appel à `sourcerEntreprises`.
+ * Le caller (orchestrator) peut chaîner les appels en passant `curseurSuivant` comme `curseur`
+ * tant que `exhausted === false`.
+ */
+export type SourcerEntreprisesResult = {
+  /** Établissements collectés sur les pages chargées (filtrés via `excludeSirens` si fourni). */
+  etablissements: SireneEtablissement[]
+  /** Curseur de début de l'appel (input ou `*`). */
+  curseur: string
+  /** Curseur à passer au prochain appel (ou identique à `curseur` si univers épuisé). */
+  curseurSuivant: string
+  /** Total de l'univers déclaré par Sirene (`header.total` de la PREMIÈRE page). */
+  totalAvailable: number
+  /** Nombre de pages effectivement fetchées dans cet appel. */
+  pagesLoaded: number
+  /** true ssi `curseurSuivant === curseur` (FIN d'univers selon convention Sirene). */
+  exhausted: boolean
+}
+
+/**
  * Type local représentant un record ADEME BEGES renvoyé par l'API Data Fair.
  * Les champs correspondent à l'API : https://data.ademe.fr/data-fair/api/v1/datasets/bilan-ges/lines
  * Ce type est plus riche que l'interface AdemeBeges de types.ts (qui reste la surface publique).
  */
-interface AdemeBegesDataFairRecord {
+export interface AdemeBegesDataFairRecord {
   siren_principal: string
   raison_sociale: string
   annee_de_reporting: number
@@ -198,57 +303,148 @@ export function getInseeApiKey(): string {
 }
 
 // ------------------------------------------------------------
-// SOURCING SIRENE
+// SOURCING SIRENE — Pagination par CURSEUR (INSEE v3.11)
 // ------------------------------------------------------------
 
 /**
- * Source les établissements français (Gironde, effectifs ≥ 200)
- * depuis l'API Sirene INSEE v3.11, avec pagination automatique.
+ * Valide les paramètres de `sourcerEntreprises` et lève `SireneValidationError` si invalides.
+ * Retourne une version normalisée avec les défauts appliqués.
  */
-export async function sourcerEntreprises(
-  options: SourcingOptions = {},
-): Promise<SireneEtablissement[]> {
-  const {
-    maxResults = 200,
-    nafCodes = NAF_PRIORITAIRES,
-    codePostalRange = CODE_POSTAL_QUERY,
-  } = options
+function validateSourcerParams(params: SourcerEntreprisesParams): {
+  nafCodes: string[]
+  effectifTranches: string[]
+  codePostalRange: [string, string]
+  departements: string[]
+  curseur: string
+  pageSize: number
+  maxPages: number
+  excludeSirens: Set<string>
+} {
+  const nafCodes = params.nafCodes ?? NAF_PRIORITAIRES.slice()
+  const effectifTranches = params.effectifTranches ?? DEFAULT_EFFECTIF_TRANCHES.slice()
+  const codePostalRange: [string, string] = params.codePostalRange ?? [
+    DEFAULT_CODE_POSTAL_RANGE[0],
+    DEFAULT_CODE_POSTAL_RANGE[1],
+  ]
+  const departements = params.departements ?? DEFAULT_DEPARTEMENTS.slice()
+  const curseur = params.curseur ?? '*'
+  const requestedPageSize = params.pageSize ?? DEFAULT_PAGE_SIZE
+  const pageSize = Math.max(1, Math.min(SIRENE_MAX_PAGE_SIZE, Math.floor(requestedPageSize)))
+  const maxPages = params.maxPages ?? DEFAULT_MAX_PAGES
+  const excludeSirens = params.excludeSirens ?? new Set<string>()
 
-  const apiKey = getInseeApiKey()
+  // 1. Tranches valides
+  for (const t of effectifTranches) {
+    if (!VALID_TRANCHE_CODES.has(t)) {
+      throw new SireneValidationError(
+        `effectifTranches: code "${t}" invalide. Codes acceptés : ${[...VALID_TRANCHE_CODES].join(',')}`,
+      )
+    }
+  }
+  if (effectifTranches.length === 0) {
+    throw new SireneValidationError('effectifTranches: au moins une tranche est requise')
+  }
 
-  // Construction du filtre Lucene
-  // L'API Sirene utilise les codes NAF sans point (ex: "4941A" et non "49.41A").
-  // On retire le point via replace — mais String.replace() ne remplace que la PREMIÈRE occurrence.
-  // "01.21Z" → "0121Z" (correct). Pas de second point dans un code NAF valide.
-  // IMPORTANT : si nafCodes est vide après nettoyage, ne PAS inclure le filtre NAF
-  // pour éviter un filtre Lucene malformé "activitePrincipaleEtablissement:()" → HTTP 400.
+  // 2. codePostalRange : 5 chars + min <= max (lexicographique)
+  const [cpMin, cpMax] = codePostalRange
+  if (typeof cpMin !== 'string' || typeof cpMax !== 'string' || cpMin.length !== 5 || cpMax.length !== 5) {
+    throw new SireneValidationError(
+      `codePostalRange: chaque borne doit être une chaîne de 5 caractères (reçu: ["${cpMin}","${cpMax}"])`,
+    )
+  }
+  if (cpMin > cpMax) {
+    throw new SireneValidationError(
+      `codePostalRange: borne min "${cpMin}" > borne max "${cpMax}" (ordre lexicographique)`,
+    )
+  }
+
+  // 3. maxPages > 0
+  if (!Number.isFinite(maxPages) || maxPages <= 0 || !Number.isInteger(maxPages)) {
+    throw new SireneValidationError(`maxPages: entier > 0 requis (reçu: ${maxPages})`)
+  }
+
+  return {
+    nafCodes,
+    effectifTranches,
+    codePostalRange,
+    departements,
+    curseur,
+    pageSize,
+    maxPages,
+    excludeSirens,
+  }
+}
+
+/**
+ * Construit la requête Lucene Sirene à partir des filtres fournis.
+ * Format attendu par INSEE (codes NAF sans point, range lexicographique).
+ */
+function buildLuceneQuery(
+  nafCodes: string[],
+  effectifTranches: string[],
+  codePostalRange: [string, string],
+): string {
+  // L'API Sirene attend les codes NAF SANS point (ex. "0121Z" au lieu de "01.21Z").
   const cleanedNafCodes = nafCodes
     .map((c) => c.replace('.', '').trim().toUpperCase())
     .filter((c) => c.length > 0)
 
+  // Tranches : déduplication + tri + énumération via "OR" (toujours valide même pour 1 élément).
+  const uniqueTranches = [...new Set(effectifTranches)].sort()
+  const tranchesClause = `trancheEffectifsEtablissement:(${uniqueTranches.join(' OR ')})`
+
   const queryParts: string[] = [
-    codePostalRange,
-    `trancheEffectifsEtablissement:[${TRANCHE_MIN} TO ${TRANCHE_MAX}]`,
+    `codePostalEtablissement:[${codePostalRange[0]} TO ${codePostalRange[1]}]`,
+    tranchesClause,
     'etatAdministratifEtablissement:A',
   ]
 
   // N'ajouter le filtre NAF que si la liste est non vide — sinon on cible tous les secteurs
+  // (éviter le bug HTTP 400 sur `activitePrincipaleEtablissement:()`).
   if (cleanedNafCodes.length > 0) {
-    queryParts.push(`activitePrincipaleEtablissement:(${cleanedNafCodes.join(' ')})`)
+    queryParts.push(`activitePrincipaleEtablissement:(${cleanedNafCodes.join(' OR ')})`)
   }
 
-  const query = queryParts.join(' AND ')
+  return queryParts.join(' AND ')
+}
 
-  const allEtablissements: SireneEtablissement[] = []
-  const pageSize = 100
-  let debut = 0
-  let totalAvailable = Infinity
+/**
+ * Source les établissements depuis l'API Sirene INSEE v3.11 en utilisant la
+ * pagination officielle par CURSEUR.
+ *
+ * Convention INSEE :
+ *   - Premier appel : `curseur=*`
+ *   - Pages suivantes : passer `header.curseurSuivant` en `curseur`
+ *   - Fin d'univers : `curseurSuivant === curseur` (page terminale)
+ *
+ * Arrêt anticipé : si `pagesLoaded >= maxPages` (safety cap) ou si une page renvoie
+ * `etablissements` vide.
+ *
+ * Throw `SireneValidationError` sur params invalides (pré-flight), `SireneApiError`
+ * sur erreur HTTP fatale (>= 500 après retries) ou parse échoué. Les 4xx renvoient
+ * un résultat vide avec `exhausted=true` (cohérent : pas de page suivante possible).
+ */
+export async function sourcerEntreprises(
+  params: SourcerEntreprisesParams = {},
+): Promise<SourcerEntreprisesResult> {
+  const validated = validateSourcerParams(params)
+  const { nafCodes, effectifTranches, codePostalRange, curseur, pageSize, maxPages, excludeSirens } = validated
 
-  while (allEtablissements.length < maxResults && debut < totalAvailable) {
+  const apiKey = getInseeApiKey()
+  const query = buildLuceneQuery(nafCodes, effectifTranches, codePostalRange)
+
+  const collected: SireneEtablissement[] = []
+  let currentCurseur = curseur
+  let nextCurseur = curseur
+  let totalAvailable = 0
+  let pagesLoaded = 0
+
+  for (let page = 1; page <= maxPages; page++) {
     const url = new URL(INSEE_SIRET_URL)
     url.searchParams.set('q', query)
     url.searchParams.set('nombre', String(pageSize))
-    url.searchParams.set('debut', String(debut))
+    // URLSearchParams encode automatiquement les caractères spéciaux du curseur (* devient %2A, + → %2B, etc.)
+    url.searchParams.set('curseur', currentCurseur)
 
     let response: Response
     try {
@@ -259,70 +455,138 @@ export async function sourcerEntreprises(
         },
       })
     } catch (err) {
-      console.log(
-        JSON.stringify({
-          level: 'error',
-          module: 'sourcing',
-          msg: `Erreur réseau Sirene page debut=${debut}`,
-          error: err instanceof Error ? err.message : String(err),
-        }),
+      // Erreur réseau / timeout après retries → propager pour permettre fallback
+      throw new SireneApiError(
+        `Sirene: erreur réseau page ${page} curseur=${currentCurseur} — ${
+          err instanceof Error ? err.message : String(err)
+        }`,
       )
-      // Arrêter la pagination sur erreur fatale — renvoyer ce qu'on a déjà
-      break
     }
 
     if (response.status === 404) {
-      // 404 = aucun résultat pour ce filtre
+      // 404 = aucun résultat — univers vide pour ce filtre
+      console.log(
+        JSON.stringify({
+          level: 'info',
+          module: 'sourcing',
+          phase: 'sirene_page',
+          page,
+          curseur: currentCurseur,
+          curseurSuivant: currentCurseur,
+          returned: 0,
+          header_total: 0,
+          msg: 'Sirene 404 — univers vide',
+        }),
+      )
+      nextCurseur = currentCurseur
+      break
+    }
+
+    if (response.status >= 400 && response.status < 500) {
+      // 4xx hors 404 = erreur de requête (auth, validation) — on stoppe sans throw pour
+      // laisser le caller décider du fallback. Le runner détectera `etablissements=[]`.
+      const body = await response.text().catch(() => '')
+      console.log(
+        JSON.stringify({
+          level: 'warn',
+          module: 'sourcing',
+          phase: 'sirene_page',
+          page,
+          curseur: currentCurseur,
+          status: response.status,
+          body: body.slice(0, 200),
+          msg: 'Sirene HTTP 4xx — abandon (caller doit basculer en fallback)',
+        }),
+      )
+      nextCurseur = currentCurseur
       break
     }
 
     if (!response.ok) {
+      // 5xx persistants → erreur fatale typée
       const body = await response.text().catch(() => '')
-      console.log(
-        JSON.stringify({
-          level: 'error',
-          module: 'sourcing',
-          msg: `Sirene HTTP ${response.status} sur page debut=${debut}`,
-          body,
-        }),
+      throw new SireneApiError(
+        `Sirene: HTTP ${response.status} page ${page} curseur=${currentCurseur} body=${body.slice(0, 200)}`,
+        response.status,
       )
-      break
     }
 
-    const data = (await response.json()) as SireneResponse
+    let data: SireneResponse
+    try {
+      data = (await response.json()) as SireneResponse
+    } catch (err) {
+      throw new SireneApiError(
+        `Sirene: parse JSON échoué page ${page} curseur=${currentCurseur} — ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      )
+    }
 
-    // Mettre à jour le total disponible depuis le header de la réponse
-    totalAvailable = data.header?.total ?? 0
+    pagesLoaded++
+
+    // Le total déclaré est figé sur la PREMIÈRE page chargée dans cet appel.
+    if (pagesLoaded === 1) {
+      totalAvailable = data.header?.total ?? 0
+    }
 
     const etablissements = data.etablissements ?? []
-    allEtablissements.push(...etablissements)
+    collected.push(...etablissements)
+
+    // Curseur suivant — Sirene renvoie `curseurSuivant` égal au curseur courant en fin d'univers.
+    // Fallback prudent : si absent du header, considérer terminal.
+    const headerCurseurSuivant = data.header?.curseurSuivant ?? currentCurseur
 
     console.log(
       JSON.stringify({
         level: 'info',
         module: 'sourcing',
-        msg: `Sirene page chargée`,
-        debut,
-        nombre: etablissements.length,
-        total: totalAvailable,
-        cumul: allEtablissements.length,
+        phase: 'sirene_page',
+        page,
+        curseur: currentCurseur,
+        curseurSuivant: headerCurseurSuivant,
+        returned: etablissements.length,
+        header_total: data.header?.total ?? 0,
       }),
     )
 
-    // Pas d'autres résultats
-    if (etablissements.length < pageSize) {
+    nextCurseur = headerCurseurSuivant
+
+    // Condition d'arrêt INSEE : curseurSuivant === curseur courant => univers épuisé
+    if (headerCurseurSuivant === currentCurseur) {
       break
     }
 
-    debut += pageSize
+    // Garde-fou : page vide alors que curseur "avance" — situation anormale mais safe à stopper
+    if (etablissements.length === 0) {
+      break
+    }
 
-    // Respecter le rate limit Sirene (30 req/min max)
-    if (debut < totalAvailable && allEtablissements.length < maxResults) {
+    currentCurseur = headerCurseurSuivant
+
+    // Respect du rate-limit Sirene (~28 req/min) entre les pages
+    if (page < maxPages) {
       await sleep(SIRENE_DELAY_MS)
     }
   }
 
-  return allEtablissements.slice(0, maxResults)
+  // `exhausted` = vrai ssi le curseur suivant final est égal au curseur courant à la
+  // dernière itération réussie (convention INSEE : page terminale). Couvre aussi les
+  // cas 404 / 4xx / page vide où on a remis nextCurseur = currentCurseur.
+  const finalExhausted = nextCurseur === currentCurseur
+
+  // Filtrage post-fetch : exclure les SIREN déjà connus du caller (pas géré côté API Sirene).
+  const filtered = excludeSirens.size > 0
+    ? collected.filter((e) => !excludeSirens.has(e.siren))
+    : collected
+
+  return {
+    etablissements: filtered,
+    curseur,
+    curseurSuivant: nextCurseur,
+    totalAvailable,
+    pagesLoaded,
+    exhausted: finalExhausted,
+  }
 }
 
 // ------------------------------------------------------------

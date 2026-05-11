@@ -4,12 +4,21 @@ Toutes les intégrations sortantes du pipeline. Variables d'env à configurer da
 
 ## Sirene INSEE (sourcing primaire)
 
-- **URL base** : `https://api.insee.fr/entreprises/sirene/V3.11/` (à vérifier dans `lib/agent/sourcing.ts`).
-- **Auth** : OAuth2 client_credentials. Token JWT valide **7 jours**, à rafraîchir au-delà. Stocké en cache mémoire (singleton module).
-- **Variables d'env** : `INSEE_CLIENT_ID`, `INSEE_CLIENT_SECRET`.
-- **Rate limit** : 30 req/min en sandbox, plus en prod (cf. docs INSEE).
-- **Utilisation** : recherche d'établissements par codes NAF + tranche d'effectif (50-499 salariés visés, mais le pipeline étend selon `target_sectors`).
-- **Fallback** : si exception ou 0 résultats → Recherche Entreprises gouv (ci-dessous).
+- **URL base** : `https://api.insee.fr/api-sirene/3.11/siret` (cf. `lib/agent/sourcing.ts`, constante `INSEE_SIRET_URL`).
+- **Auth** : **API Key simple** (depuis sept. 2025, l'INSEE a abandonné OAuth2). Header `X-INSEE-Api-Key-Integration: <key>`. Clé générée sur https://portail-api.insee.fr/ → Applications → API Key.
+- **Variables d'env** : `INSEE_API_KEY` (anciennes `INSEE_CLIENT_ID` / `INSEE_CLIENT_SECRET` mortes).
+- **Rate limit** : ~30 req/min. `SIRENE_DELAY_MS = 2100 ms` entre les pages (~28 req/min, marge de sécurité).
+- **Pagination** : **CURSEUR officiel INSEE v3.11** (Wave 2). Premier appel `curseur=*`, pages suivantes utilisent `header.curseurSuivant`, fin d'univers détectée par `curseurSuivant === curseur` (page terminale). L'ancien mode offset `debut=N` est abandonné.
+- **API exposée** : `sourcerEntreprises(params: SourcerEntreprisesParams): Promise<SourcerEntreprisesResult>`. Types exportés depuis `lib/agent/sourcing.ts` :
+  - `SourcerEntreprisesParams` — `nafCodes`, `effectifTranches`, `codePostalRange`, `departements`, `curseur`, `pageSize`, `maxPages`, `excludeSirens` (toutes optionnelles avec défauts legacy : Gironde, 50+ salariés, NAF prioritaires).
+  - `SourcerEntreprisesResult` — `etablissements`, `curseur`, `curseurSuivant`, `totalAvailable`, `pagesLoaded`, `exhausted`.
+  - `SireneApiError` — sur HTTP 5xx persistant ou parse JSON échoué. Le caller doit l'attraper pour basculer en fallback.
+  - `SireneValidationError` — sur params invalides (tranche inconnue, codePostalRange mal formé, maxPages ≤ 0).
+  - `AdemeBegesDataFairRecord` — type record ADEME (auparavant interne, désormais exporté ; les fixtures `fixtures/ademe.ts` ne sont plus un mirror).
+- **Header type** : `SireneHeader` (dans `lib/types.ts`) inclut désormais `curseur?` et `curseurSuivant?` ; `debut` / `nombre` legacy sont optionnels.
+- **Utilisation** : recherche d'établissements par codes NAF + tranches d'effectif + range code postal. Filtrage post-fetch `excludeSirens` (l'API Sirene ne supporte pas NOT IN — dedup côté code).
+- **Logging** : chaque page fetchée émet un log JSON structuré `{ phase: 'sirene_page', page, curseur, curseurSuivant, returned, header_total }`.
+- **Fallback** : si exception (`SireneApiError`) ou 0 résultats → Recherche Entreprises gouv (ci-dessous). Sur 4xx (auth/validation), `sourcerEntreprises` renvoie un résultat vide avec `exhausted=true` pour permettre la bascule fallback sans throw.
 
 ## Recherche Entreprises (data.gouv.fr) — fallback gratuit
 
@@ -91,9 +100,8 @@ SUPABASE_SERVICE_ROLE_KEY=
 # OpenAI
 OPENAI_API_KEY=
 
-# Sirene INSEE
-INSEE_CLIENT_ID=
-INSEE_CLIENT_SECRET=
+# Sirene INSEE (API Key depuis sept. 2025 — anciennes vars OAuth2 mortes)
+INSEE_API_KEY=
 
 # Enrichissement contacts (optionnels — phase 4.5 skippée sans)
 PAPPERS_API_KEY=
@@ -121,7 +129,7 @@ Pour mocker les APIs externes sans appel réseau réel, des fixtures TypeScript 
 - `sireneCursorSequence` — séquence `{ page1, page2, page3 }` avec curseurs progressant (`*` → `c2` → `c3` → `c3` = FIN). 250 SIREN uniques (100000000..100000249).
 - `sireneEmptyResponse` — page vide (univers sans résultat).
 - `sireneErrorResponse` — enveloppe HTTP 500 pour tester le mode dégradé.
-- Types locaux exportés : `SireneCursorHeader`, `SireneCursorResponse` (à fusionner dans `lib/types.ts` une fois Wave 2 mergée).
+- Types locaux exportés : `SireneCursorHeader`, `SireneCursorResponse`. **Wave 2.1 mergé** : `SireneHeader` dans `lib/types.ts` inclut désormais `curseur?` et `curseurSuivant?` — `SireneCursorHeader` peut être considéré comme assignable à `SireneHeader` (les fixtures restent valides).
 
 **`fixtures/ademe.ts`** — réponses ADEME Data Fair `/bilan-ges/lines` :
 - `buildAdemeResponse({ siren, hasBeges, begesDate?, begesValide?, raisonSociale? })` — builder custom.
@@ -129,7 +137,7 @@ Pour mocker les APIs externes sans appel réseau réel, des fixtures TypeScript 
 - `ademeWithBegesExpire` — bilan présent mais > 4 ans (flag `beges_valide=false`).
 - `ademeWithoutBeges` — pas de bilan (cible prospection la plus pertinente).
 - `ademeErrorResponse` — enveloppe HTTP 503.
-- Type local exporté : `AdemeBegesDataFairRecord` (mirror de `sourcing.ts:84-94`, à exporter depuis `sourcing.ts` une fois stabilisé).
+- Type local exporté : `AdemeBegesDataFairRecord`. **Wave 2.1 mergé** : ce type est désormais exporté depuis `lib/agent/sourcing.ts` ; les fixtures et `sourcing.ts` partagent la même définition (plus de mirror).
 
 Toutes les fixtures sont **100 % statiques** (aucun `fetch`/`axios`), typées strictement (pas de `any`), et sans dépendance circulaire (n'importent que depuis `@/lib/types`).
 

@@ -4,7 +4,7 @@
 // ============================================================
 
 import type { Database, Json } from '@/lib/supabase/database.types'
-import type { SupabaseServerClient } from '@/lib/supabase/server'
+import type { SupabaseAdminClient, SupabaseServerClient } from '@/lib/supabase/server'
 import type {
   AgentLog,
   AgentRun,
@@ -15,10 +15,14 @@ import type {
   ProfileSettings,
   Prospect,
 } from '@/lib/types'
-import { enrichirProspect, sourcerEntreprises, sourcerEntreprisesFallback } from './sourcing'
-import { calculerScore, determinerPriorite, getScoreDetails } from './scoring'
+import { determinerPriorite } from './scoring'
 import { genererPitchsBatch } from './pitch-gen'
 import { enrichirContact, getCreditsUsed } from './contact-enrichment'
+import {
+  runPipelineSourcing,
+  type AdaptiveSourcingOutcome,
+  type PipelineSourcingOutput,
+} from './sourcing-runner'
 
 // ------------------------------------------------------------
 // CONSTANTES
@@ -75,7 +79,7 @@ function log(
 async function updateRunInDB(
   run: AgentRun,
   supabase: SupabaseServerClient,
-  extra: Partial<AgentRun> = {},
+  extra: Partial<Database['public']['Tables']['agent_runs']['Update']> = {},
 ): Promise<void> {
   const updatePayload: Database['public']['Tables']['agent_runs']['Update'] = {
     status: run.status,
@@ -86,7 +90,7 @@ async function updateRunInDB(
     error_message: run.error_message ?? null,
     logs: run.logs as unknown as Json,
     completed_at: run.completed_at ?? null,
-    ...(extra as Partial<Database['public']['Tables']['agent_runs']['Update']>),
+    ...extra,
   }
 
   const { error } = await supabase
@@ -206,238 +210,91 @@ async function phaseLoadSettings(
 }
 
 // ------------------------------------------------------------
-// PHASE 3 : SOURCING
+// PHASE 3 : SOURCING ADAPTATIF (Wave 2.2 — pagination curseur Sirene)
 // ------------------------------------------------------------
+//
+// Cette phase délègue désormais à `runPipelineSourcing` (lib/agent/sourcing-runner.ts)
+// qui fait :
+//   1. résolution filtres effectifs + signature
+//   2. chargement profiles.sourcing_state + invalidation curseur
+//   3. boucle adaptative (fetch page → dedup → continue jusqu'à N candidats)
+//   4. enrichissement ADEME (batch 20) + scoring
+//   5. upsert prospects (batch 50) + comptage new/updated
+//   6. persistance sourcing_state (curseur final, signature, exhausted_at)
+//
+// L'ancienne phaseScoring est supprimée — l'upsert est fait dans `runPipelineSourcing`.
+// Les counters Sirene (total_available, pages_loaded, curseur_final, new/updated) sont
+// remontés ici dans `agent_runs` via updateRunInDB.
 
-// NAF_PRIORITAIRES par défaut utilisés quand les settings ne fournissent pas de codes NAF valides.
-// Format avec point (les deux APIs — Sirene et fallback — acceptent ce format ici,
-// sourcing.ts normalise le format en interne selon l'API cible).
-const NAF_PRIORITAIRES_DEFAULT = [
-  '01.21Z', '01.22Z',        // Viticulture
-  '30.30Z',                  // Construction aéronautique
-  '52.10B', '52.29A',        // Logistique / entreposage
-  '10.11Z', '10.13A', '10.32Z', '10.51A', '10.71A', // Agro-alimentaire
-  '46.17B',                  // Commerce intermédiaire agro
-  '49.41A', '49.41B', '52.21Z', // Transport routier / services annexes
-  // Secteurs élargis — pertinents pour le bilan carbone
-  '20.11Z', '20.14Z', '20.15Z', // Industrie chimique
-  '23.11Z', '23.13Z',        // Verre et produits en verre
-  '24.10Z', '24.20Z',        // Sidérurgie / tubes acier
-  '25.11Z', '25.29Z',        // Fabrication structures métalliques
-  '28.11Z', '28.15Z',        // Fabrication moteurs / engrenages
-  '35.11Z', '35.14Z',        // Production / commerce d'électricité
-  '38.11Z', '38.21Z',        // Collecte / traitement des déchets
-  '41.20A', '41.20B',        // Construction de bâtiments
-  '42.11Z', '42.13A',        // Construction routes / ponts
-  '43.21A', '43.22A',        // Travaux d'installation
-  '46.71Z', '46.72Z',        // Commerce gros combustibles / métaux
-  '47.30Z',                  // Commerce carburants
-  '55.10Z',                  // Hôtels
-  '56.10A',                  // Restauration
-  '86.10Z',                  // Activités hospitalières
-]
-
-async function phaseSourcing(
+async function phaseSourcingAdaptive(
   run: AgentRun,
-  supabase: SupabaseServerClient,
+  supabase: SupabaseAdminClient,
   settings: ProfileSettings,
-): Promise<Array<Partial<Prospect>>> {
+): Promise<{
+  output: PipelineSourcingOutput | null
+  outcome: AdaptiveSourcingOutcome | null
+}> {
   run.phase = 'sourcing_sirene'
-  log(run, 'sourcing_sirene', 'Démarrage du sourcing Sirene INSEE', 'info')
+  log(run, 'sourcing_sirene', 'Démarrage du sourcing adaptatif (pagination curseur)', 'info')
 
-  // IMP-08 : Construction des options de sourcing depuis les settings utilisateur.
-  // - Si settings.target_sectors est non vide, l'utiliser comme nafCodes.
-  //   Note : les settings stockent les secteurs sous forme de codes NAF (ex: "49.41A")
-  //   ou de noms libres. On valide le format NAF (NNNNX) — si invalide, fallback NAF_PRIORITAIRES.
-  // - Si settings.target_city est défini, l'utiliser pour affiner le filtre géographique.
-  //   Pour l'instant, on utilise le code postal range par défaut (Gironde) — la v2 mapera
-  //   target_city → code département pour la plage codePostalRange.
-  const targetSectors = settings.target_sectors ?? []
-  const nafRegex = /^\d{2}\.\d{2}[A-Z]$/
-  const validNafCodes = targetSectors.filter((s) => nafRegex.test(s.trim().toUpperCase()))
-  const nafCodes = validNafCodes.length > 0 ? validNafCodes : NAF_PRIORITAIRES_DEFAULT
-
-  log(run, 'sourcing_sirene', `Codes NAF utilisés pour le sourcing`, 'info', {
-    source: validNafCodes.length > 0 ? 'settings_user' : 'naf_prioritaires_default',
-    count: nafCodes.length,
-  })
-
-  // Récupérer les SIREN déjà en base pour cet utilisateur (déduplication)
-  const { data: existingSirens, error: sirenError } = await supabase
-    .from('prospects')
-    .select('siren')
-    .eq('user_id', run.user_id)
-
-  if (sirenError) {
-    log(run, 'sourcing_sirene', 'Impossible de charger les SIREN existants — dedup désactivée', 'warn', {
-      error: sirenError.message,
-    })
+  // pushLog : pousse à la fois dans le `AgentRun.logs` (in-memory) et console (JSON).
+  const pushLog = (
+    phase: string,
+    message: string,
+    level: 'info' | 'warn' | 'error',
+    data?: Record<string, unknown>,
+  ) => {
+    log(run, phase, message, level, data)
   }
 
-  const sirenSet = new Set(
-    (existingSirens ?? []).map((row: { siren: string }) => row.siren),
-  )
-
-  log(run, 'sourcing_sirene', `${sirenSet.size} SIREN déjà en base (à exclure)`, 'info')
-
-  // Appel API Sirene INSEE (primaire) avec fallback Recherche Entreprises (open data)
-  let etablissements: Awaited<ReturnType<typeof sourcerEntreprises>> = []
+  let output: PipelineSourcingOutput
   try {
-    etablissements = await sourcerEntreprises({ maxResults: 200, nafCodes })
-  } catch (err) {
-    log(run, 'sourcing_sirene', `API Sirene INSEE erreur — bascule sur fallback`, 'warn', {
-      error: err instanceof Error ? err.message : String(err),
+    output = await runPipelineSourcing({
+      userId: run.user_id,
+      runId: run.id,
+      // L'orchestrator nocturne n'a pas de params UI — il consomme les settings.
+      // `target_sectors` est résolu côté `resolveSourcingFilters` (priorité settings.user).
+      // Pas de targetRegion / effectifMin/Max → défauts legacy (Gironde, 50+ salariés).
+      params: {
+        targetSectors: settings.target_sectors,
+      },
+      settings,
+      supabase,
+      pushLog,
     })
-  }
-
-  // Fallback si Sirene a retourné 0 résultats (auth 401, rate limit, ou API down)
-  if (etablissements.length === 0) {
-    log(run, 'sourcing_sirene', 'Sirene: 0 résultats — bascule sur Recherche Entreprises (open data)', 'warn')
-    try {
-      // Passer excludeSirens pour déduplication en amont : le fallback pagine à travers
-      // toutes les pages et skip les SIREN déjà connus, évitant le gaspillage de quota.
-      etablissements = await sourcerEntreprisesFallback({
-        maxResults: 200,
-        nafCodes,
-        excludeSirens: sirenSet,
-      })
-      log(run, 'sourcing_sirene', `Fallback Recherche Entreprises: ${etablissements.length} établissements sourcés`, 'info')
-    } catch (fallbackErr) {
-      throw new Error(
-        `phaseSourcing: échec Sirene ET fallback — ${fallbackErr instanceof Error ? fallbackErr.message : String(fallbackErr)}`,
-      )
-    }
-  }
-
-  run.prospects_sourced = etablissements.length
-  log(run, 'sourcing_sirene', `${etablissements.length} établissements sourcés depuis Sirene`, 'info')
-
-  // Filtrer les doublons (pour les résultats Sirene primaire — le fallback a déjà dédupliqué)
-  const nouveaux = etablissements.filter((e) => !sirenSet.has(e.siren))
-  log(run, 'sourcing_sirene', `${nouveaux.length} nouveaux établissements après déduplication`, 'info')
-
-  // Warnings sur le volume de nouveaux prospects
-  if (nouveaux.length === 0) {
-    log(run, 'sourcing_sirene', 'ATTENTION : tous les prospects sont déjà en base — élargir les critères ou le périmètre géographique', 'warn')
-  } else if (nouveaux.length < (settings.daily_call_target ?? 15)) {
-    log(run, 'sourcing_sirene', `Seulement ${nouveaux.length} nouveaux prospects trouvés (objectif: ${settings.daily_call_target ?? 15})`, 'warn')
-  }
-
-  // Enrichir chaque établissement (appel ADEME par établissement)
-  // Parallélisation par batch de 20 (augmenté depuis 10 — perf audit recommandation #3) :
-  // - 200 étabs séquentiels à ~300 ms/appel = ~60 s
-  // - 200 étabs en batchs de 20 = ~3-4 s
-  // L'API ADEME Data Fair publique n'impose pas de rate limit documenté.
-  run.phase = 'enrichissement'
-  log(run, 'enrichissement', 'Enrichissement des prospects (ADEME BEGES)', 'info')
-
-  const ADEME_BATCH_SIZE = 20
-  const enrichis: Array<Partial<Prospect>> = []
-
-  for (let i = 0; i < nouveaux.length; i += ADEME_BATCH_SIZE) {
-    const batch = nouveaux.slice(i, i + ADEME_BATCH_SIZE)
-
-    const batchResults = await Promise.allSettled(
-      batch.map((etab) => enrichirProspect(etab)),
+  } catch (err) {
+    throw new Error(
+      `phaseSourcingAdaptive: échec pipeline — ${err instanceof Error ? err.message : String(err)}`,
     )
-
-    for (let j = 0; j < batchResults.length; j++) {
-      const result = batchResults[j]
-      const etab = batch[j]
-
-      if (result.status === 'fulfilled') {
-        enrichis.push({ ...result.value, user_id: run.user_id })
-      } else {
-        log(run, 'enrichissement', `Enrichissement échoué pour ${etab.siren}`, 'warn', {
-          siren: etab.siren,
-          error: result.reason instanceof Error ? result.reason.message : String(result.reason),
-        })
-      }
-    }
   }
 
-  log(run, 'enrichissement', `${enrichis.length} prospects enrichis`, 'info')
+  run.prospects_sourced = output.scored.length
+  run.prospects_qualified = output.qualifiedCount
 
-  return enrichis
-}
-
-// ------------------------------------------------------------
-// PHASE 4 : SCORING + SAUVEGARDE
-// ------------------------------------------------------------
-
-async function phaseScoring(
-  run: AgentRun,
-  supabase: SupabaseServerClient,
-  rawProspects: Array<Partial<Prospect>>,
-): Promise<Prospect[]> {
-  run.phase = 'scoring'
-  log(run, 'scoring', `Calcul des scores pour ${rawProspects.length} prospects`, 'info')
-
-  const scored: Array<Partial<Prospect>> = rawProspects.map((p) => {
-    const score = calculerScore(p, false) // Nouveaux prospects → jamais contactés
-    const details = getScoreDetails(p, false)
-    return {
-      ...p,
-      score_priorite: score,
-      score_details: details,
-      statut: score >= SCORE_QUALIFICATION_SEUIL ? 'qualified' : 'sourced',
-    }
+  log(run, 'sourcing_completed', 'Sourcing adaptatif terminé', 'info', {
+    prospects_sourced: output.scored.length,
+    prospects_qualified: output.qualifiedCount,
+    prospects_new: output.prospectsNew,
+    prospects_updated: output.prospectsUpdated,
+    sirene_total_available: output.outcome.totalAvailable,
+    sirene_pages_loaded: output.outcome.pagesLoaded,
+    sirene_curseur_final: output.outcome.curseurFinal,
+    exhausted: output.outcome.exhausted,
+    used_fallback: output.outcome.usedFallback,
   })
 
-  run.prospects_qualified = scored.filter((p) => p.statut === 'qualified').length
-  log(run, 'scoring', `${run.prospects_qualified} prospects qualifiés (score >= ${SCORE_QUALIFICATION_SEUIL})`, 'info')
-
-  // Sauvegarder en DB par batch de 50 (éviter les timeouts sur gros volumes)
-  const BATCH_SIZE = 50
-  const savedProspects: Prospect[] = []
-
-  for (let i = 0; i < scored.length; i += BATCH_SIZE) {
-    const batch = scored.slice(i, i + BATCH_SIZE)
-
-    // Tentative d'upsert. Si les colonnes beges_url/beges_valide n'existent pas encore
-    // en DB (migration 004 non appliquée), on retry sans ces colonnes.
-    let data: unknown[] | null = null
-    let error: { message: string } | null = null
-
-    const result1 = await supabase
-      .from('prospects')
-      .upsert(batch as unknown as Database['public']['Tables']['prospects']['Insert'][], { onConflict: 'user_id,siren' })
-      .select()
-
-    if (result1.error && result1.error.message.includes('beges_')) {
-      // Fallback : retirer les colonnes BEGES non migrées
-      const cleanBatch = batch.map(({ beges_url, beges_valide, ...rest }) => rest)
-      const result2 = await supabase
-        .from('prospects')
-        .upsert(cleanBatch as unknown as Database['public']['Tables']['prospects']['Insert'][], { onConflict: 'user_id,siren' })
-        .select()
-      data = result2.data
-      error = result2.error
-      if (!error) {
-        log(run, 'scoring', 'Migration 004 non appliquée — colonnes beges_url/beges_valide ignorées', 'warn')
-      }
-    } else {
-      data = result1.data
-      error = result1.error
-    }
-
-    if (error) {
-      log(run, 'scoring', `Erreur upsert batch ${i / BATCH_SIZE + 1}`, 'warn', {
-        error: error.message,
-        batch_size: batch.length,
-      })
-      continue
-    }
-
-    if (data) {
-      savedProspects.push(...(data as unknown as Prospect[]))
-    }
-  }
-
-  log(run, 'scoring', `${savedProspects.length} prospects sauvegardés en DB`, 'info')
-
-  return savedProspects
+  return { output, outcome: output.outcome }
 }
+
+// ------------------------------------------------------------
+// PHASE 4 : SCORING + UPSERT — délégué à `runPipelineSourcing`
+// ------------------------------------------------------------
+//
+// Depuis Wave 2.2 (fix/sourcing-pagination), l'enrichissement ADEME, le scoring
+// et l'upsert prospects sont gérés dans `runPipelineSourcing` (cf. phaseSourcingAdaptive).
+// Cette section ne contient plus de logique propre — les compteurs sont déjà
+// renseignés dans `run.prospects_sourced` / `run.prospects_qualified` à la sortie
+// de la phase 3.
 
 // ------------------------------------------------------------
 // PHASE 4.5 : ENRICHISSEMENT CONTACTS (prospects prioritaires)
@@ -839,14 +696,23 @@ export async function runAgentNocturne(
   }
 
   // --------------------------------------------------------
-  // PHASE 3 : SOURCING + ENRICHISSEMENT
+  // PHASE 3 + 4 : SOURCING ADAPTATIF + ENRICHISSEMENT + SCORING + UPSERT
+  // Wave 2.2 — boucle adaptative avec pagination curseur Sirene, persistance
+  // `profiles.sourcing_state`, et remplissage des counters `agent_runs`.
   // --------------------------------------------------------
-  let rawProspects: Array<Partial<Prospect>> = []
+  let pipelineOutput: PipelineSourcingOutput | null = null
   try {
-    rawProspects = await phaseSourcing(run, supabaseAdmin, settings)
-    await updateRunInDB(run, supabaseAdmin)
+    const result = await phaseSourcingAdaptive(run, supabaseAdmin, settings)
+    pipelineOutput = result.output
+    await updateRunInDB(run, supabaseAdmin, {
+      prospects_new: pipelineOutput?.prospectsNew ?? null,
+      prospects_updated: pipelineOutput?.prospectsUpdated ?? null,
+      sirene_total_available: pipelineOutput?.outcome.totalAvailable ?? null,
+      sirene_pages_loaded: pipelineOutput?.outcome.pagesLoaded ?? null,
+      sirene_curseur_final: pipelineOutput?.outcome.curseurFinal ?? null,
+    })
   } catch (err) {
-    log(run, 'sourcing_sirene', 'FATAL: sourcing Sirene échoué', 'error', {
+    log(run, 'sourcing_sirene', 'FATAL: sourcing adaptatif échoué', 'error', {
       error: err instanceof Error ? err.message : String(err),
     })
     run.status = 'failed'
@@ -854,21 +720,6 @@ export async function runAgentNocturne(
     run.completed_at = new Date().toISOString()
     await updateRunInDB(run, supabaseAdmin)
     return run
-  }
-
-  // --------------------------------------------------------
-  // PHASE 4 : SCORING + SAUVEGARDE
-  // savedProspects retourné pour le log de comptage (non utilisé en aval
-  // car phaseSelection refait une requête DB triée pour garantir l'ordre).
-  // --------------------------------------------------------
-  try {
-    await phaseScoring(run, supabaseAdmin, rawProspects)
-    await updateRunInDB(run, supabaseAdmin)
-  } catch (err) {
-    // Non-fatal : on peut continuer avec les prospects déjà en DB
-    log(run, 'scoring', 'Scoring partiellement échoué — utilisation des prospects existants', 'warn', {
-      error: err instanceof Error ? err.message : String(err),
-    })
   }
 
   // --------------------------------------------------------
