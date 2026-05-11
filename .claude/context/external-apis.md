@@ -111,6 +111,28 @@ NEXT_PUBLIC_SENTRY_DSN=
 SENTRY_AUTH_TOKEN=        # build uploads sourcemaps
 ```
 
+## Fixtures de test
+
+Pour mocker les APIs externes sans appel réseau réel, des fixtures TypeScript prêtes à l'emploi sont disponibles dans `lib/agent/__tests__/fixtures/` (barrel `index.ts`).
+
+**`fixtures/sirene-cursor.ts`** — pagination curseur INSEE (Wave 2 cible) :
+- `sireneSampleEtablissement(siren, opts?)` — factory d'un `SireneEtablissement` réaliste (NAF prioritaire, CP Gironde).
+- `buildSirenePage({ curseur, curseurSuivant, count, sirenStart?, total?, debut? })` — page Sirene paramétrable.
+- `sireneCursorSequence` — séquence `{ page1, page2, page3 }` avec curseurs progressant (`*` → `c2` → `c3` → `c3` = FIN). 250 SIREN uniques (100000000..100000249).
+- `sireneEmptyResponse` — page vide (univers sans résultat).
+- `sireneErrorResponse` — enveloppe HTTP 500 pour tester le mode dégradé.
+- Types locaux exportés : `SireneCursorHeader`, `SireneCursorResponse` (à fusionner dans `lib/types.ts` une fois Wave 2 mergée).
+
+**`fixtures/ademe.ts`** — réponses ADEME Data Fair `/bilan-ges/lines` :
+- `buildAdemeResponse({ siren, hasBeges, begesDate?, begesValide?, raisonSociale? })` — builder custom.
+- `ademeWithBegesValide` — bilan publié récent (annee_de_reporting = currentYear − 1).
+- `ademeWithBegesExpire` — bilan présent mais > 4 ans (flag `beges_valide=false`).
+- `ademeWithoutBeges` — pas de bilan (cible prospection la plus pertinente).
+- `ademeErrorResponse` — enveloppe HTTP 503.
+- Type local exporté : `AdemeBegesDataFairRecord` (mirror de `sourcing.ts:84-94`, à exporter depuis `sourcing.ts` une fois stabilisé).
+
+Toutes les fixtures sont **100 % statiques** (aucun `fetch`/`axios`), typées strictement (pas de `any`), et sans dépendance circulaire (n'importent que depuis `@/lib/types`).
+
 ## Pattern fallback général
 
 Quand une API tombe :

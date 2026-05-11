@@ -10,6 +10,7 @@ Index des notes de contexte. Une entrée = un fichier ciblé. Le contenu vit dan
 ## Domaine
 - [BEGES & réglementation](context/beges-glossary.md) — obligation L229-25, seuils, validité 4 ans, NAF prioritaires
 - [Scoring composite](context/scoring-rules.md) — barème 0-100 et règles d'évolution
+- [Mapping UI → Sirene / Recherche Entreprises](context/sourcing-param-mapping.md) — traduction `effectifMin/Max` → tranches INSEE, `targetRegion` → CP/dept, signature de filtres pour invalidation curseur
 
 ## Intégrations
 - [APIs externes](context/external-apis.md) — Sirene OAuth2, ADEME, Recherche Entreprises, Pappers, Hunter.io, Resend

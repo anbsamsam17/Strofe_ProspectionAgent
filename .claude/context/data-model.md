@@ -1,6 +1,6 @@
 # Modèle de données — Supabase
 
-Migrations dans `supabase/migrations/` (001_initial.sql, 002_daily_lists_notified_at.sql, 003_perf_indexes.sql, 004_prospects_beges_fields.sql).
+Migrations dans `supabase/migrations/` (001_initial.sql, 002_daily_lists_notified_at.sql, 003_perf_indexes.sql, 004_prospects_beges_fields.sql, **005_sourcing_state_and_counters.sql**).
 
 ## Schéma ER textuel
 
@@ -29,6 +29,7 @@ Extension de `auth.users` créée automatiquement via le trigger `handle_new_use
 | `company_name`   | TEXT        | |
 | `settings`       | JSONB       | offre, NAF cibles, ville, codes postaux, daily_call_target, notification_email, offer_description |
 | `onboarded`      | BOOLEAN     | false jusqu'à ce que les settings soient renseignés |
+| `sourcing_state` | JSONB       | **(migration 005)** Curseur Sirene + signature filtres persistés entre runs. Structure : `{ curseur, curseurSuivant, filters_signature, last_total, exhausted_at, last_run_at }`. Default `{}` (premier run). |
 | `created_at`/`updated_at` | TIMESTAMPTZ | trigger `set_updated_at` |
 
 RLS : 4 policies S/I/U/D où `auth.uid() = id`.
@@ -90,6 +91,11 @@ Journal d'exécution du pipeline. 1 ligne par lancement.
 | `status` | enum `agent_run_status` : `running` / `completed` / `failed` |
 | `phase` | TEXT libre : `init` / `load_settings` / `sourcing_sirene` / `enrichissement` / `scoring` / `contact_enrichment` / `selection` / `generation_pitch` / `construction_liste` / `completed` |
 | `prospects_sourced`, `prospects_qualified` | INTEGER |
+| `prospects_new`, `prospects_updated` | INTEGER **(migration 005)** — breakdown upsert (heuristique `created_at === updated_at`) |
+| `sirene_total_available` | INTEGER **(migration 005)** — `header.total` Sirene à la 1ère page (univers déclaré) |
+| `sirene_pages_loaded` | INTEGER **(migration 005)** — nb de pages Sirene fetchées dans ce run |
+| `sirene_debut_final` | INTEGER **(migration 005)** — dernier offset (legacy, optionnel quand curseur) |
+| `sirene_curseur_final` | TEXT **(migration 005)** — dernier `curseurSuivant` (aussi persisté dans `profiles.sourcing_state`) |
 | `list_generated` | BOOLEAN |
 | `error_message` | TEXT (set si failed) |
 | `logs` | JSONB array `[{timestamp, phase, message, level, data}]` |

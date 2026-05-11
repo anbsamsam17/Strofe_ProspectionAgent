@@ -25,6 +25,7 @@ export type Database = {
           avatar_url: string | null
           settings: Json
           onboarded: boolean
+          sourcing_state: Json
           created_at: string
           updated_at: string
         }
@@ -36,6 +37,7 @@ export type Database = {
           avatar_url?: string | null
           settings?: Json
           onboarded?: boolean
+          sourcing_state?: Json
           created_at?: string
           updated_at?: string
         }
@@ -47,6 +49,7 @@ export type Database = {
           avatar_url?: string | null
           settings?: Json
           onboarded?: boolean
+          sourcing_state?: Json
           updated_at?: string
         }
         Relationships: []
@@ -268,6 +271,12 @@ export type Database = {
           phase: string | null
           prospects_sourced: number
           prospects_qualified: number
+          prospects_new: number | null
+          prospects_updated: number | null
+          sirene_total_available: number | null
+          sirene_pages_loaded: number | null
+          sirene_debut_final: number | null
+          sirene_curseur_final: string | null
           list_generated: boolean
           error_message: string | null
           logs: Json
@@ -281,6 +290,12 @@ export type Database = {
           phase?: string | null
           prospects_sourced?: number
           prospects_qualified?: number
+          prospects_new?: number | null
+          prospects_updated?: number | null
+          sirene_total_available?: number | null
+          sirene_pages_loaded?: number | null
+          sirene_debut_final?: number | null
+          sirene_curseur_final?: string | null
           list_generated?: boolean
           error_message?: string | null
           logs?: Json
@@ -292,6 +307,12 @@ export type Database = {
           phase?: string | null
           prospects_sourced?: number
           prospects_qualified?: number
+          prospects_new?: number | null
+          prospects_updated?: number | null
+          sirene_total_available?: number | null
+          sirene_pages_loaded?: number | null
+          sirene_debut_final?: number | null
+          sirene_curseur_final?: string | null
           list_generated?: boolean
           error_message?: string | null
           logs?: Json
