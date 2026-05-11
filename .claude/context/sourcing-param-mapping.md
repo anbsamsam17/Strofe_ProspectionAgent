@@ -221,7 +221,8 @@ function resolveGeoFilter(targetRegion: string | undefined): GeoFilter {
 
 | Cas | Décision | Justification |
 |---|---|---|
-| `targetRegion` vide ou `"France"` | Pas de filtre `codePostalEtablissement` ni `departement` | Univers national. Attention au volume : préciser cap `maxResults` côté Wave 2.2. |
+| `targetRegion` **absent** (undefined/null/vide string) | **Fallback Gironde** (`['33']` / `['33000','33999']`) — comportement legacy préservé | **Par défaut (params absents) → Gironde, comportement legacy préservé. Phase 2 = élargissement explicite.** L'orchestrator nocturne (`lib/agent/orchestrator.ts`) appelle `runPipelineSourcing` sans `targetRegion` ; retourner une range nationale ici élargirait silencieusement l'univers à France entière, ce qui n'est pas la décision du TODO Wave 2. Voir F-IMP-03 du code review Wave 2. |
+| `targetRegion="France"` ou `"fr"` (label **explicite**) | Pas de filtre `codePostalEtablissement` ni `departement` (univers national) | L'élargissement géographique doit être un choix utilisateur explicite (UI ou setting), pas un défaut implicite. Attention au volume : préciser cap `maxResults`. |
 | `targetRegion` non reconnue (ex. `"Atlantide"`) | Log warning + fallback Gironde (`33`) | Compat avec le comportement actuel (Gironde) ; permet de ne pas casser des intégrations existantes. Alternative envisagée : retourner erreur 400 — rejetée car trop strict pour un MVP. À ré-évaluer si on observe des fallbacks fréquents en prod. |
 | Code département `"33"` saisi en tant que texte | Traité comme code département (§2.3 cas 1) | Compatible avec l'UI actuelle. |
 | Label `"Bordeaux"` | Sur-couverture Gironde côté fallback (l'API gouv ne sait pas filtrer commune) + filtrage CP côté code | Pas d'impact résultats — juste plus de bande passante. Acceptable. |

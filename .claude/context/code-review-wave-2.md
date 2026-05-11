@@ -324,3 +324,25 @@ Pas grave car `resolveStartCurseur` gère robustement, mais un test de bord
 **Recommandation finale** : merger après fix F-IMP-01 + F-IMP-04 + F-IMP-05
 (triviaux, ~15 min de code), arbitrer F-IMP-03 avec le pilote, et lancer
 Wave 3.1 pour livrer les tests manquants avant `git push`.
+
+---
+
+## Wave 3 — Status des fixes
+
+- ✅ **F-IMP-01 FIXED** (`app/api/agent/sourcing/route.ts:182-201`) — La réponse
+  JSON expose désormais `prospectsQualified`, `totalAvailable`, `pagesLoaded`,
+  `exhausted`, `curseurFinal`, `usedFallback`, `durationMs` (en plus du legacy
+  `duration_ms`). La modal reçoit désormais toutes les données nécessaires.
+- ✅ **F-IMP-04 FIXED** (`lib/agent/sourcing-runner.ts:56-89`, `:988-1000`) —
+  `SourcingResult` étendu : `prospectsSourced`, `prospectsQualified`,
+  `totalAvailable`, `pagesLoaded`, `exhausted`, `curseurFinal`, `usedFallback`
+  ajoutés. `runSourcing` les renvoie en lisant `output.outcome.*` et
+  `output.qualifiedCount`.
+- ✅ **F-IMP-05 FIXED** (`lib/agent/sourcing-runner.ts:810-880`) — Boucle
+  adaptative + enrich + score + upsert encapsulés dans un `try/finally`.
+  `persistSourcingState` est appelé dans le `finally` dès que `outcome` est
+  affecté (la boucle a au moins commencé une itération réussie). Garantit
+  l'idempotence : un crash ADEME / upsert n'efface plus l'avancement du
+  curseur Sirene.
+
+Validation : `npm run type-check` ✅ — `npm run test` ✅ (73 tests passent).

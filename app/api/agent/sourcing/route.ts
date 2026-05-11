@@ -179,13 +179,25 @@ export async function POST(request: NextRequest) {
     )
   }
 
+  // Wave 3 (F-IMP-01 + F-IMP-04) — La modal `sourcing-modal.tsx:81-104` lit
+  // en plus `prospectsQualified`, `totalAvailable`, `exhausted`, `pagesLoaded`.
+  // On les expose ici. `duration_ms` est conservé (legacy) + `durationMs` ajouté
+  // (format Task 2.3 que la modal tolère aussi via `parseRunResponse`).
   return NextResponse.json(
     {
       success: true,
       runId: result.runId,
       prospectsNew: result.prospectsNew,
       prospectsUpdated: result.prospectsUpdated,
+      prospectsSourced: result.prospectsSourced,
+      prospectsQualified: result.prospectsQualified,
+      totalAvailable: result.totalAvailable,
+      pagesLoaded: result.pagesLoaded,
+      exhausted: result.exhausted,
+      curseurFinal: result.curseurFinal,
+      usedFallback: result.usedFallback,
       duration_ms: result.duration_ms,
+      durationMs: result.duration_ms,
     },
     { status: 200 },
   )

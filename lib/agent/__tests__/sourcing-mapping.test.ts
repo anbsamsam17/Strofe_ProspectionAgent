@@ -77,13 +77,15 @@ describe('mapEffectifToTranches', () => {
 // ------------------------------------------------------------
 
 describe('mapRegionToCodePostal', () => {
-  it('retourne range nationale quand label vide', () => {
-    expect(mapRegionToCodePostal(undefined)).toEqual(['00000', '99999'])
-    expect(mapRegionToCodePostal('')).toEqual(['00000', '99999'])
-    expect(mapRegionToCodePostal('   ')).toEqual(['00000', '99999'])
+  it('retourne range Gironde (legacy default) quand label est undefined/null/vide', () => {
+    // F-IMP-03 : préserve le comportement legacy. Phase 2 = élargissement explicite.
+    expect(mapRegionToCodePostal(undefined)).toEqual(['33000', '33999'])
+    expect(mapRegionToCodePostal(null)).toEqual(['33000', '33999'])
+    expect(mapRegionToCodePostal('')).toEqual(['33000', '33999'])
+    expect(mapRegionToCodePostal('   ')).toEqual(['33000', '33999'])
   })
 
-  it('retourne range nationale pour "France" / "fr"', () => {
+  it('retourne range nationale UNIQUEMENT pour "France" / "fr" explicite', () => {
     expect(mapRegionToCodePostal('France')).toEqual(['00000', '99999'])
     expect(mapRegionToCodePostal('FRANCE')).toEqual(['00000', '99999'])
     expect(mapRegionToCodePostal('fr')).toEqual(['00000', '99999'])
@@ -125,10 +127,18 @@ describe('mapRegionToCodePostal', () => {
 // ------------------------------------------------------------
 
 describe('mapRegionToDepartements', () => {
-  it('retourne [] pour France entière', () => {
-    expect(mapRegionToDepartements(undefined)).toEqual([])
-    expect(mapRegionToDepartements('')).toEqual([])
+  it('retourne ["33"] (legacy default Gironde) quand label est undefined/null/vide', () => {
+    // F-IMP-03 : préserve le comportement legacy. Phase 2 = élargissement explicite.
+    expect(mapRegionToDepartements(undefined)).toEqual(['33'])
+    expect(mapRegionToDepartements(null)).toEqual(['33'])
+    expect(mapRegionToDepartements('')).toEqual(['33'])
+    expect(mapRegionToDepartements('   ')).toEqual(['33'])
+  })
+
+  it('retourne [] UNIQUEMENT pour "France" / "fr" explicite', () => {
     expect(mapRegionToDepartements('France')).toEqual([])
+    expect(mapRegionToDepartements('FRANCE')).toEqual([])
+    expect(mapRegionToDepartements('fr')).toEqual([])
   })
 
   it('mappe "Gironde" → ["33"]', () => {

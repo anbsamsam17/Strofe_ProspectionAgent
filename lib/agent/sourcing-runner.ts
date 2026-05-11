@@ -53,10 +53,33 @@ export interface SourcingParams {
   targetRegion?: string
 }
 
+/**
+ * Résultat exposé au caller HTTP (`POST /api/agent/sourcing`).
+ *
+ * Wave 3 (F-IMP-01 + F-IMP-04) — on inclut désormais les counters Sirene
+ * (`totalAvailable`, `pagesLoaded`, `curseurFinal`, `exhausted`, `usedFallback`)
+ * et `prospectsQualified`, qui étaient calculés mais jetés. Cf. modal
+ * `components/dashboard/sourcing-modal.tsx:81-104` (champs `prospectsQualified`,
+ * `totalAvailable`, `exhausted`, `pagesLoaded`).
+ *
+ * `duration_ms` est conservé en snake_case pour compatibilité legacy avec
+ * la modal qui tolère les deux formes (`durationMs` Task 2.3 ou `duration_ms`).
+ */
 export interface SourcingResult {
   runId: string
+  prospectsSourced: number
+  prospectsQualified: number
   prospectsNew: number
   prospectsUpdated: number
+  /** header.total Sirene de la 1ère page (0 si fallback Recherche Entreprises). */
+  totalAvailable: number
+  pagesLoaded: number
+  /** true ssi l'univers Sirene est épuisé (`curseurSuivant === curseur`). */
+  exhausted: boolean
+  /** Dernier `curseurSuivant` persisté dans `profiles.sourcing_state`. */
+  curseurFinal: string
+  /** true ssi la collecte a basculé sur Recherche Entreprises (Sirene KO). */
+  usedFallback: boolean
   duration_ms: number
 }
 
@@ -784,62 +807,77 @@ export async function runPipelineSourcing(
   const dailyTarget = settings?.daily_call_target ?? 15
   const targetCandidates = Math.max(dailyTarget * 3, 50)
 
-  // 5. Boucle adaptative
-  const outcome = await runAdaptiveSourcing({
-    userId,
-    runId,
-    filters,
-    startCurseur,
-    sirenSet,
-    targetCandidates,
-    pushLog,
-  })
+  // 5. Boucle adaptative + enrich + score + upsert
+  //
+  // Wave 3 (F-IMP-05) — On enveloppe le cœur du pipeline dans un try/finally
+  // pour garantir que `sourcing_state` est persisté dans TOUS les cas (succès,
+  // erreur enrich, erreur upsert, timeout). Sans cela, si la boucle a déjà
+  // chargé N pages avant un crash, le curseur avancé est perdu → run suivant
+  // repart de `*` et refetche les pages déjà vues = symptôme du plateau initial.
+  //
+  // Stratégie : tout ce qui touche au curseur Sirene est tenté DANS le try ;
+  // le finally persiste l'état avec les valeurs courantes au moment du throw
+  // (cf. `runAdaptiveSourcing` qui retourne TOUJOURS un outcome bien formé,
+  // sauf en cas d'échec total Sirene + fallback — auquel cas il throw avant
+  // toute affectation et `outcome` reste `null` ; le finally skip alors la
+  // persistance car aucun curseur n'a été consommé).
+  let outcome: AdaptiveSourcingOutcome | null = null
+  let scored: Array<Partial<Prospect>> = []
+  let qualifiedCount = 0
+  let prospectsNew = 0
+  let prospectsUpdated = 0
 
-  if (outcome.etablissements.length === 0) {
-    pushLog(
-      'sourcing_loop',
-      'Aucun nouvel établissement collecté — élargir les critères ou attendre le refresh univers',
-      'warn',
-      {
-        total_available: outcome.totalAvailable,
-        pages_loaded: outcome.pagesLoaded,
-        exhausted: outcome.exhausted,
-      },
-    )
-
-    await persistSourcingState(userId, supabase, {
-      curseur: outcome.curseurFinal,
-      curseurSuivant: outcome.curseurFinal,
-      filters_signature: filters.signature,
-      last_total: outcome.totalAvailable,
-      exhausted_at: outcome.exhausted ? new Date().toISOString() : null,
-      last_run_at: new Date().toISOString(),
+  try {
+    // 5a. Boucle adaptative
+    outcome = await runAdaptiveSourcing({
+      userId,
+      runId,
+      filters,
+      startCurseur,
+      sirenSet,
+      targetCandidates,
+      pushLog,
     })
 
-    return {
-      scored: [],
-      qualifiedCount: 0,
-      outcome,
-      prospectsNew: 0,
-      prospectsUpdated: 0,
+    if (outcome.etablissements.length === 0) {
+      pushLog(
+        'sourcing_loop',
+        'Aucun nouvel établissement collecté — élargir les critères ou attendre le refresh univers',
+        'warn',
+        {
+          total_available: outcome.totalAvailable,
+          pages_loaded: outcome.pagesLoaded,
+          exhausted: outcome.exhausted,
+        },
+      )
+    } else {
+      // 5b. Enrich ADEME + scoring
+      const enrichResult = await enrichAndScore(userId, outcome.etablissements, pushLog)
+      scored = enrichResult.scored
+      qualifiedCount = enrichResult.qualifiedCount
+
+      // 5c. Upsert
+      const upsertResult = await upsertProspectsBatch(supabase, scored, pushLog)
+      prospectsNew = upsertResult.prospectsNew
+      prospectsUpdated = upsertResult.prospectsUpdated
+    }
+  } finally {
+    // 6. Persiste TOUJOURS l'état partiel (succès ou erreur) — pas de curseur perdu.
+    //
+    // `persistSourcingState` ne re-throw jamais (log warn en interne via console.log
+    // structuré, cf. ligne 350-358). Ce finally est donc safe : il n'écrase pas une
+    // erreur en cours de propagation depuis le try.
+    if (outcome) {
+      await persistSourcingState(userId, supabase, {
+        curseur: outcome.curseurFinal,
+        curseurSuivant: outcome.curseurFinal,
+        filters_signature: filters.signature,
+        last_total: outcome.totalAvailable,
+        exhausted_at: outcome.exhausted ? new Date().toISOString() : null,
+        last_run_at: new Date().toISOString(),
+      })
     }
   }
-
-  // 6. Enrich ADEME + scoring
-  const { scored, qualifiedCount } = await enrichAndScore(userId, outcome.etablissements, pushLog)
-
-  // 7. Upsert
-  const { prospectsNew, prospectsUpdated } = await upsertProspectsBatch(supabase, scored, pushLog)
-
-  // 8. Persister sourcing_state
-  await persistSourcingState(userId, supabase, {
-    curseur: outcome.curseurFinal,
-    curseurSuivant: outcome.curseurFinal,
-    filters_signature: filters.signature,
-    last_total: outcome.totalAvailable,
-    exhausted_at: outcome.exhausted ? new Date().toISOString() : null,
-    last_run_at: new Date().toISOString(),
-  })
 
   return { scored, qualifiedCount, outcome, prospectsNew, prospectsUpdated }
 }
@@ -964,8 +1002,15 @@ export async function runSourcing(
 
   return {
     runId,
+    prospectsSourced: output.scored.length,
+    prospectsQualified: output.qualifiedCount,
     prospectsNew: output.prospectsNew,
     prospectsUpdated: output.prospectsUpdated,
+    totalAvailable: output.outcome.totalAvailable,
+    pagesLoaded: output.outcome.pagesLoaded,
+    exhausted: output.outcome.exhausted,
+    curseurFinal: output.outcome.curseurFinal,
+    usedFallback: output.outcome.usedFallback,
     duration_ms,
   }
 }

@@ -170,7 +170,14 @@ function normalizeRegionLabel(label: string): string {
  * Convertit un label région / code département en range de codes postaux `[min, max]`.
  *
  * Comportement :
- *   - `undefined` / vide / `"France"` → range étendue nationale (`['00000','99999']`).
+ *   - `undefined` / `null` / vide → **fallback Gironde** (`['33000','33999']`).
+ *     // Default = Gironde to preserve legacy behavior. Phase 2 will widen via explicit user setting.
+ *     Le défaut historique du sourcing (avant Wave 2) ciblait la Gironde via la constante
+ *     `CODE_POSTAL_QUERY = 'codePostalEtablissement:[33000 TO 33999]'`. L'orchestrator
+ *     nocturne (`lib/agent/orchestrator.ts`) appelle `runPipelineSourcing` SANS `targetRegion` ;
+ *     retourner une range nationale ici élargirait silencieusement l'univers à France entière.
+ *     L'élargissement géographique est une décision métier de Phase 2, pas un effet de bord.
+ *   - `"France"` / `"fr"` (label explicite) → range nationale (`['00000','99999']`).
  *   - Label/code reconnu (Gironde, 33, Nouvelle-Aquitaine, etc.) → range borné sur les départements.
  *   - Label non reconnu → fallback Gironde + log warn (compat historique).
  *
@@ -178,15 +185,16 @@ function normalizeRegionLabel(label: string): string {
  * @returns tuple `[cpMin, cpMax]` à utiliser dans `codePostalRange`
  */
 export function mapRegionToCodePostal(
-  label: string | undefined,
+  label: string | undefined | null,
 ): [string, string] {
+  // Default = Gironde to preserve legacy behavior. Phase 2 will widen via explicit user setting.
   if (!label?.trim()) {
-    return ['00000', '99999']
+    return [DEFAULT_CODE_POSTAL_RANGE[0], DEFAULT_CODE_POSTAL_RANGE[1]]
   }
 
   const normalized = normalizeRegionLabel(label)
 
-  // France entière → range nationale (pas de filtre effectif)
+  // France entière → range nationale (pas de filtre effectif). Doit être EXPLICITE.
   if (FRANCE_LABELS.has(normalized)) {
     return ['00000', '99999']
   }
@@ -251,18 +259,29 @@ function computeCodePostalRangeFromDepartements(
  *
  * Utilisé par le fallback Recherche Entreprises qui filtre via `?departement=33,75`.
  *
+ * Comportement :
+ *   - `undefined` / `null` / vide → **fallback Gironde** (`['33']`).
+ *     // Default = Gironde to preserve legacy behavior. Phase 2 will widen via explicit user setting.
+ *     Cohérent avec `mapRegionToCodePostal` : l'orchestrator nocturne sans `targetRegion`
+ *     doit continuer de cibler la Gironde (comportement legacy avant Wave 2).
+ *   - `"France"` / `"fr"` (label explicite) → liste vide (pas de filtre département).
+ *   - Label/code reconnu → liste des départements correspondants.
+ *   - Label non reconnu → fallback Gironde.
+ *
  * @param label libellé région ou code département
- * @returns liste de codes département (vide si France entière)
+ * @returns liste de codes département (vide UNIQUEMENT si "France" explicite)
  */
 export function mapRegionToDepartements(
-  label: string | undefined,
+  label: string | undefined | null,
 ): string[] {
+  // Default = Gironde to preserve legacy behavior. Phase 2 will widen via explicit user setting.
   if (!label?.trim()) {
-    return []
+    return [...DEFAULT_DEPARTEMENTS]
   }
 
   const normalized = normalizeRegionLabel(label)
 
+  // France entière explicite → pas de filtre département
   if (FRANCE_LABELS.has(normalized)) {
     return []
   }
