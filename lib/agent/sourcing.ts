@@ -483,8 +483,11 @@ export async function sourcerEntreprises(
     }
 
     if (response.status >= 400 && response.status < 500) {
-      // 4xx hors 404 = erreur de requête (auth, validation) — on stoppe sans throw pour
-      // laisser le caller décider du fallback. Le runner détectera `etablissements=[]`.
+      // 4xx hors 404 = erreur de requête (auth, validation). On THROW pour que
+      // le caller (`runAdaptiveSourcing`) déclenche le fallback Recherche Entreprises.
+      // Le break silencieux précédent retournait { etablissements: [], exhausted: true }
+      // sans signal d'erreur → la modal affichait à tort "Univers épuisé / 0 trouvés"
+      // alors qu'il s'agissait d'une clé INSEE invalide. Cf. hindsight 2026-05-11.
       const body = await response.text().catch(() => '')
       console.log(
         JSON.stringify({
@@ -495,11 +498,13 @@ export async function sourcerEntreprises(
           curseur: currentCurseur,
           status: response.status,
           body: body.slice(0, 200),
-          msg: 'Sirene HTTP 4xx — abandon (caller doit basculer en fallback)',
+          msg: 'Sirene HTTP 4xx — throw SireneApiError pour fallback',
         }),
       )
-      nextCurseur = currentCurseur
-      break
+      throw new SireneApiError(
+        `Sirene: HTTP ${response.status} page ${page} curseur=${currentCurseur} body=${body.slice(0, 200)}`,
+        response.status,
+      )
     }
 
     if (!response.ok) {

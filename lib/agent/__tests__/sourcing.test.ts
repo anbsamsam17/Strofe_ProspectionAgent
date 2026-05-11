@@ -368,29 +368,26 @@ describe('sourcerEntreprises — gestion erreurs API (Cat. D)', () => {
     ).rejects.toBeInstanceOf(SireneApiError)
   }, 15_000)
 
-  it('retourne tableau vide + exhausted=true sur HTTP 401 (4xx)', async () => {
+  it('throw SireneApiError sur HTTP 401 (4xx auth) — permet fallback côté caller', async () => {
     const fetchMock = vi.fn().mockResolvedValueOnce(
       makeResponse({ status: 401, ok: false, text: async () => 'Unauthorized' }),
     )
     vi.stubGlobal('fetch', fetchMock)
 
-    const result = await sourcerEntreprises({ curseur: '*', maxPages: 1 })
-
-    expect(result.etablissements).toEqual([])
-    expect(result.exhausted).toBe(true)
-    expect(result.curseurSuivant).toBe(result.curseur)
+    await expect(
+      sourcerEntreprises({ curseur: '*', maxPages: 1 }),
+    ).rejects.toBeInstanceOf(SireneApiError)
   })
 
-  it('retourne tableau vide + exhausted=true sur HTTP 400 (bad request)', async () => {
+  it('throw SireneApiError sur HTTP 400 (bad request) — permet fallback côté caller', async () => {
     const fetchMock = vi.fn().mockResolvedValueOnce(
       makeResponse({ status: 400, ok: false, text: async () => 'Bad Request' }),
     )
     vi.stubGlobal('fetch', fetchMock)
 
-    const result = await sourcerEntreprises({ curseur: '*', maxPages: 1 })
-
-    expect(result.etablissements).toEqual([])
-    expect(result.exhausted).toBe(true)
+    await expect(
+      sourcerEntreprises({ curseur: '*', maxPages: 1 }),
+    ).rejects.toBeInstanceOf(SireneApiError)
   })
 
   it('retourne tableau vide + exhausted=true sur HTTP 404 (univers vide)', async () => {
