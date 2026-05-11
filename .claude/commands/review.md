@@ -1,46 +1,61 @@
 ---
-description: "Lance une code review complète selon les standards SaaS / B2B."
+description: "Code review d'une PR ou d'un diff selon les standards du projet."
+argument-hint: "<chemin fichier ou range git, ex: HEAD~1>"
 ---
 
-# /review — Code Review 📊
+# /review
 
-Tu es un expert code reviewer pour un projet **SaaS / B2B**.
+Tu reviews du code de l'agent de prospection BEGES. Cible : `$ARGUMENTS` (chemin fichier, ou range git type `HEAD~1`, ou vide = diff staged).
 
-## Étapes obligatoires
+## 1. Identification du périmètre
 
-1. Identifie les fichiers modifiés récemment (`git diff --name-only HEAD~1` ou demande à l'utilisateur)
-2. Lis chaque fichier concerné
-3. Évalue selon ces critères prioritaires :
+1. Si l'argument est vide : `git diff --staged --name-only` puis `git diff --name-only HEAD~1` si rien n'est staged.
+2. Si c'est un chemin : revue ciblée du fichier.
+3. Liste les fichiers à reviewer, puis lis-les un par un. Ne suppose rien — lis le code réel.
 
-### Règles domaine — SaaS / B2B
-- Multi-tenancy avec isolation SQL stricte (row-level security ou schemas séparés)
-- Rate limiting sur toutes les API (par tenant et par utilisateur)
-- Feature flags via LaunchDarkly ou Flagsmith — jamais de if/else en dur
+## 2. Checklist obligatoire
 
-### Critères universels
-- Logique correcte et absence de bugs évidents
-- Sécurité : pas d'injection, pas de secrets en clair, validation des entrées
-- Lisibilité : nommage clair, fonctions courtes, complexité raisonnable
-- Tests : couverture suffisante des cas nominaux et limites
+### Typage strict
+- [ ] Aucun `any` explicite ou implicite. Si un `unknown` est utilisé, il est narrow avec Zod ou type guard.
+- [ ] Les types DB viennent de `lib/supabase/database.types.ts` ou des modèles dans `lib/types.ts`. Pas de duplication.
+- [ ] Les retours de fonction async sont annotés `Promise<T>` quand non triviaux.
 
-## Format de sortie
+### Sécurité Supabase / RLS
+- [ ] Toute query côté API Route utilise `createClient()` de `lib/supabase/server.ts` (qui hérite de la session user) — pas `createAdminClient()` sauf justification cron/admin claire.
+- [ ] Si `createAdminClient()` est utilisé : la route a une auth manuelle (Bearer `CRON_SECRET` ou check `user.id` explicite). Le service_role bypass RLS, donc tout filtre `user_id` doit être ajouté à la main via `.eq('user_id', userId)`.
+- [ ] `SUPABASE_SERVICE_ROLE_KEY` n'est JAMAIS importé ni référencé dans un fichier `components/**` ou `app/**` côté client (`'use client'`).
+- [ ] Aucune query ne fait confiance à un `user_id` qui vient du body / query string sans recouper avec la session.
+
+### Validation des entrées
+- [ ] Toute route API parse son body / query string avec un schéma Zod avant de toucher la BDD.
+- [ ] Les `.transform()` Zod renvoient un type prévisible — pas de coercion sauvage.
+- [ ] Les enums (`ProspectStatus`, `Priority`, etc.) sont en sync entre `lib/types.ts`, Zod schemas et la migration SQL (`CHECK` ou `ENUM` type).
+
+### Pipeline agent
+- [ ] Les changements dans `lib/agent/orchestrator.ts` préservent l'ordre : sourcing → enrichissement BEGES → scoring → top 15 → enrichissement contact → pitch → email.
+- [ ] Les prompts GPT-4o dans `lib/agent/pitch-gen.ts` respectent l'ordre obligatoire ROI → image → légal. Si modifiés, ils sont mentionnés dans `memory/prompt-history.md`.
+- [ ] Pas de TODO sans ticket ou commentaire d'explication.
+
+### Robustesse
+- [ ] Les appels HTTP externes (INSEE, ADEME, Pappers, Hunter, OpenAI, Resend) ont un timeout et un retry/fallback documenté.
+- [ ] Les erreurs sont catchées et loggées de façon structurée (JSON pour l'orchestrateur). Pas de `console.log` brut qui leak des secrets ou PII.
+- [ ] Sentry capture les erreurs critiques mais ne logge ni `service_role`, ni emails clients, ni numéros SIREN/SIRET sans nécessité.
+
+## 3. Format de retour
+
+Pour chaque fichier, sortie en français :
 
 ```
-## Code Review — [nom du fichier]
+## <chemin/du/fichier.ts>
 
-### ✅ Points positifs
+Bloquants (à corriger avant merge) :
 - ...
 
-### ⚠️ Points à améliorer (non bloquants)
+À améliorer (non bloquant) :
 - ...
 
-### 🔴 Problèmes bloquants
+Bien vu :
 - ...
-
-### 💡 Suggestions
-- ...
-
-**Verdict** : ✅ Approuvé / ⚠️ À revoir / 🔴 Changements requis
 ```
 
-Applique le principe : **"Would a staff engineer approve this?"**
+Verdict final : `Approuvé` / `Changements demandés` / `Refactor majeur requis`. Applique le filtre : un staff engineer approuverait-il en l'état ?

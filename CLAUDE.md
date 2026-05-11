@@ -1,106 +1,90 @@
-# CLAUDE.md — Agent IA - Prospection Bilan Carbone
+# CLAUDE.md — ProspectionAgent
 
-> Ce fichier est lu automatiquement par **Claude Code** (CLI) et **Claude Desktop Projects**
-> à chaque nouvelle conversation. Maintiens-le concis et à jour.
-
----
-
-## Projet
-
-**Agent IA - Prospection Bilan Carbone** — SaaS / B2B 📊
-Démarré le 2026-04-05 | Stack : React / Next.js (dashboard frontend) | Node.js ou Python FastAPI (backend) | PostgreSQL + Redis (données + cache) | Stripe Billing (abonnements et facturation)
-
-**Objectif** : L'agent travaille en amont : il fait tout le travail de recherche, qualification et préparation. L'humain n'a plus qu'à décrocher son téléphone avec une liste de 15 appels/jour, chacun accompagné d'un...
+Agent de prospection automatique pour consultants en bilan carbone (BEGES) : sourcing nocturne d'entreprises soumises à l'obligation, scoring, génération de pitchs GPT-4o, livraison d'une liste de 15 appels/jour.
 
 ---
 
-## Fichiers de contexte à lire en priorité
+## Stack
 
-1. `memory/project-context.md` — Architecture et décisions techniques
-2. `memory/primer.md` — Connaissance de fond et glossaire du domaine
-3. `memory/session-context.md` — Objectif de la session courante
-4. `memory/hindsight.md` — Leçons apprises et pièges à éviter
-5. `memory/prompt-history.md` — Historique des tâches effectuées
+- **Next.js 15.5.14** (App Router, Turbopack) + React 19, TypeScript 5 strict
+- **Tailwind CSS v4** (brut, pas de shadcn/Radix), **next-themes** (dark mode)
+- **Supabase** (`@supabase/ssr` 0.10, `@supabase/supabase-js` 2.49) — Postgres + Auth, RLS par `user_id`
+- **OpenAI SDK 4.89** — modèle `gpt-4o` (pitchs)
+- **Resend 4.2** + `@react-email/components` (emails transactionnels)
+- **Zod 3.24** (validation aux frontières)
+- **Vitest 3.1** + jsdom + `@testing-library/react`
+- **Sentry 9** (`@sentry/nextjs`)
+- **Vercel** (hébergement + crons via `vercel.json`)
 
----
-
-## Règles de code — non négociables
-
-- Multi-tenancy avec isolation SQL stricte (row-level security ou schemas séparés)
-- Rate limiting sur toutes les API (par tenant et par utilisateur)
-- Feature flags via LaunchDarkly ou Flagsmith — jamais de if/else en dur
-- Logging centralisé structuré (JSON) avec correlation ID
-- Tests de charge (k6, Locust) avant chaque release majeure
+Pas de Stripe, Clerk, Redis, Python/FastAPI, LaunchDarkly, k6/Locust, Datadog, PostHog.
 
 ---
 
-## Préoccupations métier — toujours garder en tête
+## Architecture en 30 secondes
 
-- Onboarding utilisateur (time-to-value)
-- Taux de churn et rétention
-- Performance et scalabilité multi-tenant
-- Isolation stricte des données entre tenants
-- Intégrations tierces (Slack, Salesforce, Zapier)
-- Feature flags pour déploiements progressifs
+Cron Vercel 22h → `/api/agent/run` (Bearer CRON_SECRET) → `lib/agent/orchestrator.ts` → pour chaque user onboardé : sourcing Sirene INSEE (fallback Recherche Entreprises gouv) → enrichissement ADEME BEGES (batches de 20) → scoring composite 0-100 → top 15 non-appelés → enrichissement contact en cascade (Recherche Entreprises → Pappers → Hunter.io) → génération pitchs GPT-4o parallèle (groupes de 5) → insertion `daily_list` + items. Cron 7h30 jours ouvrés → `/api/notifications/daily` → email Resend "votre liste est prête".
 
 ---
 
-## Ce que tu NE dois PAS faire
+## Modèle de données
 
-- Ne pas modifier l'architecture sans documenter la décision dans `memory/project-context.md`
-- Ne pas introduire de nouvelles dépendances sans évaluer la sécurité et la maintenance
-- Ne pas supposer le contexte : si une information manque, demande-la
-- Ne pas générer de code fonctionnel sans tests ou instructions de validation
-- Ne jamais marquer une tâche comme terminée sans avoir prouvé qu'elle fonctionne
+- **`profiles`** — extension de `auth.users` : settings JSONB (offre, secteurs NAF cibles, ville, codes postaux, daily_call_target), flag `onboarded`.
+- **`prospects`** — entreprises sourcées, identité Sirene, BEGES, score 0-100, statut CRM (sourced → qualified → contacted → interested → rdv → converted / rejected / on_hold), unique `(user_id, siren)`.
+- **`daily_lists`** — 1 ligne par `(user_id, date)`, statut pending → generating → ready → completed, `notified_at` pour éviter double envoi email.
+- **`daily_list_items`** — les 15 appels du jour : prospect, ordre, pitch, accroche, objections, `contact_type`, résultat d'appel renseigné par l'humain (`call_result`, `callback_date`, `call_notes`).
+- **`agent_runs`** — journal cron : phase courante, compteurs (sourced/qualified), logs JSONB chronologiques, statut running → completed/failed.
 
----
-
-## Verification Before Done
-
-Avant de considérer une tâche terminée, tu dois :
-
-1. Vérifier que le code produit fait ce qui était demandé (diff, logs, tests)
-2. Te poser la question : **"Un senior dev validerait-il ce code en review ?"**
-3. Démontrer la correction : run tests, affiche les logs, prouve le bon comportement
-4. Si un bug est reporté : trouve la cause racine et fixe-la — ne contourne pas
+Détails : [.claude/context/data-model.md](.claude/context/data-model.md).
 
 ---
 
-## Self-Improvement Loop
+## Sécurité non négociable
 
-Après TOUTE correction de l'utilisateur sur ton travail :
-
-1. **Identifie le pattern** : pourquoi cette erreur s'est-elle produite ?
-2. **Écris une règle** dans `memory/hindsight.md` pour éviter de la répéter :
-   ```
-   ## [Date] — [Titre de la leçon]
-   **Erreur commise** : ...
-   **Règle à retenir** : ...
-   **Comment l'éviter** : ...
-   ```
-3. **Relis `memory/hindsight.md`** au début de chaque session pour réactiver les leçons passées
+- **RLS strict** sur les 5 tables : `auth.uid() = user_id` (4 policies S/I/U/D par table). Jamais ajouter de filtre redondant `.eq('user_id', userId)` dans le code applicatif (sauf orchestrator avec service role).
+- **CRON_SECRET** : comparaison timing-safe (`crypto.timingSafeEqual` avec padding 128 octets) dans `/api/agent/run`. Jamais loggé.
+- **Service role key** (`SUPABASE_SERVICE_ROLE_KEY`) : exclusivement serveur dans l'orchestrator. Jamais dans un Client Component, jamais exposée au navigateur.
+- **Secrets** : `.env.local` jamais commité. Production via Vercel project settings.
+- **Validation Zod** sur tous les bodies d'API entrants.
+- **Sentry** : `beforeSend` scrub PII (email/téléphone des prospects).
 
 ---
 
-## Workflow attendu
+## Conventions
 
-1. Lis les fichiers de contexte listés ci-dessus (dont `memory/hindsight.md`)
-2. Exécute la tâche demandée
-3. **Vérifie** que la tâche fonctionne avant de la déclarer terminée (Verification Before Done)
-4. Après la tâche, mets à jour :
-   - `memory/session-context.md` (bilan de session)
-   - `memory/prompt-history.md` (nouvelle entrée)
-   - `memory/project-context.md` si une décision architecturale a changé
-   - `memory/hindsight.md` si tu as appris quelque chose d'important ou reçu une correction
+- TypeScript strict, types partagés dans `lib/types.ts` et `lib/supabase/database.types.ts` (généré).
+- **Zod aux frontières uniquement** : API routes, parsing externe. Pas de Zod en interne entre fonctions typées.
+- **RLS implicite** : les requêtes Supabase côté user (createClient SSR) sont déjà filtrées par RLS — ne pas doubler par un `.eq('user_id', ...)`. Côté orchestrator (admin/service_role), on filtre explicitement.
+- **Prompts versionnés** : tout changement au SYSTEM_PROMPT de `lib/agent/pitch-gen.ts` → entrée dans `memory/hindsight.md` + dry-run sur 3 prospects test avant déploiement.
+- **Tailwind v4 brut** : pas de composants UI tiers. Conventions de classes alignées avec `app/globals.css`.
+- **Logs structurés JSON** dans l'orchestrator (`{ts, level, phase, msg, meta}`), persistés dans `agent_runs.logs`.
 
 ---
 
-## Commandes utiles du projet
+## Fichiers à consulter
 
-```bash
-# Charger le contexte complet avant une session Claude CLI
-bash scripts/memory.sh
+- **`.claude/MEMORY.md`** — index des notes de contexte ciblées.
+- **`.claude/context/`** — fiches détaillées (pipeline, scoring, APIs, prompts, crons, sécurité, etc.).
+- `memory/primer.md` — glossaire et connaissance domaine (fond).
+- `memory/hindsight.md` — leçons apprises (toujours relire avant changement sensible).
+- `memory/session-context.md` — objectif de la session courante.
+- `memory/prompt-history.md` — historique des tâches.
 
-# Équivalent PowerShell (Windows)
-powershell scripts/memory.ps1
+---
+
+## Commandes utiles
+
+```powershell
+npm run dev          # Next dev (Turbopack)
+npm run build        # Production build
+npm run type-check   # tsc --noEmit
+npm run test         # Vitest run
+npm run test:watch
+npm run lint
+
+# Migrations Supabase
+npx supabase migration new <nom_migration>
+npx supabase db push
+
+# Test local du cron (PowerShell)
+curl -H "Authorization: Bearer $env:CRON_SECRET" -X POST http://localhost:3000/api/agent/run
 ```

@@ -10,10 +10,115 @@
       "Edit",
       "Write",
       "Bash",
-      "WebFetch(domain:portail-api.insee.fr)"
+      "Bash(npm run lint)",
+      "Bash(npm run type-check)",
+      "Bash(npm run test*)",
+      "Bash(npm run build)",
+      "Bash(npm run dev)",
+      "Bash(npx vitest*)",
+      "Bash(npx tsc*)",
+      "Bash(npx supabase*)",
+      "Bash(git status)",
+      "Bash(git diff*)",
+      "Bash(git log*)",
+      "Bash(git add*)",
+      "Bash(git commit*)",
+      "Bash(git branch*)",
+      "Bash(git checkout*)",
+      "Bash(node *)",
+      "Bash(npm install*)",
+      "Bash(npm ci)",
+      "WebFetch(domain:portail-api.insee.fr)",
+      "WebFetch(domain:data.ademe.fr)",
+      "WebFetch(domain:recherche-entreprises.api.gouv.fr)",
+      "WebFetch(domain:api.pappers.fr)",
+      "WebFetch(domain:api.hunter.io)",
+      "WebFetch(domain:api.openai.com)",
+      "WebFetch(domain:api.resend.com)",
+      "WebFetch(domain:supabase.com)",
+      "WebFetch(domain:vercel.com)",
+      "WebFetch(domain:nextjs.org)",
+      "WebFetch(domain:tailwindcss.com)"
     ],
     "deny": [
-      "Bash(rm -rf*)"
+      "Bash(rm -rf*)",
+      "Bash(Remove-Item -Recurse*)",
+      "Bash(rmdir /s*)",
+      "Bash(git push --force*)",
+      "Bash(git push -f*)",
+      "Bash(git reset --hard*)",
+      "Bash(git clean -fd*)",
+      "Bash(npm publish*)",
+      "Read(./.env)",
+      "Read(./.env.local)",
+      "Read(./.env.production)",
+      "Write(./.env.local)",
+      "Edit(./.env.local)"
+    ],
+    "ask": [
+      "Bash(npx supabase db reset*)",
+      "Bash(npx supabase migration new*)",
+      "Bash(npx supabase db push*)",
+      "Bash(vercel deploy*)",
+      "Bash(vercel --prod*)",
+      "Bash(git push*)"
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "powershell -NoProfile -ExecutionPolicy Bypass -File \"${CLAUDE_PROJECT_DIR}\\.claude\\hooks\\pre-bash-guard.ps1\""
+          }
+        ]
+      },
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "powershell -NoProfile -ExecutionPolicy Bypass -File \"${CLAUDE_PROJECT_DIR}\\.claude\\hooks\\pre-write-protect-env.ps1\""
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "powershell -NoProfile -ExecutionPolicy Bypass -File \"${CLAUDE_PROJECT_DIR}\\.claude\\hooks\\post-edit-typecheck.ps1\""
+          },
+          {
+            "type": "command",
+            "command": "powershell -NoProfile -ExecutionPolicy Bypass -File \"${CLAUDE_PROJECT_DIR}\\.claude\\hooks\\post-edit-lint.ps1\""
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "powershell -NoProfile -ExecutionPolicy Bypass -File \"${CLAUDE_PROJECT_DIR}\\.claude\\hooks\\user-prompt-context.ps1\""
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "powershell -NoProfile -ExecutionPolicy Bypass -File \"${CLAUDE_PROJECT_DIR}\\.claude\\hooks\\stop-summary.ps1\""
+          }
+        ]
+      }
     ]
   }
 }

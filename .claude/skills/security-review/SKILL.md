@@ -1,39 +1,83 @@
 ---
 name: security-review
-description: "Deep security audit workflow for SaaS / B2B projects. Use proactively when the user mentions: security, vulnerability, audit, pentest, compliance, authentication, authorization, sensitive data, or when reviewing code that handles user input, payments, or medical data."
+description: "Audit sécurité de l'agent de prospection bilan carbone : RLS Supabase, service_role, CRON_SECRET, Zod, secrets. À activer quand l'utilisateur demande audit, review sécu, vérifier RLS, security scan."
 ---
 
-# Skill : Security Review — SaaS / B2B 📊
+# Skill : Security Review — Agent IA Prospection Bilan Carbone
 
-## Déclencheur automatique
+Activé quand l'utilisateur mentionne : audit, review sécu, sécurité, vérifier RLS, security scan, pentest.
 
-Activé quand l'utilisateur mentionne : sécurité, vulnérabilité, audit, pentest, conformité, authentification, autorisation, données sensibles, RGPD, PCI-DSS, HIPAA.
+Lis d'abord `rules/security.md` qui contient les règles de référence.
 
-## Étape 1 : Contexte
+## 1. RLS Supabase
 
-Lis `memory/project-context.md` pour identifier :
-- Architecture et points d'entrée
-- Stack technique et dépendances
-- Données sensibles manipulées
+Pour chaque table (`profiles`, `prospects`, `daily_lists`, `daily_list_items`, `agent_runs`) :
 
-## Étape 2 : Audit domaine-spécifique
+- Vérifier qu'il existe **4 policies** : SELECT, INSERT, UPDATE, DELETE.
+- Chaque policy contient `auth.uid() = user_id` dans `USING` et/ou `WITH CHECK`.
+- Source : `supabase/migrations/001_initial.sql` + migrations suivantes.
+- Test manuel : se connecter en user A, tenter de SELECT un row appartenant à user B — doit retourner 0 ligne, pas une erreur.
 
-### Préoccupations prioritaires — SaaS / B2B
-- Onboarding utilisateur (time-to-value)
-- Taux de churn et rétention
-- Performance et scalabilité multi-tenant
-- Isolation stricte des données entre tenants
-- Intégrations tierces (Slack, Salesforce, Zapier)
-- Feature flags pour déploiements progressifs
+## 2. Service role key côté client (CRITIQUE)
 
-## Étape 3 : OWASP Top 10
+```bash
+grep -rn "SERVICE_ROLE" app/ components/ lib/
+```
 
-Vérifie systématiquement chaque catégorie sur les fichiers concernés.
+- Doit apparaître uniquement dans `app/api/agent/run/`, `app/api/notifications/daily/`, et un wrapper `lib/supabase/server.ts` si applicable.
+- **Aucune** occurrence dans un fichier `'use client'`, ni dans `components/`, ni dans une page rendue côté client. Si oui → bug critique, fix immédiat.
 
-## Étape 4 : Rapport
+## 3. CRON_SECRET — timing safe
 
-Classe les vulnérabilités : 🔴 Critique → fix immédiat / 🟡 Moyen → sprint suivant / 🟢 Faible → backlog
+```bash
+grep -rn "CRON_SECRET" lib/ app/
+```
 
-## Étape 5 : Suivi
+- Les comparaisons doivent **toutes** passer par `isCronRequest()` de `lib/auth/cron.ts` (qui utilise `crypto.timingSafeEqual`).
+- `grep -rn "CRON_SECRET ===" .` ne doit **rien** retourner.
+- Le token ne doit pas apparaître dans des logs Sentry ni dans `agent_runs.error_message`.
 
-Documente les findings dans `memory/hindsight.md`.
+## 4. Type bypass
+
+```bash
+grep -rn "as any" app/ lib/ components/
+```
+
+Chaque occurrence est suspecte. Soit elle est justifiable et doit être commentée, soit il faut typer correctement (Zod / type guard).
+
+## 5. Validation Zod sur chaque route API
+
+Pour chaque `app/api/**/route.ts` qui accepte un body :
+- Il doit y avoir un `z.object({...}).safeParse(await req.json())` avant toute query DB.
+- Une route qui fait `await req.json()` puis utilise les champs directement = vulnérabilité (injection, crash).
+
+## 6. Whitelist domaines (SSRF)
+
+```bash
+grep -rn "fetch(" lib/ app/api/
+```
+
+Vérifier que chaque `fetch()` cible un domaine de la whitelist (`rules/security.md`). Pas de variable user-controlled dans l'URL.
+
+## 7. Secrets in-code
+
+```bash
+grep -rEn "(sk-[A-Za-z0-9]{20,}|re_[A-Za-z0-9]{20,}|eyJ[A-Za-z0-9_-]{20,})" .
+```
+
+Aucun match attendu. Si match : rotation immédiate du secret + retire du code + force-push uniquement après concertation.
+
+## 8. PII dans Sentry
+
+Vérifier `sentry.client.config.ts`, `sentry.server.config.ts`, `sentry.edge.config.ts` :
+- Hook `beforeSend` présent.
+- Scrub des emails (regex `/\S+@\S+\.\S+/`) et téléphones (regex `/\+?\d[\d\s.-]{8,}/`) du payload.
+
+## Rapport
+
+Classer les findings :
+- **Critique** (fix immédiat, blocant deploy) : service_role exposée client, `CRON_SECRET ===`, RLS manquante, secret en clair.
+- **Moyen** (sprint suivant) : `as any` non justifiés, route sans Zod, fetch sans whitelist explicite.
+- **Faible** (backlog) : nommage, commentaires, optimisations.
+
+Documenter les findings critiques dans `memory/hindsight.md` avec date.

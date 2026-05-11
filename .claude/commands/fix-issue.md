@@ -1,40 +1,46 @@
 ---
-description: "Analyse un bug ou une issue et applique un fix propre."
+description: "Workflow correction de bug avec test rouge avant fix et non-régression pipeline."
+argument-hint: "<description du bug ou ID Sentry>"
 ---
 
-# /fix-issue — Bug Fix 📊
+# /fix-issue
 
-Tu es un expert debugger pour un projet **SaaS / B2B**.
+Tu corriges un bug sur l'agent de prospection BEGES. Argument : `$ARGUMENTS` (description ou ID Sentry).
 
-## Protocole de résolution
+## 1. Récupération du contexte
 
-1. **Reproduis** le problème — lis les logs, messages d'erreur, stack traces
-2. **Identifie** la cause racine (pas le symptôme)
-3. **Vérifie** les fichiers concernés avant de modifier quoi que ce soit
-4. **Applique** le fix minimal — ne touche que ce qui est nécessaire
-5. **Valide** : explique comment tester que le fix fonctionne
+1. Si l'argument est un ID/lien Sentry : consulte l'issue sur dashboard Sentry pour récupérer stack trace, breadcrumbs, user_id concerné, route affectée. Note la fréquence et la première occurrence.
+2. Sinon : lis les logs JSON de l'orchestrateur (`console.log` JSON structuré dans `lib/agent/orchestrator.ts`) ou la table `agent_runs.logs` pour la run incriminée.
+3. Identifie la **cause racine**, pas le symptôme. Liste les fichiers impliqués avec leur chemin absolu.
 
-## Règles
+## 2. Reproduction locale
 
-- Ne contourne JAMAIS un problème — trouve et fixe la vraie cause
-- Un fix doit être aussi simple que possible
-- Si le fix demande un refactoring important, signale-le d'abord
-- Documente le fix dans `memory/hindsight.md` si c'est une leçon réutilisable
+1. Reproduis le bug dans `npm run dev`. Si c'est une route API, utilise `curl` ou un client HTTP avec la session Supabase.
+2. Si le bug est dans l'orchestrateur nocturne : lance `/agent-dry-run` pour rejouer le pipeline sans toucher la BDD.
+3. Confirme que tu vois le même comportement que celui rapporté.
 
-## Format de réponse
+## 3. Test rouge AVANT fix
 
-```
-## Diagnostic
-**Cause racine** : ...
-**Fichiers concernés** : ...
+1. Écris un test Vitest qui **échoue** sur le comportement bugué. Place-le dans `lib/**/__tests__/` à côté du fichier source (ex: `lib/agent/__tests__/scoring.test.ts`).
+2. Lance `npm run test -- <pattern>` et vérifie que le test échoue pour la bonne raison (assertion, pas erreur d'import).
+3. Si le bug est dans une route API : préfère un test unitaire sur la fonction extraite plutôt qu'un test d'intégration HTTP.
 
-## Fix appliqué
-[Description du changement]
+## 4. Fix minimal
 
-## Comment tester
-1. ...
-2. ...
+1. Applique le changement le plus petit possible qui rend le test vert.
+2. Ne modifie pas le style/format autour. Pas de refactoring opportuniste.
+3. Respecte les invariants du repo : pas de `any`, pas de filter user_id manquant, pas d'import service_role côté client.
+4. Si le fix demande un refactoring de plus de ~50 lignes : arrête-toi et signale-le à l'utilisateur avant de continuer.
 
-## Leçon à retenir
-[Si applicable — à ajouter dans memory/hindsight.md]
-```
+## 5. Validation
+
+1. `npm run test` — le nouveau test passe, aucun ancien test ne casse.
+2. `npm run type-check` — zéro erreur TS.
+3. Si le fix touche `lib/agent/orchestrator.ts`, `lib/agent/sourcing.ts`, `lib/agent/scoring.ts`, `lib/agent/pitch-gen.ts` ou `lib/agent/contact-enrichment.ts` : lance `/agent-dry-run` pour vérifier que le pipeline complet tourne toujours bout en bout sans crash.
+4. Si le fix touche une route API : `curl` la route en local avec un payload valide ET un payload invalide (Zod doit toujours rejeter proprement).
+
+## 6. Documentation
+
+1. Commit message : `fix(<scope>): <résumé court>` — mentionne l'ID Sentry si applicable.
+2. Si la leçon est réutilisable (ex: piège récurrent sur Supabase RLS, OpenAI rate limit, etc.) : ajoute une entrée dans `memory/hindsight.md`.
+3. Ne ferme l'issue Sentry qu'après le déploiement (`/deploy`) et confirmation que l'erreur ne réapparaît pas pendant 24h.

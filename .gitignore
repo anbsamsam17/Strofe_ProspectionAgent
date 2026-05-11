@@ -52,6 +52,11 @@ supabase/.temp
 .sentryclirc
 
 # =====================
+# CLAUDE CODE
+# =====================
+.claude/settings.local.json
+
+# =====================
 # MISC
 # =====================
 *.log
