@@ -19,6 +19,9 @@ Index des notes de contexte. Une entrée = un fichier ciblé. Le contenu vit dan
 - [Crons Vercel](context/crons.md) — 22h + 7h30, Bearer CRON_SECRET, retry, test local
 - [Sécurité](context/security.md) — RLS, service_role, secrets, Sentry PII, SSRF, Zod
 
+## Initiatives en cours
+- [TODO sourcing-fix](TODO-sourcing-fix.md) — refonte pagination Sirene + observabilité, dispatch par vagues parallèles via l'orchestrator
+
 ---
 
 ## Conventions de lecture
