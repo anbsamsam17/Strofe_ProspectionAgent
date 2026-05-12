@@ -4,10 +4,13 @@ import { useRouter, usePathname, useSearchParams } from 'next/navigation'
 import { useState, useTransition } from 'react'
 import type { ProspectStatus } from '@/lib/types'
 
+export type ContactFilterType = 'phone' | 'email' | 'linkedin'
+
 interface ProspectsFiltersProps {
   currentStatuts: string[]
   currentSecteur: string
   currentScoreMin: number
+  currentContactTypes?: ContactFilterType[]
 }
 
 const ALL_STATUTS: { value: ProspectStatus; label: string; dot: string }[] = [
@@ -21,10 +24,17 @@ const ALL_STATUTS: { value: ProspectStatus; label: string; dot: string }[] = [
   { value: 'on_hold', label: 'En pause', dot: 'bg-orange-500' },
 ]
 
+const ALL_CONTACT_TYPES: { value: ContactFilterType; label: string }[] = [
+  { value: 'phone', label: 'Téléphone' },
+  { value: 'email', label: 'Email' },
+  { value: 'linkedin', label: 'LinkedIn' },
+]
+
 export function ProspectsFilters({
   currentStatuts,
   currentSecteur,
   currentScoreMin,
+  currentContactTypes = [],
 }: ProspectsFiltersProps) {
   const router = useRouter()
   const pathname = usePathname()
@@ -34,11 +44,13 @@ export function ProspectsFilters({
   const [statuts, setStatuts] = useState<string[]>(currentStatuts)
   const [secteur, setSecteur] = useState(currentSecteur)
   const [scoreMin, setScoreMin] = useState(currentScoreMin)
+  const [contactTypes, setContactTypes] = useState<ContactFilterType[]>(currentContactTypes)
 
   function applyFilters(
     newStatuts: string[],
     newSecteur: string,
-    newScoreMin: number
+    newScoreMin: number,
+    newContactTypes: ContactFilterType[],
   ) {
     const params = new URLSearchParams(searchParams.toString())
     params.set('page', '1')
@@ -61,6 +73,12 @@ export function ProspectsFilters({
       params.delete('score_min')
     }
 
+    if (newContactTypes.length > 0) {
+      params.set('contact_type', newContactTypes.join(','))
+    } else {
+      params.delete('contact_type')
+    }
+
     startTransition(() => {
       router.push(`${pathname}?${params.toString()}`)
     })
@@ -71,7 +89,15 @@ export function ProspectsFilters({
       ? statuts.filter((s) => s !== value)
       : [...statuts, value]
     setStatuts(next)
-    applyFilters(next, secteur, scoreMin)
+    applyFilters(next, secteur, scoreMin, contactTypes)
+  }
+
+  function toggleContactType(value: ContactFilterType) {
+    const next = contactTypes.includes(value)
+      ? contactTypes.filter((t) => t !== value)
+      : [...contactTypes, value]
+    setContactTypes(next)
+    applyFilters(statuts, secteur, scoreMin, next)
   }
 
   function handleSecteurChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -80,26 +106,28 @@ export function ProspectsFilters({
 
   function handleSecteurKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
     if (e.key === 'Enter') {
-      applyFilters(statuts, secteur, scoreMin)
+      applyFilters(statuts, secteur, scoreMin, contactTypes)
     }
   }
 
   function handleScoreChange(e: React.ChangeEvent<HTMLInputElement>) {
     const val = parseInt(e.target.value, 10)
     setScoreMin(val)
-    applyFilters(statuts, secteur, val)
+    applyFilters(statuts, secteur, val, contactTypes)
   }
 
   function handleReset() {
     setStatuts([])
     setSecteur('')
     setScoreMin(0)
+    setContactTypes([])
     startTransition(() => {
       router.push(pathname)
     })
   }
 
-  const hasFilters = statuts.length > 0 || secteur || scoreMin > 0
+  const hasFilters =
+    statuts.length > 0 || secteur || scoreMin > 0 || contactTypes.length > 0
   const scorePercent = scoreMin
 
   return (
@@ -178,7 +206,7 @@ export function ProspectsFilters({
                 value={secteur}
                 onChange={handleSecteurChange}
                 onKeyDown={handleSecteurKeyDown}
-                onBlur={() => applyFilters(statuts, secteur, scoreMin)}
+                onBlur={() => applyFilters(statuts, secteur, scoreMin, contactTypes)}
                 placeholder="ex : Transport..."
                 className="w-full rounded-lg border border-gray-200 bg-white py-2 pl-9 pr-3 text-sm text-gray-900 placeholder-gray-400 transition focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-500/20 dark:border-gray-700 dark:bg-gray-800 dark:text-white dark:placeholder-gray-600"
               />
@@ -239,6 +267,37 @@ export function ProspectsFilters({
               <span>100</span>
             </div>
           </div>
+
+          {/* Type de contact disponible */}
+          <fieldset>
+            <legend className="mb-1.5 text-xs font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">
+              Contact dispo
+            </legend>
+            <div
+              className="flex flex-wrap gap-1.5"
+              role="group"
+              aria-label="Filtrer par canal de contact disponible"
+            >
+              {ALL_CONTACT_TYPES.map(({ value, label }) => {
+                const isActive = contactTypes.includes(value)
+                return (
+                  <button
+                    key={value}
+                    type="button"
+                    onClick={() => toggleContactType(value)}
+                    aria-pressed={isActive}
+                    className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition-all duration-150 ${
+                      isActive
+                        ? 'border-green-500 bg-green-50 text-green-700 shadow-sm dark:border-green-600 dark:bg-green-950/50 dark:text-green-400'
+                        : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300 hover:bg-gray-50 dark:border-gray-700 dark:bg-transparent dark:text-gray-400 dark:hover:border-gray-600 dark:hover:bg-gray-800/50'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                )
+              })}
+            </div>
+          </fieldset>
         </div>
       </div>
 
@@ -250,6 +309,10 @@ export function ProspectsFilters({
               statuts.length > 0 && `${statuts.length} statut${statuts.length > 1 ? 's' : ''}`,
               secteur && `secteur "${secteur}"`,
               scoreMin > 0 && `score ≥ ${scoreMin}`,
+              contactTypes.length > 0 &&
+                `contact : ${contactTypes
+                  .map((t) => ALL_CONTACT_TYPES.find((c) => c.value === t)?.label ?? t)
+                  .join(' / ')}`,
             ]
               .filter(Boolean)
               .join(' · ')}

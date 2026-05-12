@@ -31,29 +31,73 @@ const PROSPECT_STATUTS: [ProspectStatus, ...ProspectStatus[]] = [
 // Schéma de validation PATCH (tous les champs sont optionnels)
 // ------------------------------------------------------------
 
+// Helper Zod : `''` est traité comme "effacer la valeur" → null en DB.
+// Permet à l'UI d'envoyer un input vide pour supprimer un champ optionnel.
+const nullableString = (max: number) =>
+  z
+    .string()
+    .max(max)
+    .transform((s) => s.trim())
+    .transform((s) => (s.length === 0 ? null : s))
+    .nullable()
+    .optional()
+
 const PatchBodySchema = z.object({
+  // Identité entreprise (correction manuelle)
+  raison_sociale: z.string().min(1).max(255).trim().optional(),
+  secteur_naf: nullableString(20),
+  secteur_libelle: nullableString(255),
+
   // Infos de contact
-  contact_nom: z.string().max(100).trim().optional(),
-  contact_prenom: z.string().max(100).trim().optional(),
-  contact_poste: z.string().max(200).trim().optional(),
+  contact_nom: nullableString(100),
+  contact_prenom: nullableString(100),
+  contact_poste: nullableString(200),
   contact_telephone: z
     .string()
     .max(20)
-    .regex(/^[\d\s\+\-\(\)\.]+$/, 'Numéro de téléphone invalide')
+    .transform((s) => s.trim())
+    .refine(
+      (s) => s.length === 0 || /^[\d\s+\-().]+$/.test(s),
+      'Numéro de téléphone invalide',
+    )
+    .transform((s) => (s.length === 0 ? null : s))
+    .nullable()
     .optional(),
-  contact_email: z.string().email('Email invalide').max(254).optional(),
-  contact_linkedin: z.string().url('URL LinkedIn invalide').max(500).optional(),
+  contact_email: z
+    .string()
+    .max(254)
+    .transform((s) => s.trim())
+    .refine(
+      (s) => s.length === 0 || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s),
+      'Email invalide',
+    )
+    .transform((s) => (s.length === 0 ? null : s))
+    .nullable()
+    .optional(),
+  contact_linkedin: z
+    .string()
+    .max(500)
+    .transform((s) => s.trim())
+    .refine(
+      (s) => s.length === 0 || /^https?:\/\/.+/i.test(s),
+      'URL LinkedIn invalide',
+    )
+    .transform((s) => (s.length === 0 ? null : s))
+    .nullable()
+    .optional(),
 
   // Statut pipeline
   statut: z.enum(PROSPECT_STATUTS).optional(),
 
   // Localisation (correction possible)
-  ville: z.string().max(100).trim().optional(),
-  code_postal: z.string().max(10).optional(),
-  adresse: z.string().max(500).trim().optional(),
+  ville: nullableString(100),
+  code_postal: nullableString(10),
+  adresse: nullableString(500),
 
   // Données BEGES (correction manuelle possible)
   beges_publie: z.boolean().optional(),
+  beges_valide: z.boolean().optional(),
+  beges_derniere_publication: nullableString(20),
   obligation_beges: z.boolean().optional(),
 })
 

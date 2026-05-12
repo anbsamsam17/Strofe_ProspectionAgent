@@ -4,6 +4,26 @@ import { createClient } from '@/lib/supabase/server'
 import type { Prospect, ProspectStatus } from '@/lib/types'
 import { ProspectsFilters } from '@/components/prospects/prospects-filters'
 import { AddToDailyListButton } from '@/components/prospects/add-to-daily-list-button'
+import { buildBegesUrl } from '@/lib/utils/beges-url'
+
+// ── Types contact filter ──────────────────────────────────────────────────────
+
+const CONTACT_TYPES = ['phone', 'email', 'linkedin'] as const
+type ContactFilterType = (typeof CONTACT_TYPES)[number]
+
+function parseContactTypes(raw: string | undefined): ContactFilterType[] {
+  if (!raw) return []
+  const parts = raw.split(',').map((s) => s.trim()).filter(Boolean)
+  return parts.filter((p): p is ContactFilterType =>
+    (CONTACT_TYPES as ReadonlyArray<string>).includes(p),
+  )
+}
+
+const CONTACT_FIELD_BY_TYPE: Record<ContactFilterType, string> = {
+  phone: 'contact_telephone',
+  email: 'contact_email',
+  linkedin: 'contact_linkedin',
+}
 
 // Force le rendu dynamique — la table prospects change à chaque run agent
 // et après chaque feedback d'appel (statut mis à jour)
@@ -148,6 +168,7 @@ interface SearchParams {
   statut?: string
   secteur?: string
   score_min?: string
+  contact_type?: string
 }
 
 export default async function ProspectsPage({
@@ -170,6 +191,7 @@ export default async function ProspectsPage({
   const statutFilter = params.statut ? params.statut.split(',') : []
   const secteurFilter = params.secteur ?? ''
   const scoreMin = params.score_min ? parseInt(params.score_min, 10) : 0
+  const contactTypes = parseContactTypes(params.contact_type)
 
   const from = (page - 1) * PAGE_SIZE
   const to = from + PAGE_SIZE - 1
@@ -191,6 +213,13 @@ export default async function ProspectsPage({
   if (scoreMin > 0) {
     query = query.gte('score_priorite', scoreMin)
   }
+  if (contactTypes.length > 0) {
+    // Multi-select = OR : un prospect matche s'il a AU MOINS un des canaux choisis.
+    const orClause = contactTypes
+      .map((t) => `${CONTACT_FIELD_BY_TYPE[t]}.not.is.null`)
+      .join(',')
+    query = query.or(orClause)
+  }
 
   const { data: prospects, count } = await query
 
@@ -204,6 +233,7 @@ export default async function ProspectsPage({
       ...(params.statut ? { statut: params.statut } : {}),
       ...(secteurFilter ? { secteur: secteurFilter } : {}),
       ...(scoreMin > 0 ? { score_min: String(scoreMin) } : {}),
+      ...(contactTypes.length > 0 ? { contact_type: contactTypes.join(',') } : {}),
       ...newParams,
     }
     const qs = new URLSearchParams(merged).toString()
@@ -238,6 +268,7 @@ export default async function ProspectsPage({
         currentStatuts={statutFilter}
         currentSecteur={secteurFilter}
         currentScoreMin={scoreMin}
+        currentContactTypes={contactTypes}
       />
 
       {/* Tableau */}
@@ -380,7 +411,7 @@ export default async function ProspectsPage({
                         {(() => {
                           const begesPublie = prospect.beges_publie
                           const begesValide = prospect.beges_valide
-                          const begesUrl = prospect.beges_url
+                          const begesUrl = buildBegesUrl(prospect)
                           const begesDate = prospect.beges_derniere_publication
 
                           let badgeClass: string

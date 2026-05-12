@@ -1,9 +1,54 @@
 import { notFound, redirect } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
-import type { Prospect, ProspectStatus, ScoreDetails, IntentionSignal } from '@/lib/types'
+import type {
+  Prospect,
+  ProspectStatus,
+  ScoreDetails,
+  IntentionSignal,
+  CallResult,
+} from '@/lib/types'
+import { ProspectDetailEditor } from '@/components/prospects/prospect-detail-editor'
+import { buildBegesUrl } from '@/lib/utils/beges-url'
 
 export const dynamic = 'force-dynamic'
+
+// ── Types locaux ──────────────────────────────────────────────────────────────
+
+interface HistoryItem {
+  id: string
+  called_at: string
+  call_result: CallResult | null
+  call_notes: string | null
+  callback_date: string | null
+}
+
+const CALL_RESULT_LABELS: Record<CallResult, { label: string; className: string }> = {
+  interested: {
+    label: 'Intéressé',
+    className: 'bg-green-50 text-green-700 dark:bg-green-950/50 dark:text-green-400',
+  },
+  callback: {
+    label: 'Rappel demandé',
+    className: 'bg-blue-50 text-blue-700 dark:bg-blue-950/50 dark:text-blue-400',
+  },
+  not_interested: {
+    label: 'Pas intéressé',
+    className: 'bg-red-50 text-red-700 dark:bg-red-950/50 dark:text-red-400',
+  },
+  wrong_contact: {
+    label: 'Mauvais contact',
+    className: 'bg-orange-50 text-orange-700 dark:bg-orange-950/50 dark:text-orange-400',
+  },
+  no_answer: {
+    label: 'Pas de réponse',
+    className: 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400',
+  },
+  voicemail: {
+    label: 'Répondeur',
+    className: 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400',
+  },
+}
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -140,10 +185,21 @@ export default async function ProspectDetailPage({ params }: PageProps) {
 
   const prospect = data as unknown as Prospect
 
+  // Historique des appels — RLS implicite via la session SSR.
+  const { data: historyRaw } = await supabase
+    .from('daily_list_items')
+    .select('id, called_at, call_result, call_notes, callback_date')
+    .eq('prospect_id', id)
+    .not('called_at', 'is', null)
+    .order('called_at', { ascending: false })
+
+  const history = (historyRaw ?? []) as unknown as HistoryItem[]
+
   const statusStyle = STATUS_STYLES[prospect.statut] ?? STATUS_STYLES.sourced
   const priority = priorityFromScore(prospect.score_priorite)
   const scoreDetails = prospect.score_details as ScoreDetails
   const signaux = (prospect.signaux ?? []) as IntentionSignal[]
+  const begesUrl = buildBegesUrl(prospect)
 
   // Noms contact
   const contactFullName = [prospect.contact_prenom, prospect.contact_nom].filter(Boolean).join(' ')
@@ -227,6 +283,7 @@ export default async function ProspectDetailPage({ params }: PageProps) {
 
         {/* ── Section Informations entreprise ── */}
         <SectionCard title="Informations entreprise">
+          <ProspectDetailEditor prospect={prospect} section="identity">
           <dl className="space-y-3">
             {prospect.siren && (
               <InfoRow label="SIREN" value={prospect.siren} />
@@ -269,10 +326,12 @@ export default async function ProspectDetailPage({ params }: PageProps) {
               }
             />
           </dl>
+          </ProspectDetailEditor>
         </SectionCard>
 
         {/* ── Section Contact ── */}
         <SectionCard title="Contact identifié">
+          <ProspectDetailEditor prospect={prospect} section="contact">
           {contactFullName || prospect.contact_telephone || prospect.contact_email || prospect.contact_linkedin ? (
             <div className="space-y-4">
               {contactFullName && (
@@ -382,10 +441,12 @@ export default async function ProspectDetailPage({ params }: PageProps) {
               Aucun contact identifié pour cette entreprise.
             </p>
           )}
+          </ProspectDetailEditor>
         </SectionCard>
 
         {/* ── Section BEGES ── */}
         <SectionCard title="Bilan GES (BEGES)">
+          <ProspectDetailEditor prospect={prospect} section="beges">
           <div className="space-y-4">
             {/* Badge état principal */}
             <div className="flex flex-wrap items-center gap-2">
@@ -434,16 +495,16 @@ export default async function ProspectDetailPage({ params }: PageProps) {
               </p>
             )}
 
-            {/* Lien ADEME */}
-            {prospect.beges_url && (
+            {/* Lien ADEME : fiche directe si possible, sinon recherche par SIREN */}
+            {begesUrl && (
               <a
-                href={prospect.beges_url}
+                href={begesUrl}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="inline-flex items-center gap-1.5 text-sm font-medium text-green-600 transition-colors hover:text-green-700 dark:text-green-400 dark:hover:text-green-300"
-                aria-label={`Voir le BEGES de ${prospect.raison_sociale} sur ADEME (ouvre dans un nouvel onglet)`}
+                aria-label={`Voir le BEGES de ${prospect.raison_sociale} sur bilans-ges.ademe.fr (ouvre dans un nouvel onglet)`}
               >
-                Voir le BEGES sur ADEME
+                Voir le BEGES sur bilans-ges.ademe.fr
                 <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                   <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
                   <polyline points="15 3 21 3 21 9" />
@@ -459,6 +520,27 @@ export default async function ProspectDetailPage({ params }: PageProps) {
                 : "Cette entreprise n'est pas soumise à l'obligation réglementaire, mais une démarche volontaire de bilan carbone reste possible et valorisante."}
             </p>
           </div>
+          </ProspectDetailEditor>
+        </SectionCard>
+
+        {/* ── Section Statut CRM (éditable) ── */}
+        <SectionCard title="Statut CRM">
+          <ProspectDetailEditor prospect={prospect} section="statut">
+            <div className="space-y-2">
+              <span
+                className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-sm font-medium ${statusStyle.badge}`}
+              >
+                <span
+                  className={`h-1.5 w-1.5 flex-shrink-0 rounded-full ${statusStyle.dot}`}
+                  aria-hidden="true"
+                />
+                {STATUS_LABELS[prospect.statut] ?? prospect.statut}
+              </span>
+              <p className="text-xs text-gray-500 dark:text-gray-400">
+                Avancement actuel du prospect dans le pipeline commercial.
+              </p>
+            </div>
+          </ProspectDetailEditor>
         </SectionCard>
 
         {/* ── Section Score ── */}
@@ -584,8 +666,55 @@ export default async function ProspectDetailPage({ params }: PageProps) {
         )}
       </SectionCard>
 
-      {/* ── Section Historique ── */}
-      <SectionCard title="Historique">
+      {/* ── Section Historique des échanges ── */}
+      <SectionCard title={`Historique des échanges${history.length > 0 ? ` (${history.length})` : ''}`}>
+        {history.length > 0 ? (
+          <ul
+            className="divide-y divide-gray-100 dark:divide-gray-800"
+            aria-label="Historique des appels passés sur ce prospect"
+          >
+            {history.map((item) => {
+              const resultMeta = item.call_result ? CALL_RESULT_LABELS[item.call_result] : null
+              return (
+                <li key={item.id} className="py-4 first:pt-0 last:pb-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-sm font-semibold text-gray-900 dark:text-white">
+                      {formatDate(item.called_at, {
+                        dateStyle: 'long',
+                        timeStyle: 'short',
+                      }) ?? item.called_at}
+                    </span>
+                    {resultMeta && (
+                      <span
+                        className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${resultMeta.className}`}
+                      >
+                        {resultMeta.label}
+                      </span>
+                    )}
+                    {item.callback_date && (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2.5 py-0.5 text-xs font-medium text-blue-700 dark:bg-blue-950/40 dark:text-blue-400">
+                        Rappel le {formatDate(item.callback_date, { dateStyle: 'medium' }) ?? item.callback_date}
+                      </span>
+                    )}
+                  </div>
+                  {item.call_notes && (
+                    <p className="mt-2 whitespace-pre-line text-sm text-gray-700 dark:text-gray-300">
+                      {item.call_notes}
+                    </p>
+                  )}
+                </li>
+              )
+            })}
+          </ul>
+        ) : (
+          <p className="text-sm text-gray-400 dark:text-gray-600">
+            Aucun échange enregistré pour ce prospect.
+          </p>
+        )}
+      </SectionCard>
+
+      {/* ── Section Métadonnées ── */}
+      <SectionCard title="Métadonnées">
         <dl className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           <div>
             <dt className="text-xs font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">

@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import Link from 'next/link'
 import type { Prospect, ProspectStatus } from '@/lib/types'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -279,6 +280,30 @@ function ProspectModal({
               {error}
             </p>
           )}
+
+          {/* Lien vers la fiche complète du prospect */}
+          <Link
+            href={`/prospects/${prospect.id}`}
+            className="inline-flex w-full items-center justify-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3.5 py-2 text-sm font-medium text-gray-700 transition-colors hover:border-green-300 hover:bg-green-50 hover:text-green-700 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300 dark:hover:border-green-700 dark:hover:bg-green-950/40 dark:hover:text-green-400"
+            aria-label={`Voir la fiche complète de ${prospect.raison_sociale}`}
+          >
+            Plus de détails
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <line x1="5" y1="12" x2="19" y2="12" />
+              <polyline points="12 5 19 12 12 19" />
+            </svg>
+          </Link>
 
           {/* Actions changement de statut */}
           <div className="space-y-2">
