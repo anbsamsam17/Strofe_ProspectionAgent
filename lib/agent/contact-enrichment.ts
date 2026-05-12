@@ -100,6 +100,45 @@ export function getCreditsUsed(): { pappers: number; hunter: number } {
 }
 
 // ------------------------------------------------------------
+// HELPER : NETTOYAGE PRÉNOM
+// Les sources externes (Recherche Entreprises, Pappers) retournent souvent
+// plusieurs prénoms ("Jean-Marc Pierre", "MARIE SOPHIE") — on ne conserve
+// que le premier token, proprement capitalisé.
+// ------------------------------------------------------------
+
+/**
+ * Extrait le premier prénom propre d'une chaîne brute.
+ *
+ * Règles :
+ *  - Trim + split sur whitespace puis sur tirets
+ *  - Conserve le 1er token uniquement
+ *  - Capitalise (1ère lettre majuscule, reste minuscule)
+ *  - Retourne `undefined` si résultat < 2 caractères
+ *
+ * Exemples :
+ *  - "Jean Marc"     → "Jean"
+ *  - "Jean-Marc"     → "Jean"
+ *  - "  jean  "      → "Jean"
+ *  - "J"             → undefined
+ *  - "MARIE SOPHIE"  → "Marie"
+ *  - undefined       → undefined
+ */
+export function cleanFirstName(raw?: string): string | undefined {
+  if (!raw) return undefined
+
+  const trimmed = raw.trim()
+  if (!trimmed) return undefined
+
+  // Premier token sur whitespace puis sur tiret
+  const firstSpaceToken = trimmed.split(/\s+/)[0] ?? ''
+  const firstToken = firstSpaceToken.split('-')[0] ?? ''
+
+  if (firstToken.length < 2) return undefined
+
+  return firstToken.charAt(0).toUpperCase() + firstToken.slice(1).toLowerCase()
+}
+
+// ------------------------------------------------------------
 // HELPER : NORMALISATION NOM ENTREPRISE
 // Utilisé pour valider le match Hunter domain-search by company
 // ------------------------------------------------------------
@@ -168,6 +207,8 @@ interface PappersRepresentant {
   nom?: string
   prenom?: string
   nom_complet?: string
+  /** URL de profil LinkedIn (Pappers v2 — champ optionnel sur les dirigeants) */
+  lien_linkedin?: string
 }
 
 interface PappersEntreprise {
@@ -375,6 +416,8 @@ interface PappersResult {
   domain?: string
   contact_nom?: string
   contact_prenom?: string
+  /** URL profil LinkedIn du dirigeant (champ Pappers v2 `lien_linkedin`) */
+  lien_linkedin?: string
 }
 
 /**
@@ -530,7 +573,12 @@ async function fetchPappers(siren: string): Promise<PappersResult | null> {
 
   if (dirigeant) {
     if (dirigeant.nom?.trim()) result.contact_nom = dirigeant.nom.trim()
-    if (dirigeant.prenom?.trim()) result.contact_prenom = dirigeant.prenom.trim()
+    const cleanedPrenom = cleanFirstName(dirigeant.prenom)
+    if (cleanedPrenom) result.contact_prenom = cleanedPrenom
+    // LinkedIn dirigeant (Pappers v2 — meilleure source de vérité pour une personne nommée)
+    if (dirigeant.lien_linkedin?.trim()) {
+      result.lien_linkedin = dirigeant.lien_linkedin.trim()
+    }
   }
 
   console.log(
@@ -545,6 +593,7 @@ async function fetchPappers(siren: string): Promise<PappersResult | null> {
       dirigeant_found: Boolean(result.contact_nom),
       nom: result.contact_nom ?? null,
       prenom: result.contact_prenom ?? null,
+      linkedin_found: Boolean(result.lien_linkedin),
       nb_representants: representants.length,
     }),
   )
@@ -1028,10 +1077,12 @@ export async function enrichirContact(
         resolvedNom = dirigeant.nom
       }
       if (!resolvedPrenom && dirigeant.prenoms) {
-        // Prend le premier prénom uniquement (ex: "Guillaume Jean" → "Guillaume")
-        const premierPrenom = dirigeant.prenoms.split(' ')[0]
-        result.contact_prenom = premierPrenom
-        resolvedPrenom = premierPrenom
+        // Dédup : on garde le 1er prénom propre (ex: "Jean-Marc Pierre" → "Jean")
+        const cleaned = cleanFirstName(dirigeant.prenoms)
+        if (cleaned) {
+          result.contact_prenom = cleaned
+          resolvedPrenom = cleaned
+        }
       }
       if (!existingContact.contact_poste && !result.contact_poste && dirigeant.qualite) {
         result.contact_poste = dirigeant.qualite
@@ -1058,8 +1109,17 @@ export async function enrichirContact(
         resolvedNom = pappers.contact_nom
       }
       if (!resolvedPrenom && pappers.contact_prenom) {
-        result.contact_prenom = pappers.contact_prenom
-        resolvedPrenom = pappers.contact_prenom
+        const cleaned = cleanFirstName(pappers.contact_prenom)
+        if (cleaned) {
+          result.contact_prenom = cleaned
+          resolvedPrenom = cleaned
+        }
+      }
+
+      // LinkedIn dirigeant — Pappers est prioritaire (source de vérité personne nommée).
+      // Renseigné AVANT Hunter pour éviter d'être écrasé par un LinkedIn générique.
+      if (!existingContact.contact_linkedin && !result.contact_linkedin && pappers.lien_linkedin) {
+        result.contact_linkedin = pappers.lien_linkedin
       }
 
       // Domaine web (usage interne pour Hunter)
@@ -1088,8 +1148,11 @@ export async function enrichirContact(
         resolvedNom = hunterByDomain.last_name
       }
       if (!resolvedPrenom && hunterByDomain.first_name) {
-        result.contact_prenom = hunterByDomain.first_name
-        resolvedPrenom = hunterByDomain.first_name
+        const cleaned = cleanFirstName(hunterByDomain.first_name)
+        if (cleaned) {
+          result.contact_prenom = cleaned
+          resolvedPrenom = cleaned
+        }
       }
       if (!existingContact.contact_linkedin && !result.contact_linkedin && hunterByDomain.linkedin) {
         result.contact_linkedin = hunterByDomain.linkedin
@@ -1134,8 +1197,11 @@ export async function enrichirContact(
           resolvedNom = hunterByCompany.last_name
         }
         if (!resolvedPrenom && hunterByCompany.first_name) {
-          result.contact_prenom = hunterByCompany.first_name
-          resolvedPrenom = hunterByCompany.first_name
+          const cleaned = cleanFirstName(hunterByCompany.first_name)
+          if (cleaned) {
+            result.contact_prenom = cleaned
+            resolvedPrenom = cleaned
+          }
         }
         if (!existingContact.contact_poste && !result.contact_poste && hunterByCompany.position) {
           result.contact_poste = hunterByCompany.position
@@ -1219,6 +1285,12 @@ export async function enrichirContact(
     )
   }
 
+  // TODO(samir): fallback search URL — si aucune source ne fournit un profil
+  // LinkedIn réel, on pourrait forger une URL de recherche LinkedIn
+  // (https://www.linkedin.com/search/results/people/?keywords=<prenom>+<nom>+<entreprise>)
+  // pour aider le consultant à retrouver le contact. Volontairement NON peuplée
+  // dans contact_linkedin (le user veut un profil réel, pas une URL de recherche).
+
   logSummary(siren, result)
   return result
 }
@@ -1239,6 +1311,7 @@ function logSummary(siren: string, result: Partial<EnrichedContact>): void {
       email_enriched: Boolean(result.contact_email),
       telephone_enriched: Boolean(result.contact_telephone),
       nom_enriched: Boolean(result.contact_nom),
+      linkedin_enriched: Boolean(result.contact_linkedin),
     }),
   )
 }
