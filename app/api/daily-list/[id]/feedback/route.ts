@@ -37,6 +37,8 @@ const FeedbackBodySchema = z
       'wrong_contact',
       'no_answer',
       'voicemail',
+      'email_sent',
+      'no_contact_point',
     ]),
     callback_date: z
       .string()
@@ -67,6 +69,11 @@ const CALL_RESULT_TO_STATUS: Record<CallResult, ProspectStatus | null> = {
   wrong_contact: null, // statut inchangé
   no_answer: 'contacted',
   voicemail: 'contacted',
+  // Email envoyé = prospect contacté par un autre canal
+  email_sent: 'contacted',
+  // Pas de point de contact = on met de côté, statut inchangé (l'humain pourra
+  // marquer manuellement rejected ou on_hold depuis le pipeline)
+  no_contact_point: 'on_hold',
 }
 
 // ------------------------------------------------------------

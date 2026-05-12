@@ -8,10 +8,20 @@ interface DailyListClientProps {
   initialItems: (DailyListItem & { prospect: Prospect })[]
 }
 
+/**
+ * Un prospect est "atteignable" s'il dispose d'au moins un canal de contact :
+ * téléphone, email, ou profil LinkedIn. Les autres sont écartés de la liste
+ * par défaut (cf. feedback "Liste du jour" — point 3).
+ */
+function hasContact(p?: Prospect): boolean {
+  return Boolean(p?.contact_telephone || p?.contact_email || p?.contact_linkedin)
+}
+
 export function DailyListClient({ initialItems }: DailyListClientProps) {
   const [items, setItems] = useState(initialItems)
   const [isResetting, setIsResetting] = useState(false)
   const [resetError, setResetError] = useState<string | null>(null)
+  const [showHidden, setShowHidden] = useState(false)
 
   async function handleReset() {
     const confirmed = window.confirm(
@@ -61,9 +71,14 @@ export function DailyListClient({ initialItems }: DailyListClientProps) {
 
   // Séparation appels effectués / à faire
   // pendingItems : meilleurs scores en premier (score_priorite DESC) — prospect peut être null (sécurité)
-  const pendingItems = items
+  // On filtre par défaut les prospects sans aucun canal de contact (tél/email/LinkedIn)
+  // car l'humain ne peut rien en faire — sauf si showHidden est activé.
+  const pendingItemsAll = items
     .filter((item) => !item.called_at)
     .sort((a, b) => (b.prospect?.score_priorite ?? 0) - (a.prospect?.score_priorite ?? 0))
+  const pendingItemsWithContact = pendingItemsAll.filter((i) => hasContact(i.prospect))
+  const hiddenCount = pendingItemsAll.length - pendingItemsWithContact.length
+  const pendingItems = showHidden ? pendingItemsAll : pendingItemsWithContact
   // doneItems : plus récemment appelé en haut (called_at DESC)
   const doneItems = items
     .filter((item) => Boolean(item.called_at))
@@ -226,6 +241,27 @@ export function DailyListClient({ initialItems }: DailyListClientProps) {
           )}
         </div>
       </div>
+
+      {/* Bandeau "X prospect(s) écarté(s) (pas de point de contact)" — toggle */}
+      {hiddenCount > 0 && (
+        <div
+          className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm dark:border-gray-800 dark:bg-gray-800/40"
+          role="status"
+        >
+          <p className="text-gray-600 dark:text-gray-400">
+            <span className="font-semibold text-gray-800 dark:text-gray-200">{hiddenCount}</span>{' '}
+            prospect{hiddenCount > 1 ? 's' : ''} écarté{hiddenCount > 1 ? 's' : ''} (pas de point de contact)
+          </p>
+          <button
+            type="button"
+            onClick={() => setShowHidden((prev) => !prev)}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 transition-colors hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-gray-400 focus:ring-offset-1 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 dark:hover:bg-gray-800 dark:focus:ring-offset-gray-900"
+            aria-pressed={showHidden}
+          >
+            {showHidden ? 'Masquer' : 'Voir tous'}
+          </button>
+        </div>
+      )}
 
       {/* Appels à faire */}
       {pendingItems.length > 0 && (

@@ -19,6 +19,29 @@ interface ProspectCardProps {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
+/**
+ * Affiche uniquement le premier prénom quand l'enrichissement renvoie plusieurs
+ * (ex. "Jean Marc" ou "Marie-Claire Dupont"). On split sur espace OU tiret et
+ * on prend le premier segment non vide, puis on trim.
+ * Vide / undefined → chaîne vide (à laisser le caller gérer le fallback).
+ */
+export function displayFirstName(p?: string): string {
+  if (!p) return ''
+  const first = p.split(/[\s\-]+/).find((s) => s.trim().length > 0)
+  return first ? first.trim() : ''
+}
+
+/**
+ * Format SIREN à 9 chiffres en groupes de 3 (ex. "123456789" → "123 456 789").
+ * Si la chaîne est invalide / manquante, retourne la valeur d'origine non formatée.
+ */
+function formatSiren(siren?: string): string {
+  if (!siren) return ''
+  const digits = siren.replace(/\D/g, '')
+  if (digits.length !== 9) return siren
+  return `${digits.slice(0, 3)} ${digits.slice(3, 6)} ${digits.slice(6, 9)}`
+}
+
 const CALL_RESULTS: { value: CallResult; label: string; icon: string }[] = [
   { value: 'interested', label: 'Intéressé — RDV à fixer', icon: 'M9 12l2 2 4-4m6 2a9 9 0 1 1-18 0 9 9 0 0 1 18 0z' },
   { value: 'callback', label: 'Rappeler plus tard', icon: 'M12 8v4l3 3m6-3a9 9 0 1 1-18 0 9 9 0 0 1 18 0z' },
@@ -26,6 +49,10 @@ const CALL_RESULTS: { value: CallResult; label: string; icon: string }[] = [
   { value: 'wrong_contact', label: 'Mauvais contact', icon: 'M16 7a4 4 0 1 1-8 0 4 4 0 0 1 8 0zM12 14a7 7 0 0 0-7 7h14a7 7 0 0 0-7-7z' },
   { value: 'no_answer', label: 'Pas de réponse', icon: 'M20.354 15.354A9 9 0 0 1 8.646 3.646 9.003 9.003 0 0 0 12 21a9.003 9.003 0 0 0 8.354-5.646z' },
   { value: 'voicemail', label: 'Messagerie vocale', icon: 'M19 11a7 7 0 0 1-7 7m0 0a7 7 0 0 1-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 0 1-3-3V5a3 3 0 0 1 6 0v6a3 3 0 0 1-3 3z' },
+  // Email envoyé — icône enveloppe (heroicons mail outline)
+  { value: 'email_sent', label: 'Email envoyé', icon: 'M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2zM2 6l10 7 10-7' },
+  // Pas de point de contact — icône user-x (utilisateur barré)
+  { value: 'no_contact_point', label: 'Pas de point de contact', icon: 'M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM17 8l5 5M22 8l-5 5' },
 ]
 
 const CALL_RESULT_BADGE: Record<CallResult, { label: string; className: string; dot: string }> = {
@@ -58,6 +85,16 @@ const CALL_RESULT_BADGE: Record<CallResult, { label: string; className: string; 
     label: 'Messagerie',
     className: 'bg-yellow-50 text-yellow-700 border-yellow-200 dark:bg-yellow-950/50 dark:text-yellow-400 dark:border-yellow-800',
     dot: 'bg-yellow-400',
+  },
+  email_sent: {
+    label: 'Email envoyé',
+    className: 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/50 dark:text-blue-400 dark:border-blue-800',
+    dot: 'bg-blue-500',
+  },
+  no_contact_point: {
+    label: 'Pas de point de contact',
+    className: 'bg-gray-100 text-gray-600 border-gray-200 dark:bg-gray-800 dark:text-gray-400 dark:border-gray-700',
+    dot: 'bg-gray-400',
   },
 }
 
@@ -225,8 +262,15 @@ export function ProspectCard({ item, onFeedbackSubmit }: ProspectCardProps) {
             {prospect.raison_sociale}
           </h2>
 
+          {/* SIREN — sous-titre cliquable (copie au clipboard) pour retrouver le BEGES sur ADEME */}
+          {prospect.siren && (
+            <p className="mt-0.5 font-mono text-xs text-gray-400 dark:text-gray-500">
+              SIREN <span className="font-semibold tracking-wide text-gray-500 dark:text-gray-400">{formatSiren(prospect.siren)}</span>
+            </p>
+          )}
+
           {/* Contact rapide — visible immédiatement sans dérouler */}
-          {(prospect.contact_nom || prospect.contact_prenom || prospect.contact_telephone || prospect.contact_email) && (
+          {(prospect.contact_nom || prospect.contact_prenom || prospect.contact_telephone || prospect.contact_email || prospect.contact_linkedin) && (
             <div className="mt-2 space-y-1">
               {(prospect.contact_nom || prospect.contact_prenom) && (
                 <p className="flex items-center gap-1.5 text-sm text-gray-600 dark:text-gray-400">
@@ -248,7 +292,7 @@ export function ProspectCard({ item, onFeedbackSubmit }: ProspectCardProps) {
                     <circle cx="12" cy="7" r="4" />
                   </svg>
                   <span className="font-medium text-gray-800 dark:text-gray-200">
-                    {[prospect.contact_prenom, prospect.contact_nom].filter(Boolean).join(' ')}
+                    {[displayFirstName(prospect.contact_prenom), prospect.contact_nom].filter(Boolean).join(' ')}
                   </span>
                   {prospect.contact_poste && (
                     <span className="text-gray-500 dark:text-gray-500">
@@ -306,6 +350,30 @@ export function ProspectCard({ item, onFeedbackSubmit }: ProspectCardProps) {
                     <polyline points="22,6 12,13 2,6" />
                   </svg>
                   {prospect.contact_email}
+                </a>
+              )}
+
+              {prospect.contact_linkedin && (
+                <a
+                  href={prospect.contact_linkedin}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-1.5 text-sm font-medium text-blue-600 transition-colors hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300"
+                  aria-label="Ouvrir le profil LinkedIn (nouvel onglet)"
+                >
+                  {/* Icône LinkedIn (logo) */}
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    width="13"
+                    height="13"
+                    viewBox="0 0 24 24"
+                    fill="currentColor"
+                    className="flex-shrink-0"
+                    aria-hidden="true"
+                  >
+                    <path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 1 1 0-4.124 2.062 2.062 0 0 1 0 4.124zM7.119 20.452H3.554V9h3.565v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z" />
+                  </svg>
+                  Profil LinkedIn
                 </a>
               )}
             </div>
@@ -366,7 +434,7 @@ export function ProspectCard({ item, onFeedbackSubmit }: ProspectCardProps) {
       </div>
 
       {/* ── Infos contact ── */}
-      {(prospect.contact_nom || prospect.contact_prenom || prospect.contact_telephone || prospect.contact_email || item.meilleur_creneau) && (
+      {(prospect.contact_nom || prospect.contact_prenom || prospect.contact_telephone || prospect.contact_email || prospect.contact_linkedin || item.meilleur_creneau) && (
         <div className="border-t border-gray-100 bg-gray-50/60 px-5 py-4 dark:border-gray-800 dark:bg-gray-800/20">
           <div className="flex flex-wrap gap-5">
             {(prospect.contact_nom || prospect.contact_prenom) && (
@@ -375,7 +443,7 @@ export function ProspectCard({ item, onFeedbackSubmit }: ProspectCardProps) {
                   Contact
                 </p>
                 <p className="mt-1 text-sm font-medium text-gray-900 dark:text-white">
-                  {[prospect.contact_prenom, prospect.contact_nom].filter(Boolean).join(' ')}
+                  {[displayFirstName(prospect.contact_prenom), prospect.contact_nom].filter(Boolean).join(' ')}
                   {prospect.contact_poste ? (
                     <span className="ml-1 text-gray-500 dark:text-gray-400">
                       — {prospect.contact_poste}
@@ -447,6 +515,33 @@ export function ProspectCard({ item, onFeedbackSubmit }: ProspectCardProps) {
                 <p className="mt-1 text-sm text-gray-400 dark:text-gray-600">Non renseigné</p>
               )}
             </div>
+
+            {prospect.contact_linkedin && (
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">
+                  LinkedIn
+                </p>
+                <a
+                  href={prospect.contact_linkedin}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="mt-1 inline-flex items-center gap-1.5 text-sm font-semibold text-blue-600 transition-colors hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300"
+                  aria-label="Ouvrir le profil LinkedIn (nouvel onglet)"
+                >
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    width="14"
+                    height="14"
+                    viewBox="0 0 24 24"
+                    fill="currentColor"
+                    aria-hidden="true"
+                  >
+                    <path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 1 1 0-4.124 2.062 2.062 0 0 1 0 4.124zM7.119 20.452H3.554V9h3.565v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z" />
+                  </svg>
+                  Voir le profil
+                </a>
+              </div>
+            )}
 
             {item.meilleur_creneau && (
               <div>

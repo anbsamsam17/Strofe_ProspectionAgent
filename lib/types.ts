@@ -23,6 +23,8 @@ export type CallResult =
   | 'wrong_contact'
   | 'no_answer'
   | 'voicemail'
+  | 'email_sent'
+  | 'no_contact_point'
 
 export type Priority = 'haute' | 'normale' | 'basse'
 

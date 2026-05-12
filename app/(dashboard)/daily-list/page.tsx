@@ -107,7 +107,7 @@ export default async function DailyListPage() {
         prospect:prospects(
           id, siren, raison_sociale, secteur_naf, secteur_libelle,
           effectif_min, effectif_max, ville, code_postal,
-          contact_nom, contact_prenom, contact_poste, contact_telephone, contact_email,
+          contact_nom, contact_prenom, contact_poste, contact_telephone, contact_email, contact_linkedin,
           beges_publie, beges_derniere_publication, beges_url, beges_valide,
           obligation_beges, score_priorite, statut
         )
