@@ -3,6 +3,7 @@
 // Source : API Sirene INSEE v3.11 + ADEME BEGES (Data Fair)
 // ============================================================
 
+import { captureWithContext } from '@/lib/observability/sentry-helpers'
 import type {
   Prospect,
   SireneEtablissement,
@@ -662,7 +663,21 @@ export async function sourcerEntreprises(
         },
       })
     } catch (err) {
-      // Erreur réseau / timeout après retries → propager pour permettre fallback
+      // Erreur réseau / timeout après retries → capturer Sentry + propager pour fallback.
+      // Le throw ci-dessous est rattrapé par runAdaptiveSourcing pour basculer sur
+      // Recherche Entreprises. Sans ce captureException on ne voit l'erreur Sirene
+      // que dans Vercel logs (sans alerting Sentry).
+      captureWithContext(err, {
+        pipeline_phase: 'sourcing',
+        api: 'sirene',
+        extra: {
+          phase: 'sirene_fetch',
+          page,
+          curseur: currentRawCursor,
+          chunk_index: currentChunkIndex,
+          chunk_count: nafChunks.length,
+        },
+      })
       throw new SireneApiError(
         `Sirene: erreur réseau page ${page} chunk=${currentChunkIndex}/${nafChunks.length} curseur=${currentRawCursor} — ${
           err instanceof Error ? err.message : String(err)
@@ -731,30 +746,76 @@ export async function sourcerEntreprises(
           msg: 'Sirene HTTP 4xx — throw SireneApiError pour fallback',
         }),
       )
-      throw new SireneApiError(
+      const sireneErr = new SireneApiError(
         `Sirene: HTTP ${response.status} page ${page} chunk=${currentChunkIndex}/${nafChunks.length} curseur=${currentRawCursor} body=${body.slice(0, 200)}`,
         response.status,
       )
+      // Capture Sentry AVANT le throw — le caller (runAdaptiveSourcing) intercepte
+      // SireneApiError pour basculer sur le fallback. Sans capture ici, l'erreur
+      // est invisible côté alerting (cas du bug "Erreur de syntaxe dans le paramètre q"
+      // découvert uniquement dans Vercel logs le 2026-05-12).
+      captureWithContext(sireneErr, {
+        pipeline_phase: 'sourcing',
+        api: 'sirene',
+        http_status: response.status,
+        extra: {
+          phase: 'sirene_page',
+          page,
+          curseur: currentRawCursor,
+          chunk_index: currentChunkIndex,
+          chunk_count: nafChunks.length,
+          // body tronqué à 1KB pour Sentry — le body reste utile au debug
+          // (message d'erreur INSEE typé), pas de PII attendue dans la réponse.
+          body_preview: body.slice(0, 1024),
+        },
+      })
+      throw sireneErr
     }
 
     if (!response.ok) {
-      // 5xx persistants → erreur fatale typée
+      // 5xx persistants → erreur fatale typée + capture Sentry pour alerting.
       const body = await response.text().catch(() => '')
-      throw new SireneApiError(
+      const sireneErr = new SireneApiError(
         `Sirene: HTTP ${response.status} page ${page} chunk=${currentChunkIndex}/${nafChunks.length} curseur=${currentRawCursor} body=${body.slice(0, 200)}`,
         response.status,
       )
+      captureWithContext(sireneErr, {
+        pipeline_phase: 'sourcing',
+        api: 'sirene',
+        http_status: response.status,
+        extra: {
+          phase: 'sirene_page',
+          page,
+          curseur: currentRawCursor,
+          chunk_index: currentChunkIndex,
+          chunk_count: nafChunks.length,
+          body_preview: body.slice(0, 1024),
+        },
+      })
+      throw sireneErr
     }
 
     let data: SireneResponse
     try {
       data = (await response.json()) as SireneResponse
     } catch (err) {
-      throw new SireneApiError(
+      const parseErr = new SireneApiError(
         `Sirene: parse JSON échoué page ${page} chunk=${currentChunkIndex}/${nafChunks.length} curseur=${currentRawCursor} — ${
           err instanceof Error ? err.message : String(err)
         }`,
       )
+      captureWithContext(parseErr, {
+        pipeline_phase: 'sourcing',
+        api: 'sirene',
+        extra: {
+          phase: 'sirene_parse',
+          page,
+          curseur: currentRawCursor,
+          chunk_index: currentChunkIndex,
+          chunk_count: nafChunks.length,
+        },
+      })
+      throw parseErr
     }
 
     pagesLoaded++

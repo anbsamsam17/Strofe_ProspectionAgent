@@ -3,6 +3,10 @@
 // Chef d'orchestre du run nocturne (Vercel Cron 22h)
 // ============================================================
 
+import {
+  captureWithContext,
+  shouldReportFailure,
+} from '@/lib/observability/sentry-helpers'
 import type { Database, Json } from '@/lib/supabase/database.types'
 import type { SupabaseAdminClient, SupabaseServerClient } from '@/lib/supabase/server'
 import type {
@@ -361,6 +365,17 @@ async function phaseContactEnrichment(
         siren: prospect.siren,
         error: err instanceof Error ? err.message : String(err),
       })
+      // Anti-spam : capture seulement la 1ère erreur + 1 sur 5 ensuite, par run.
+      // Sans throttle, une cascade RE/Pappers/Hunter en panne génère N events Sentry
+      // identiques par run (cf. observability bug B 2026-05-12, timeout 300s).
+      if (shouldReportFailure('contact-enrichment.cascade', run.id, 5)) {
+        captureWithContext(err, {
+          pipeline_phase: 'enrichment',
+          run_id: run.id,
+          user_id: run.user_id,
+          extra: { siren: prospect.siren },
+        })
+      }
       continue
     }
 
@@ -715,6 +730,12 @@ export async function runAgentNocturne(
     log(run, 'sourcing_sirene', 'FATAL: sourcing adaptatif échoué', 'error', {
       error: err instanceof Error ? err.message : String(err),
     })
+    captureWithContext(err, {
+      pipeline_phase: 'sourcing',
+      run_id: run.id,
+      user_id: run.user_id,
+      extra: { fatal: true, phase: 'sourcing_adaptive' },
+    })
     run.status = 'failed'
     run.error_message = `Sourcing: ${err instanceof Error ? err.message : String(err)}`
     run.completed_at = new Date().toISOString()
@@ -788,6 +809,12 @@ export async function runAgentNocturne(
   } catch (err) {
     log(run, 'construction_liste', 'FATAL: création daily list échouée', 'error', {
       error: err instanceof Error ? err.message : String(err),
+    })
+    captureWithContext(err, {
+      pipeline_phase: 'daily_list',
+      run_id: run.id,
+      user_id: run.user_id,
+      extra: { fatal: true, phase: 'create_daily_list' },
     })
     run.status = 'failed'
     run.error_message = `Daily list: ${err instanceof Error ? err.message : String(err)}`

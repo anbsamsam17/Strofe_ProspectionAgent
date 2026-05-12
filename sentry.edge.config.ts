@@ -5,6 +5,7 @@
 // La config doit rester légère et compatible avec les contraintes Edge.
 
 import * as Sentry from '@sentry/nextjs'
+import { scrubSentryEvent } from '@/lib/observability/sentry-helpers'
 
 Sentry.init({
   dsn: process.env.NEXT_PUBLIC_SENTRY_DSN,
@@ -15,4 +16,9 @@ Sentry.init({
 
   // Pas de profilesSampleRate sur Edge : le profiling CPU n'est pas supporté
   // dans les environnements sans accès aux APIs Node.js natives.
+
+  // Scrub PII (emails + téléphones) avant envoi — cf. .claude/rules/security.md.
+  beforeSend(event) {
+    return scrubSentryEvent(event)
+  },
 })

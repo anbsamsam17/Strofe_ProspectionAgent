@@ -14,6 +14,7 @@
 // NE GÉNÈRE PAS de pitchs.
 // ============================================================
 
+import { captureWithContext } from '@/lib/observability/sentry-helpers'
 import type { Database, Json } from '@/lib/supabase/database.types'
 import type { SupabaseAdminClient } from '@/lib/supabase/server'
 import type { AgentLog, AgentRun, ProfileSettings, Prospect, SireneEtablissement } from '@/lib/types'
@@ -146,6 +147,14 @@ const ENRICH_SOFT_TIMEOUT_MS = 180 * 1000
 // Recherche Entreprises répond lentement sans déclencher le circuit breaker).
 // 80 × ~2s/SIREN (ADEME parallèle + tel) ≈ 160s — confortable sous le soft timeout.
 const ENRICH_MAX_ETABLISSEMENTS = 80
+
+/**
+ * Intervalle du heartbeat (ms) — pousse un log "vivant" dans `agent_runs.logs`
+ * toutes les 30s. Permet de localiser la phase du run au moment du kill quand
+ * Vercel termine la fonction sur timeout 300s sans nous laisser logguer le
+ * vrai message d'erreur. Cf. bug B 2026-05-12 (timeout enrichissement contact).
+ */
+const HEARTBEAT_INTERVAL_MS = 30_000
 
 // Reset du curseur si l'univers a été déclaré épuisé il y a moins de N jours
 // (nouveaux établissements créés depuis dernière épuisement).
@@ -402,6 +411,60 @@ async function persistSourcingState(
 }
 
 // ------------------------------------------------------------
+// HEARTBEAT — détection post-mortem des timeouts Vercel
+// ------------------------------------------------------------
+
+/**
+ * État partagé du run en cours, lu par le heartbeat pour savoir où on est resté.
+ * Muté par la boucle principale ; le heartbeat ne le mute jamais.
+ */
+export interface HeartbeatState {
+  /** Phase courante du pipeline (sourcing_init, sourcing_loop, enrichissement, upsert, ...). */
+  phase: string
+  /** Compteurs incrémentaux pour le diag (pages, candidats, batch en cours). */
+  counters: Record<string, number | string>
+}
+
+/**
+ * Démarre un heartbeat qui pousse un log toutes les `HEARTBEAT_INTERVAL_MS` ms
+ * dans `agent_runs.logs` (via le `pushLog` fourni) ET console (JSON struct).
+ *
+ * Retourne une fonction `stop()` à appeler dans un finally pour cleanup propre.
+ * Idempotent : appeler stop() plusieurs fois est sans effet.
+ *
+ * Pourquoi : Vercel kill la fonction à 300s sans nous laisser logguer une erreur.
+ * Sans heartbeat, on ne sait pas si le run est mort en sourcing, enrichment, etc.
+ * Avec heartbeat, le dernier log persisté avant la mort indique la phase.
+ */
+export function startHeartbeat(
+  state: HeartbeatState,
+  pushLog: (phase: string, message: string, level: 'info' | 'warn' | 'error', data?: Record<string, unknown>) => void,
+  intervalMs: number = HEARTBEAT_INTERVAL_MS,
+): () => void {
+  let stopped = false
+  const start = Date.now()
+
+  const interval = setInterval(() => {
+    if (stopped) return
+    pushLog('heartbeat', 'Run actif (heartbeat)', 'info', {
+      current_phase: state.phase,
+      elapsed_ms: Date.now() - start,
+      counters: { ...state.counters },
+    })
+  }, intervalMs)
+
+  // unref évite que le heartbeat empêche le process Node de se terminer
+  // si le run finit avant l'intervalle (env. test ou cold-start abandonné).
+  if (typeof interval.unref === 'function') interval.unref()
+
+  return () => {
+    if (stopped) return
+    stopped = true
+    clearInterval(interval)
+  }
+}
+
+// ------------------------------------------------------------
 // BOUCLE ADAPTATIVE — factorisée et réutilisée par les deux callers
 // ------------------------------------------------------------
 
@@ -523,6 +586,18 @@ export async function runAdaptiveSourcing(
               fallback_error: fallbackErr instanceof Error ? fallbackErr.message : String(fallbackErr),
             },
           )
+          // Échec total des deux sources — alerting Sentry obligatoire (pas de fallback restant).
+          captureWithContext(fallbackErr, {
+            pipeline_phase: 'sourcing',
+            api: 'recherche_entreprises',
+            run_id: options.runId,
+            user_id: options.userId,
+            extra: {
+              phase: 'sourcing_fallback_total_failure',
+              sirene_error: err.message,
+              sirene_status: err.status,
+            },
+          })
           throw new Error(
             `runAdaptiveSourcing: échec total sourcing — Sirene: ${err.message} ; fallback: ${
               fallbackErr instanceof Error ? fallbackErr.message : String(fallbackErr)
@@ -887,6 +962,15 @@ export async function runPipelineSourcing(
 ): Promise<PipelineSourcingOutput> {
   const { userId, runId, params, settings, supabase, pushLog } = input
 
+  // Heartbeat : log toutes les 30s la phase courante du pipeline pour permettre
+  // un diag post-mortem en cas de Vercel timeout 300s (cf. HEARTBEAT_INTERVAL_MS).
+  const hbState: HeartbeatState = {
+    phase: 'sourcing_init',
+    counters: { pages_loaded: 0, candidates_collected: 0 },
+  }
+  const stopHeartbeat = startHeartbeat(hbState, pushLog)
+
+  try {
   // 1. Filtres effectifs + signature
   const filters = resolveSourcingFilters(params, settings)
   pushLog('sourcing_init', 'Filtres résolus', 'info', {
@@ -952,6 +1036,7 @@ export async function runPipelineSourcing(
 
   try {
     // 5a. Boucle adaptative
+    hbState.phase = 'sourcing_loop'
     outcome = await runAdaptiveSourcing({
       userId,
       runId,
@@ -961,6 +1046,8 @@ export async function runPipelineSourcing(
       targetCandidates,
       pushLog,
     })
+    hbState.counters.pages_loaded = outcome.pagesLoaded
+    hbState.counters.candidates_collected = outcome.etablissements.length
 
     if (outcome.etablissements.length === 0) {
       pushLog(
@@ -975,14 +1062,19 @@ export async function runPipelineSourcing(
       )
     } else {
       // 5b. Enrich ADEME + scoring
+      hbState.phase = 'enrichissement'
       const enrichResult = await enrichAndScore(userId, outcome.etablissements, pushLog)
       scored = enrichResult.scored
       qualifiedCount = enrichResult.qualifiedCount
+      hbState.counters.qualified = qualifiedCount
 
       // 5c. Upsert
+      hbState.phase = 'upsert'
       const upsertResult = await upsertProspectsBatch(supabase, scored, pushLog)
       prospectsNew = upsertResult.prospectsNew
       prospectsUpdated = upsertResult.prospectsUpdated
+      hbState.counters.prospects_new = prospectsNew
+      hbState.counters.prospects_updated = prospectsUpdated
     }
   } finally {
     // 6. Persiste TOUJOURS l'état partiel (succès ou erreur) — pas de curseur perdu.
@@ -1003,6 +1095,10 @@ export async function runPipelineSourcing(
   }
 
   return { scored, qualifiedCount, outcome, prospectsNew, prospectsUpdated }
+  } finally {
+    // Cleanup heartbeat dans TOUS les cas (succès, throw, timeout interne).
+    stopHeartbeat()
+  }
 }
 
 // ------------------------------------------------------------
