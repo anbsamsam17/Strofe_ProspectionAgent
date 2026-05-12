@@ -14,6 +14,7 @@ import {
   SireneApiError,
   SireneValidationError,
   sourcerEntreprises,
+  sourcerEntreprisesFallback,
   type SourcerEntreprisesParams,
 } from '../sourcing'
 import {
@@ -390,7 +391,7 @@ describe('sourcerEntreprises — gestion erreurs API (Cat. D)', () => {
     ).rejects.toBeInstanceOf(SireneApiError)
   })
 
-  it('retourne tableau vide + exhausted=true sur HTTP 404 (univers vide)', async () => {
+  it('retourne tableau vide + exhausted=true + universeEmpty=true sur HTTP 404 (1ère page)', async () => {
     const fetchMock = vi.fn().mockResolvedValueOnce(
       makeResponse({ status: 404, ok: false }),
     )
@@ -400,6 +401,9 @@ describe('sourcerEntreprises — gestion erreurs API (Cat. D)', () => {
 
     expect(result.etablissements).toEqual([])
     expect(result.exhausted).toBe(true)
+    // Décision produit 2026-05-12 : un 404 sur la 1ère page = univers vide
+    // (filtres trop restrictifs), distinct d'un curseur consommé.
+    expect(result.universeEmpty).toBe(true)
   })
 
   it('throw SireneApiError quand le body JSON est invalide', async () => {
@@ -533,5 +537,169 @@ describe('sourcerEntreprises — construction de requête Lucene (Cat. E)', () =
 
     const url = decodeFetchUrl(getFetchedUrls(fetchMock)[0])
     expect(url).not.toContain('activitePrincipaleEtablissement:(')
+  })
+})
+
+// ============================================================
+// CATÉGORIE F — universeEmpty vs exhausted (décision 2026-05-12)
+// Distinction sémantique : 404 1ère page = univers vide ≠ pagination terminée.
+// ============================================================
+
+describe('sourcerEntreprises — universeEmpty (Cat. F)', () => {
+  it('universeEmpty=true sur 404 dès la 1ère page (filtres → aucun match)', async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(
+      makeResponse({ status: 404, ok: false }),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    const result = await sourcerEntreprises({
+      nafCodes: ['01.21Z'],
+      curseur: '*',
+      maxPages: 1,
+    })
+
+    expect(result.universeEmpty).toBe(true)
+    expect(result.exhausted).toBe(true)
+    expect(result.etablissements).toEqual([])
+  })
+
+  it('universeEmpty=false quand Sirene répond 200 avec total>0 mais page vide (curseur terminale)', async () => {
+    // L'univers existe (header.total = 5) mais la page courante ne renvoie aucun
+    // établissement (par exemple : tous filtrés via excludeSirens, ou page de fin).
+    // → exhausted=true mais universeEmpty=false.
+    const terminalEmpty = buildSirenePage({
+      curseur: '*',
+      curseurSuivant: '*', // page terminale
+      count: 0,
+      total: 5,
+    })
+    const fetchMock = vi.fn().mockResolvedValueOnce(makeJsonResponse(terminalEmpty))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const result = await sourcerEntreprises({
+      nafCodes: ['01.21Z'],
+      curseur: '*',
+      maxPages: 1,
+    })
+
+    expect(result.universeEmpty).toBe(false)
+    expect(result.totalAvailable).toBe(5)
+    expect(result.exhausted).toBe(true)
+  })
+
+  it('universeEmpty=false sur page nominale (200, etablissements présents)', async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(
+      makeJsonResponse(sireneCursorSequence.page1),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    const result = await sourcerEntreprises({ curseur: '*', maxPages: 1 })
+
+    expect(result.universeEmpty).toBe(false)
+    expect(result.etablissements.length).toBeGreaterThan(0)
+  })
+
+  it('universeEmpty=false sur 404 reçu sur une page > 1 (fin de pagination, pas univers vide)', async () => {
+    // Page 1 OK avec curseurSuivant différent → on continue. Page 2 → 404.
+    // Au final exhausted=true mais universeEmpty doit rester false (l'univers
+    // existait, la pagination est juste épuisée).
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    try {
+      const fetchMock = vi.fn()
+        .mockResolvedValueOnce(makeJsonResponse(sireneCursorSequence.page1))
+        .mockResolvedValueOnce(makeResponse({ status: 404, ok: false }))
+      vi.stubGlobal('fetch', fetchMock)
+
+      const promise = sourcerEntreprises({ curseur: '*', maxPages: 2, pageSize: 100 })
+      await vi.advanceTimersByTimeAsync(3_000)
+      const result = await promise
+
+      expect(result.universeEmpty).toBe(false)
+      expect(result.exhausted).toBe(true)
+      expect(result.pagesLoaded).toBe(1)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+})
+
+// ============================================================
+// CATÉGORIE G — sourcerEntreprisesFallback (Recherche Entreprises)
+// Décision 2026-05-12 : departements=[] = France entière (PAS de param departement).
+// ============================================================
+
+describe('sourcerEntreprisesFallback — paramètres URL', () => {
+  it('omet le param departement quand departements=[] (France entière)', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      makeJsonResponse({ results: [] }),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    await sourcerEntreprisesFallback({
+      nafCodes: ['49.41A'],
+      departements: [],
+      effectifTranches: ['41'],
+      maxResults: 25,
+    })
+
+    expect(fetchMock).toHaveBeenCalled()
+    const calledUrl = String(fetchMock.mock.calls[0][0])
+    expect(calledUrl).not.toContain('departement=')
+    expect(calledUrl).toContain('tranche_effectif_salarie=41')
+    expect(calledUrl).toContain('activite_principale=49.41A')
+  })
+
+  it('omet le param departement quand departements absent (défaut implicite France entière)', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      makeJsonResponse({ results: [] }),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    await sourcerEntreprisesFallback({
+      nafCodes: ['49.41A'],
+      effectifTranches: ['41'],
+      maxResults: 25,
+    })
+
+    const calledUrl = String(fetchMock.mock.calls[0][0])
+    expect(calledUrl).not.toContain('departement=')
+  })
+
+  it('inclut le param departement quand departements=["75","33"]', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      makeJsonResponse({ results: [] }),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    await sourcerEntreprisesFallback({
+      nafCodes: ['49.41A'],
+      departements: ['75', '33'],
+      effectifTranches: ['21', '22'],
+      maxResults: 25,
+    })
+
+    const calledUrl = String(fetchMock.mock.calls[0][0])
+    // L'URL est encodée → "," devient "%2C"
+    expect(calledUrl).toMatch(/departement=75(%2C|,)33/)
+    expect(calledUrl).toMatch(/tranche_effectif_salarie=21(%2C|,)22/)
+  })
+
+  it('passe effectifTranches custom (au lieu du défaut 50+)', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      makeJsonResponse({ results: [] }),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    await sourcerEntreprisesFallback({
+      nafCodes: ['49.41A'],
+      departements: ['33'],
+      effectifTranches: ['11', '12'], // 10-49 salariés (cible non-BEGES)
+      maxResults: 25,
+    })
+
+    const calledUrl = String(fetchMock.mock.calls[0][0])
+    expect(calledUrl).toMatch(/tranche_effectif_salarie=11(%2C|,)12/)
+    // Vérifier qu'on n'a PAS le défaut legacy (50+)
+    expect(calledUrl).not.toContain('21%2C22%2C31')
   })
 })

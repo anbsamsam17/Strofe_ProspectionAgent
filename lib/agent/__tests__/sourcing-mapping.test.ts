@@ -4,7 +4,7 @@
 // Spec : .claude/context/sourcing-param-mapping.md §1.4, §2.4, §3
 // ============================================================
 
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import {
   computeFiltersSignature,
   mapEffectifToTranches,
@@ -77,21 +77,23 @@ describe('mapEffectifToTranches', () => {
 // ------------------------------------------------------------
 
 describe('mapRegionToCodePostal', () => {
-  it('retourne range Gironde (legacy default) quand label est undefined/null/vide', () => {
-    // F-IMP-03 : préserve le comportement legacy. Phase 2 = élargissement explicite.
-    expect(mapRegionToCodePostal(undefined)).toEqual(['33000', '33999'])
-    expect(mapRegionToCodePostal(null)).toEqual(['33000', '33999'])
-    expect(mapRegionToCodePostal('')).toEqual(['33000', '33999'])
-    expect(mapRegionToCodePostal('   ')).toEqual(['33000', '33999'])
+  it('défaut implicite : France entière quand label est undefined/null/vide', () => {
+    // Décision produit 2026-05-12 — remplace l'ancien défaut "Gironde" qui
+    // causait le bug "Univers de recherche épuisé / 0 entreprises" en UI quand
+    // l'utilisateur ne pré-renseignait pas targetRegion.
+    expect(mapRegionToCodePostal(undefined)).toEqual(['00000', '99999'])
+    expect(mapRegionToCodePostal(null)).toEqual(['00000', '99999'])
+    expect(mapRegionToCodePostal('')).toEqual(['00000', '99999'])
+    expect(mapRegionToCodePostal('   ')).toEqual(['00000', '99999'])
   })
 
-  it('retourne range nationale UNIQUEMENT pour "France" / "fr" explicite', () => {
+  it('retourne range nationale pour "France" / "fr" explicite', () => {
     expect(mapRegionToCodePostal('France')).toEqual(['00000', '99999'])
     expect(mapRegionToCodePostal('FRANCE')).toEqual(['00000', '99999'])
     expect(mapRegionToCodePostal('fr')).toEqual(['00000', '99999'])
   })
 
-  it('mappe "Gironde" et "33" vers [33000, 33999]', () => {
+  it('label explicite "Gironde" reste sur la Gironde (pas de régression)', () => {
     expect(mapRegionToCodePostal('Gironde')).toEqual(['33000', '33999'])
     expect(mapRegionToCodePostal('33')).toEqual(['33000', '33999'])
     expect(mapRegionToCodePostal('gironde')).toEqual(['33000', '33999'])
@@ -109,8 +111,23 @@ describe('mapRegionToCodePostal', () => {
     expect(max).toBe('87999')
   })
 
-  it('fallback Gironde sur label non reconnu', () => {
-    expect(mapRegionToCodePostal('Atlantide')).toEqual(['33000', '33999'])
+  it('fallback France entière sur label non reconnu (+ log warn)', () => {
+    // Décision produit 2026-05-12 : un label inconnu ne doit plus retomber
+    // silencieusement sur la Gironde. Fallback = France entière + log warn.
+    const spy = vi.spyOn(console, 'log').mockImplementation(() => {})
+    expect(mapRegionToCodePostal('Atlantide')).toEqual(['00000', '99999'])
+    expect(spy).toHaveBeenCalled()
+    const warnLog = spy.mock.calls.find(([arg]) => {
+      if (typeof arg !== 'string') return false
+      try {
+        const parsed = JSON.parse(arg) as { level?: string; msg?: string }
+        return parsed.level === 'warn' && typeof parsed.msg === 'string' && parsed.msg.includes('Atlantide')
+      } catch {
+        return false
+      }
+    })
+    expect(warnLog).toBeDefined()
+    spy.mockRestore()
   })
 
   it('accepte un code département direct non listé (ex. 13 Bouches-du-Rhône)', () => {
@@ -127,21 +144,22 @@ describe('mapRegionToCodePostal', () => {
 // ------------------------------------------------------------
 
 describe('mapRegionToDepartements', () => {
-  it('retourne ["33"] (legacy default Gironde) quand label est undefined/null/vide', () => {
-    // F-IMP-03 : préserve le comportement legacy. Phase 2 = élargissement explicite.
-    expect(mapRegionToDepartements(undefined)).toEqual(['33'])
-    expect(mapRegionToDepartements(null)).toEqual(['33'])
-    expect(mapRegionToDepartements('')).toEqual(['33'])
-    expect(mapRegionToDepartements('   ')).toEqual(['33'])
+  it('défaut implicite : [] (France entière) quand label est undefined/null/vide', () => {
+    // Décision produit 2026-05-12 — symétrique avec mapRegionToCodePostal.
+    // [] = pas de filtre département côté fallback Recherche Entreprises.
+    expect(mapRegionToDepartements(undefined)).toEqual([])
+    expect(mapRegionToDepartements(null)).toEqual([])
+    expect(mapRegionToDepartements('')).toEqual([])
+    expect(mapRegionToDepartements('   ')).toEqual([])
   })
 
-  it('retourne [] UNIQUEMENT pour "France" / "fr" explicite', () => {
+  it('retourne [] pour "France" / "fr" explicite', () => {
     expect(mapRegionToDepartements('France')).toEqual([])
     expect(mapRegionToDepartements('FRANCE')).toEqual([])
     expect(mapRegionToDepartements('fr')).toEqual([])
   })
 
-  it('mappe "Gironde" → ["33"]', () => {
+  it('label explicite "Gironde" → ["33"] (pas de régression)', () => {
     expect(mapRegionToDepartements('Gironde')).toEqual(['33'])
     expect(mapRegionToDepartements('33')).toEqual(['33'])
   })
@@ -160,8 +178,9 @@ describe('mapRegionToDepartements', () => {
     expect(depts).toContain('95')
   })
 
-  it('fallback Gironde sur label non reconnu', () => {
-    expect(mapRegionToDepartements('Atlantide')).toEqual(['33'])
+  it('fallback France entière sur label non reconnu', () => {
+    // Décision produit 2026-05-12 : un label inconnu retourne [] (pas plus Gironde).
+    expect(mapRegionToDepartements('Atlantide')).toEqual([])
   })
 })
 

@@ -147,9 +147,14 @@ const LABEL_TO_DEPARTEMENTS: ReadonlyMap<string, readonly string[]> = new Map([
   ['idf', ['75', '77', '78', '91', '92', '93', '94', '95']],
 ])
 
-/** Défaut legacy : Gironde uniquement (compat historique). */
-const DEFAULT_DEPARTEMENTS: readonly string[] = ['33']
-const DEFAULT_CODE_POSTAL_RANGE: readonly [string, string] = ['33000', '33999']
+/**
+ * Défaut : France entière (pas de filtre géographique).
+ * Décision produit 2026-05-12 — remplace l'ancien défaut "Gironde uniquement"
+ * qui causait le bug "Univers de recherche épuisé — 0 entreprises" quand
+ * l'utilisateur ne pré-renseignait pas `targetRegion`.
+ */
+const DEFAULT_DEPARTEMENTS: readonly string[] = []
+const DEFAULT_CODE_POSTAL_RANGE: readonly [string, string] = ['00000', '99999']
 
 /** Sentinelle : pas de filtre géographique (France entière). */
 const FRANCE_LABELS: ReadonlySet<string> = new Set(['france', 'fr', ''])
@@ -170,16 +175,15 @@ function normalizeRegionLabel(label: string): string {
  * Convertit un label région / code département en range de codes postaux `[min, max]`.
  *
  * Comportement :
- *   - `undefined` / `null` / vide → **fallback Gironde** (`['33000','33999']`).
- *     // Default = Gironde to preserve legacy behavior. Phase 2 will widen via explicit user setting.
- *     Le défaut historique du sourcing (avant Wave 2) ciblait la Gironde via la constante
- *     `CODE_POSTAL_QUERY = 'codePostalEtablissement:[33000 TO 33999]'`. L'orchestrator
- *     nocturne (`lib/agent/orchestrator.ts`) appelle `runPipelineSourcing` SANS `targetRegion` ;
- *     retourner une range nationale ici élargirait silencieusement l'univers à France entière.
- *     L'élargissement géographique est une décision métier de Phase 2, pas un effet de bord.
- *   - `"France"` / `"fr"` (label explicite) → range nationale (`['00000','99999']`).
+ *   - `undefined` / `null` / vide → **défaut France entière** (`['00000','99999']`).
+ *     Décision produit 2026-05-12 : un appel sans `targetRegion` cible désormais
+ *     la France entière (et non plus la Gironde). Cela corrige le bug
+ *     "Univers de recherche épuisé — 0 entreprises" déclenché côté UI quand
+ *     l'utilisateur ne renseigne pas explicitement de zone.
+ *   - `"France"` / `"fr"` (label explicite) → range nationale (`['00000','99999']`),
+ *     identique au défaut mais conservé pour lisibilité côté appelant.
  *   - Label/code reconnu (Gironde, 33, Nouvelle-Aquitaine, etc.) → range borné sur les départements.
- *   - Label non reconnu → fallback Gironde + log warn (compat historique).
+ *   - Label non reconnu → fallback **France entière** + log warn (plus de surprise géo silencieuse).
  *
  * @param label libellé région ou code département (2-3 chiffres)
  * @returns tuple `[cpMin, cpMax]` à utiliser dans `codePostalRange`
@@ -187,14 +191,15 @@ function normalizeRegionLabel(label: string): string {
 export function mapRegionToCodePostal(
   label: string | undefined | null,
 ): [string, string] {
-  // Default = Gironde to preserve legacy behavior. Phase 2 will widen via explicit user setting.
+  // Défaut : France entière (cf. décision produit 2026-05-12).
   if (!label?.trim()) {
     return [DEFAULT_CODE_POSTAL_RANGE[0], DEFAULT_CODE_POSTAL_RANGE[1]]
   }
 
   const normalized = normalizeRegionLabel(label)
 
-  // France entière → range nationale (pas de filtre effectif). Doit être EXPLICITE.
+  // "France" / "fr" / vide normalisé → range nationale explicite.
+  // Identique au défaut implicite, conservé pour clarté d'intention côté appelant.
   if (FRANCE_LABELS.has(normalized)) {
     return ['00000', '99999']
   }
@@ -209,12 +214,12 @@ export function mapRegionToCodePostal(
     return computeCodePostalRangeFromDepartements([normalized])
   }
 
-  // Fallback : log warn + Gironde (compat historique)
+  // Label non reconnu : log warn + fallback France entière (cf. décision 2026-05-12).
   console.log(
     JSON.stringify({
       level: 'warn',
       module: 'sourcing-mapping',
-      msg: `targetRegion non reconnue: "${label}" — fallback Gironde`,
+      msg: `targetRegion non reconnue: "${label}" — fallback France entière`,
     }),
   )
   return [DEFAULT_CODE_POSTAL_RANGE[0], DEFAULT_CODE_POSTAL_RANGE[1]]
@@ -260,21 +265,20 @@ function computeCodePostalRangeFromDepartements(
  * Utilisé par le fallback Recherche Entreprises qui filtre via `?departement=33,75`.
  *
  * Comportement :
- *   - `undefined` / `null` / vide → **fallback Gironde** (`['33']`).
- *     // Default = Gironde to preserve legacy behavior. Phase 2 will widen via explicit user setting.
- *     Cohérent avec `mapRegionToCodePostal` : l'orchestrator nocturne sans `targetRegion`
- *     doit continuer de cibler la Gironde (comportement legacy avant Wave 2).
+ *   - `undefined` / `null` / vide → **défaut France entière** (`[]`, pas de filtre département).
+ *     Décision produit 2026-05-12 : symétrique avec `mapRegionToCodePostal`. Un appel
+ *     sans `targetRegion` ne doit plus restreindre silencieusement à la Gironde.
  *   - `"France"` / `"fr"` (label explicite) → liste vide (pas de filtre département).
  *   - Label/code reconnu → liste des départements correspondants.
- *   - Label non reconnu → fallback Gironde.
+ *   - Label non reconnu → fallback **France entière** (`[]`) + log warn implicite via `mapRegionToCodePostal`.
  *
  * @param label libellé région ou code département
- * @returns liste de codes département (vide UNIQUEMENT si "France" explicite)
+ * @returns liste de codes département (vide si France entière, défaut ou label non reconnu)
  */
 export function mapRegionToDepartements(
   label: string | undefined | null,
 ): string[] {
-  // Default = Gironde to preserve legacy behavior. Phase 2 will widen via explicit user setting.
+  // Défaut : France entière (cf. décision produit 2026-05-12).
   if (!label?.trim()) {
     return [...DEFAULT_DEPARTEMENTS]
   }
@@ -295,7 +299,8 @@ export function mapRegionToDepartements(
     return [normalized]
   }
 
-  // Fallback Gironde (cohérent avec mapRegionToCodePostal)
+  // Label non reconnu : fallback France entière (cohérent avec mapRegionToCodePostal).
+  // Le log warn est émis côté mapRegionToCodePostal (appelé en parallèle par sourcing-runner).
   return [...DEFAULT_DEPARTEMENTS]
 }
 

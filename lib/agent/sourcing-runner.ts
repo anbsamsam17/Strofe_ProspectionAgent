@@ -76,6 +76,8 @@ export interface SourcingResult {
   pagesLoaded: number
   /** true ssi l'univers Sirene est épuisé (`curseurSuivant === curseur`). */
   exhausted: boolean
+  /** true ssi univers vide (404 Sirene 1ère page) — distinct de exhausted. */
+  universeEmpty: boolean
   /** Dernier `curseurSuivant` persisté dans `profiles.sourcing_state`. */
   curseurFinal: string
   /** true ssi la collecte a basculé sur Recherche Entreprises (Sirene KO). */
@@ -115,6 +117,8 @@ export interface AdaptiveSourcingOutcome {
   pagesLoaded: number
   /** true ssi l'univers Sirene est épuisé (`curseurSuivant === curseur`). */
   exhausted: boolean
+  /** true ssi Sirene a renvoyé 404 sur la 1ère page (univers vide pour ces filtres). */
+  universeEmpty: boolean
   /** true ssi la collecte a basculé sur Recherche Entreprises (Sirene KO). */
   usedFallback: boolean
 }
@@ -427,6 +431,7 @@ export async function runAdaptiveSourcing(
   let curseurCourant = startCurseur
   let curseurFinal = startCurseur
   let exhausted = false
+  let universeEmpty = false
   let usedFallback = false
 
   while (collectedEtablissements.length < targetCandidates && !exhausted && pagesLoaded < HARD_CAP_PAGES) {
@@ -466,6 +471,7 @@ export async function runAdaptiveSourcing(
       pagePagesLoaded = result.pagesLoaded
       if (pagesLoaded === 0) {
         totalAvailable = result.totalAvailable
+        universeEmpty = result.universeEmpty
       }
       exhausted = result.exhausted
     } catch (err) {
@@ -484,6 +490,8 @@ export async function runAdaptiveSourcing(
           const fallbackEtabs = await sourcerEntreprisesFallback({
             maxResults: Math.max(targetCandidates * 3, 200),
             nafCodes: filters.nafCodes,
+            effectifTranches: filters.tranches,
+            departements: filters.departements,
             excludeSirens: sirenSet,
           })
           pageEtabs = fallbackEtabs
@@ -559,6 +567,7 @@ export async function runAdaptiveSourcing(
     totalAvailable,
     pagesLoaded,
     exhausted,
+    universeEmpty,
     usedFallback,
   }
 }
@@ -982,6 +991,7 @@ export async function runSourcing(
     sirene_pages_loaded: output.outcome.pagesLoaded,
     sirene_curseur_final: output.outcome.curseurFinal,
     exhausted: output.outcome.exhausted,
+    universe_empty: output.outcome.universeEmpty,
     used_fallback: output.outcome.usedFallback,
     duration_ms,
   })
@@ -1009,6 +1019,7 @@ export async function runSourcing(
     totalAvailable: output.outcome.totalAvailable,
     pagesLoaded: output.outcome.pagesLoaded,
     exhausted: output.outcome.exhausted,
+    universeEmpty: output.outcome.universeEmpty,
     curseurFinal: output.outcome.curseurFinal,
     usedFallback: output.outcome.usedFallback,
     duration_ms,

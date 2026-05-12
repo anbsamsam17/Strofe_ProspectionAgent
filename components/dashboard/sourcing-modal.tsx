@@ -32,6 +32,12 @@ interface RunStats {
   prospectsQualified: number | null
   totalAvailable: number | null
   exhausted: boolean
+  /**
+   * Vrai SSI l'API Sirene n'a renvoyé aucun résultat pour ces filtres dès
+   * la 1ère page (univers vraiment vide), distinct de `exhausted` qui signifie
+   * que le curseur a été consommé sur un univers non vide.
+   */
+  universeEmpty: boolean
   pagesLoaded: number | null
   durationMs: number | null
 }
@@ -97,6 +103,7 @@ function parseRunResponse(raw: unknown): RunStats | null {
     prospectsQualified: num(payload.prospectsQualified),
     totalAvailable: num(payload.totalAvailable),
     exhausted: payload.exhausted === true,
+    universeEmpty: payload.universeEmpty === true,
     pagesLoaded: num(payload.pagesLoaded),
     // Tolère `durationMs` (2.3) et `duration_ms` (legacy)
     durationMs: num(payload.durationMs) ?? num(payload.duration_ms),
@@ -178,8 +185,9 @@ export function SourcingModal({ isOpen, onClose }: SourcingModalProps) {
     }
   }, [isOpen, handleKeyDown])
 
-  // Réinitialiser l'état quand la modal se ferme.
-  // On garde le pattern : tout reset à la fermeture (pas de persistance entre ouvertures).
+  // Réinitialiser l'état à la fermeture, hydrater depuis le profil à l'ouverture.
+  // Hydratation best-effort : si /api/profile/sourcing-defaults échoue, on garde
+  // les valeurs locales par défaut (silencieux, pas de UX bloquante).
   useEffect(() => {
     if (!isOpen) {
       setFormData({ effectifMin: '50', effectifMax: '500', targetRegion: '' })
@@ -187,6 +195,46 @@ export function SourcingModal({ isOpen, onClose }: SourcingModalProps) {
       setError(null)
       setStats(null)
       setView('form')
+      return
+    }
+
+    let cancelled = false
+    fetch('/api/profile/sourcing-defaults', { credentials: 'include' })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j: unknown) => {
+        if (cancelled || !j || typeof j !== 'object') return
+        const data = (j as { data?: unknown }).data
+        if (!data || typeof data !== 'object') return
+        const d = data as {
+          targetSectors?: unknown
+          targetRegion?: unknown
+          effectifMin?: unknown
+          effectifMax?: unknown
+        }
+
+        setFormData((prev) => ({
+          effectifMin: typeof d.effectifMin === 'number' ? String(d.effectifMin) : prev.effectifMin,
+          effectifMax: typeof d.effectifMax === 'number' ? String(d.effectifMax) : prev.effectifMax,
+          targetRegion: typeof d.targetRegion === 'string' ? d.targetRegion : prev.targetRegion,
+        }))
+
+        if (Array.isArray(d.targetSectors) && d.targetSectors.length > 0) {
+          const profileCodes = d.targetSectors.filter(
+            (c): c is string => typeof c === 'string',
+          )
+          const sel = new Set<number>()
+          SECTOR_OPTIONS.forEach((opt, idx) => {
+            if (opt.codes.some((c) => profileCodes.includes(c))) sel.add(idx)
+          })
+          if (sel.size > 0) setSelectedSectors(sel)
+        }
+      })
+      .catch(() => {
+        /* silencieux : on garde les défauts locaux */
+      })
+
+    return () => {
+      cancelled = true
     }
   }, [isOpen])
 
@@ -425,8 +473,52 @@ export function SourcingModal({ isOpen, onClose }: SourcingModalProps) {
           {view === 'results' && stats && (
             <div className="flex min-h-0 flex-1 flex-col">
               <div className="flex-1 overflow-y-auto px-6 py-5">
-                {/* Badge épuisé */}
-                {stats.exhausted && (
+                {/* Bandeau diagnostic — Contrat E :
+                    - universeEmpty : 404 Sirene dès la 1ère page (aucune entreprise ne matche)
+                    - exhausted : curseur consommé, l'univers existait mais tout est déjà sourcé
+                    - sinon : pas de bandeau */}
+                {stats.universeEmpty ? (
+                  <div
+                    role="status"
+                    className="mb-4 rounded-lg border border-amber-300 bg-amber-100 px-4 py-3 text-amber-800 dark:border-amber-700/60 dark:bg-amber-950/40 dark:text-amber-200"
+                  >
+                    <div className="flex items-start gap-2.5">
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        width="16"
+                        height="16"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        className="mt-0.5 flex-shrink-0"
+                        aria-hidden="true"
+                      >
+                        <circle cx="12" cy="12" r="10" />
+                        <line x1="12" y1="16" x2="12" y2="12" />
+                        <line x1="12" y1="8" x2="12.01" y2="8" />
+                      </svg>
+                      <div className="text-sm leading-snug">
+                        <p className="font-semibold">
+                          Aucune entreprise ne correspond à ces filtres
+                        </p>
+                        <p className="mt-1 text-xs">
+                          Élargissez les effectifs, les secteurs ou la zone
+                          géographique pour découvrir des prospects.
+                        </p>
+                        <button
+                          type="button"
+                          onClick={resetToForm}
+                          className="mt-2 inline-flex items-center gap-1 rounded-md border border-amber-400 bg-white px-2.5 py-1 text-xs font-medium text-amber-800 hover:bg-amber-50 focus:outline-none focus:ring-2 focus:ring-amber-500 dark:border-amber-600 dark:bg-amber-950/60 dark:text-amber-200 dark:hover:bg-amber-900/50"
+                        >
+                          Modifier les filtres
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ) : stats.exhausted ? (
                   <div
                     role="status"
                     className="mb-4 rounded-lg border border-orange-300 bg-orange-100 px-4 py-3 text-orange-800 dark:border-orange-700/60 dark:bg-orange-950/40 dark:text-orange-200"
@@ -450,12 +542,13 @@ export function SourcingModal({ isOpen, onClose }: SourcingModalProps) {
                         <line x1="12" y1="17" x2="12.01" y2="17" />
                       </svg>
                       <div className="text-sm leading-snug">
-                        <p className="font-semibold">Univers de recherche épuisé</p>
+                        <p className="font-semibold">Univers épuisé pour ces filtres</p>
                         <p className="mt-1 text-xs">
                           {stats.totalAvailable !== null
-                            ? `${stats.totalAvailable.toLocaleString('fr-FR')} entreprises trouvées au total avec ces filtres. `
-                            : 'Aucune nouvelle entreprise disponible avec ces filtres. '}
-                          Élargissez la région ou les effectifs pour découvrir plus de prospects.
+                            ? `${stats.totalAvailable.toLocaleString('fr-FR')} entreprises au total — toutes déjà sourcées. `
+                            : 'Toutes les entreprises correspondantes ont déjà été sourcées. '}
+                          Essayez d&apos;autres secteurs, d&apos;autres régions ou un
+                          effectif différent.
                         </p>
                         <button
                           type="button"
@@ -467,7 +560,7 @@ export function SourcingModal({ isOpen, onClose }: SourcingModalProps) {
                       </div>
                     </div>
                   </div>
-                )}
+                ) : null}
 
                 {/* Stats post-run */}
                 <div className="grid grid-cols-2 gap-3">
@@ -641,13 +734,13 @@ export function SourcingModal({ isOpen, onClose }: SourcingModalProps) {
                         setFormData((prev) => ({ ...prev, targetRegion: e.target.value }))
                       }
                       disabled={isLoading}
-                      placeholder="Ex : 33 (Gironde), 75 (Paris), 69 (Rhône)"
+                      placeholder="Ex : France, IDF, 75, Nouvelle-Aquitaine (vide = France entière)"
                       className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 placeholder-gray-400 transition-colors focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-500/20 disabled:cursor-not-allowed disabled:opacity-60 dark:border-gray-700 dark:bg-gray-800 dark:text-white dark:placeholder-gray-600 dark:focus:border-green-500"
-                      maxLength={5}
+                      maxLength={30}
                       aria-describedby="region-hint"
                     />
                     <p id="region-hint" className="mt-1.5 text-xs text-gray-400 dark:text-gray-600">
-                      Code département INSEE (2 chiffres, ex : 33 pour Gironde)
+                      Code département, label région, ou laisser vide pour France entière
                     </p>
                   </div>
 

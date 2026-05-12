@@ -68,6 +68,7 @@ function buildSourcerPage(opts: {
   totalAvailable?: number
   exhausted?: boolean
   trancheEffectif?: string
+  universeEmpty?: boolean
 }): SourcerEntreprisesResult {
   const {
     count,
@@ -77,6 +78,7 @@ function buildSourcerPage(opts: {
     totalAvailable = 1_000,
     exhausted = curseur === curseurSuivant,
     trancheEffectif,
+    universeEmpty = false,
   } = opts
   const etablissements: SireneEtablissement[] = []
   for (let i = 0; i < count; i++) {
@@ -93,6 +95,7 @@ function buildSourcerPage(opts: {
     totalAvailable,
     pagesLoaded: 1,
     exhausted,
+    universeEmpty,
   }
 }
 

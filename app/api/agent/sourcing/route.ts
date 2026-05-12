@@ -183,6 +183,9 @@ export async function POST(request: NextRequest) {
   // en plus `prospectsQualified`, `totalAvailable`, `exhausted`, `pagesLoaded`.
   // On les expose ici. `duration_ms` est conservé (legacy) + `durationMs` ajouté
   // (format Task 2.3 que la modal tolère aussi via `parseRunResponse`).
+  //
+  // `universeEmpty` (Contrat D du fix sourcing-france) : distingue côté UI
+  // « 0 résultat car univers vide » vs « curseur consommé » (exhausted).
   return NextResponse.json(
     {
       success: true,
@@ -194,6 +197,7 @@ export async function POST(request: NextRequest) {
       totalAvailable: result.totalAvailable,
       pagesLoaded: result.pagesLoaded,
       exhausted: result.exhausted,
+      universeEmpty: result.universeEmpty,
       curseurFinal: result.curseurFinal,
       usedFallback: result.usedFallback,
       duration_ms: result.duration_ms,

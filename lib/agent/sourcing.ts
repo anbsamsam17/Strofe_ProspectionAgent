@@ -113,9 +113,9 @@ const DEFAULT_EFFECTIF_TRANCHES: readonly string[] = [
   '21', '22', '31', '32', '41', '42', '51', '52', '53',
 ]
 
-/** Défaut géographie : Gironde (compat legacy). */
-const DEFAULT_CODE_POSTAL_RANGE: readonly [string, string] = ['33000', '33999']
-const DEFAULT_DEPARTEMENTS: readonly string[] = ['33']
+/** Défaut : France entière (pas de filtre géographique). */
+const DEFAULT_CODE_POSTAL_RANGE: readonly [string, string] = ['00000', '99999']
+const DEFAULT_DEPARTEMENTS: readonly string[] = []
 
 /** Limites API Sirene. */
 const SIRENE_MAX_PAGE_SIZE = 1000
@@ -135,6 +135,10 @@ export interface SourcingOptions {
   codePostalRange?: string
   /** SIREN déjà en base à exclure des résultats (déduplication en amont du sourcing) */
   excludeSirens?: Set<string>
+  /** Codes tranche INSEE (ex ['21','22','31','32']). Défaut : 50+ salariés. */
+  effectifTranches?: string[]
+  /** Codes département pour filtrer le fallback. [] = France entière. */
+  departements?: string[]
 }
 
 /**
@@ -179,6 +183,8 @@ export type SourcerEntreprisesResult = {
   pagesLoaded: number
   /** true ssi `curseurSuivant === curseur` (FIN d'univers selon convention Sirene). */
   exhausted: boolean
+  /** true ssi 404 Sirene sur la première page (univers vide pour ces filtres). */
+  universeEmpty: boolean
 }
 
 /**
@@ -438,6 +444,7 @@ export async function sourcerEntreprises(
   let nextCurseur = curseur
   let totalAvailable = 0
   let pagesLoaded = 0
+  let universeEmpty = false
 
   for (let page = 1; page <= maxPages; page++) {
     const url = new URL(INSEE_SIRET_URL)
@@ -465,6 +472,11 @@ export async function sourcerEntreprises(
 
     if (response.status === 404) {
       // 404 = aucun résultat — univers vide pour ce filtre
+      // universeEmpty=true uniquement si c'est la 1ère page (aucune entreprise dans l'univers).
+      // Sur une page > 1, un 404 signifie juste la fin de pagination, pas un univers vide.
+      if (pagesLoaded === 0) {
+        universeEmpty = true
+      }
       console.log(
         JSON.stringify({
           level: 'info',
@@ -591,6 +603,7 @@ export async function sourcerEntreprises(
     totalAvailable,
     pagesLoaded,
     exhausted: finalExhausted,
+    universeEmpty,
   }
 }
 
@@ -632,7 +645,13 @@ interface RechercheEntreprisesResult {
 export async function sourcerEntreprisesFallback(
   options: SourcingOptions = {},
 ): Promise<SireneEtablissement[]> {
-  const { maxResults = 200, nafCodes = NAF_PRIORITAIRES, excludeSirens } = options
+  const {
+    maxResults = 200,
+    nafCodes = NAF_PRIORITAIRES,
+    excludeSirens,
+    effectifTranches = ['21', '22', '31', '32', '41', '42', '51', '52', '53'],
+    departements = [], // [] = France entière (pas de filtre)
+  } = options
 
   const allEtablissements: SireneEtablissement[] = []
   const perPage = 25 // max par page de cette API
@@ -648,9 +667,13 @@ export async function sourcerEntreprisesFallback(
     while (hasMore && allEtablissements.length < maxResults && page <= MAX_PAGES_PER_NAF) {
       const url = new URL(RECHERCHE_ENTREPRISES_URL)
       url.searchParams.set('activite_principale', naf)
-      url.searchParams.set('departement', '33')
-      // Tranches 21+ = 50 salariés et plus (élargi depuis 31+ = 200+)
-      url.searchParams.set('tranche_effectif_salarie', '21,22,31,32,41,42,51,52,53')
+      // Filtre département uniquement si l'utilisateur en a fourni un.
+      // Liste vide = pas de param `departement` = recherche France entière côté API gouv.
+      if (departements.length > 0) {
+        url.searchParams.set('departement', departements.join(','))
+      }
+      // Tranches d'effectifs : configurables (défaut 50+ salariés)
+      url.searchParams.set('tranche_effectif_salarie', effectifTranches.join(','))
       url.searchParams.set('etat_administratif', 'A')
       url.searchParams.set('per_page', String(perPage))
       url.searchParams.set('page', String(page))
@@ -720,6 +743,8 @@ export async function sourcerEntreprisesFallback(
         resultats: results.length,
         nouveaux_apres_dedup: results.filter((r) => r.siren && !excludeSirens?.has(r.siren)).length,
         cumul: allEtablissements.length,
+        departements,
+        effectifTranches,
       }))
 
       page++
