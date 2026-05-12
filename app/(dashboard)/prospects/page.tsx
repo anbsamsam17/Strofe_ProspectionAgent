@@ -6,6 +6,26 @@ import { ProspectsFilters } from '@/components/prospects/prospects-filters'
 import { AddToDailyListButton } from '@/components/prospects/add-to-daily-list-button'
 import { ProspectActionsMenu } from '@/components/prospects/prospect-actions-menu'
 import { TopPriorities } from '@/components/prospects/top-priorities'
+import { buildBegesUrl } from '@/lib/utils/beges-url'
+
+// ── Types contact filter ──────────────────────────────────────────────────────
+
+const CONTACT_TYPES = ['phone', 'email', 'linkedin'] as const
+type ContactFilterType = (typeof CONTACT_TYPES)[number]
+
+function parseContactTypes(raw: string | undefined): ContactFilterType[] {
+  if (!raw) return []
+  const parts = raw.split(',').map((s) => s.trim()).filter(Boolean)
+  return parts.filter((p): p is ContactFilterType =>
+    (CONTACT_TYPES as ReadonlyArray<string>).includes(p),
+  )
+}
+
+const CONTACT_FIELD_BY_TYPE: Record<ContactFilterType, string> = {
+  phone: 'contact_telephone',
+  email: 'contact_email',
+  linkedin: 'contact_linkedin',
+}
 
 // Force le rendu dynamique — la table prospects change à chaque run agent
 // et après chaque feedback d'appel (statut mis à jour)
@@ -153,6 +173,7 @@ interface SearchParams {
   score_min?: string
   /** "1" pour afficher uniquement les prospects archivés. */
   archived?: string
+  contact_type?: string
 }
 
 // Statuts terminaux exclus du Top 20 par défaut (déjà traités côté commercial).
@@ -179,6 +200,7 @@ export default async function ProspectsPage({
   const secteurFilter = params.secteur ?? ''
   const scoreMin = params.score_min ? parseInt(params.score_min, 10) : 0
   const showArchived = params.archived === '1'
+  const contactTypes = parseContactTypes(params.contact_type)
 
   const from = (page - 1) * PAGE_SIZE
   const to = from + PAGE_SIZE - 1
@@ -207,6 +229,13 @@ export default async function ProspectsPage({
   }
   if (scoreMin > 0) {
     query = query.gte('score_priorite', scoreMin)
+  }
+  if (contactTypes.length > 0) {
+    // Multi-select = OR : un prospect matche s'il a AU MOINS un des canaux choisis.
+    const orClause = contactTypes
+      .map((t) => `${CONTACT_FIELD_BY_TYPE[t]}.not.is.null`)
+      .join(',')
+    query = query.or(orClause)
   }
 
   // Top 20 priorités — vue défaut, calculée indépendamment des filtres tabulaires
@@ -240,6 +269,7 @@ export default async function ProspectsPage({
       ...(secteurFilter ? { secteur: secteurFilter } : {}),
       ...(scoreMin > 0 ? { score_min: String(scoreMin) } : {}),
       ...(showArchived ? { archived: '1' } : {}),
+      ...(contactTypes.length > 0 ? { contact_type: contactTypes.join(',') } : {}),
       ...newParams,
     }
     const qs = new URLSearchParams(merged).toString()
@@ -278,6 +308,7 @@ export default async function ProspectsPage({
         currentSecteur={secteurFilter}
         currentScoreMin={scoreMin}
         currentArchived={showArchived}
+        currentContactTypes={contactTypes}
       />
 
       {/* Tableau */}
@@ -420,7 +451,7 @@ export default async function ProspectsPage({
                         {(() => {
                           const begesPublie = prospect.beges_publie
                           const begesValide = prospect.beges_valide
-                          const begesUrl = prospect.beges_url
+                          const begesUrl = buildBegesUrl(prospect)
                           const begesDate = prospect.beges_derniere_publication
 
                           let badgeClass: string

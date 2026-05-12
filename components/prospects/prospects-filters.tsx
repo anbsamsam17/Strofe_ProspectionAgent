@@ -4,11 +4,14 @@ import { useRouter, usePathname, useSearchParams } from 'next/navigation'
 import { useState, useTransition } from 'react'
 import type { ProspectStatus } from '@/lib/types'
 
+export type ContactFilterType = 'phone' | 'email' | 'linkedin'
+
 interface ProspectsFiltersProps {
   currentStatuts: string[]
   currentSecteur: string
   currentScoreMin: number
   currentArchived: boolean
+  currentContactTypes?: ContactFilterType[]
 }
 
 const ALL_STATUTS: { value: ProspectStatus; label: string; dot: string }[] = [
@@ -22,11 +25,18 @@ const ALL_STATUTS: { value: ProspectStatus; label: string; dot: string }[] = [
   { value: 'on_hold', label: 'En pause', dot: 'bg-orange-500' },
 ]
 
+const ALL_CONTACT_TYPES: { value: ContactFilterType; label: string }[] = [
+  { value: 'phone', label: 'Téléphone' },
+  { value: 'email', label: 'Email' },
+  { value: 'linkedin', label: 'LinkedIn' },
+]
+
 export function ProspectsFilters({
   currentStatuts,
   currentSecteur,
   currentScoreMin,
   currentArchived,
+  currentContactTypes = [],
 }: ProspectsFiltersProps) {
   const router = useRouter()
   const pathname = usePathname()
@@ -37,12 +47,14 @@ export function ProspectsFilters({
   const [secteur, setSecteur] = useState(currentSecteur)
   const [scoreMin, setScoreMin] = useState(currentScoreMin)
   const [archived, setArchived] = useState<boolean>(currentArchived)
+  const [contactTypes, setContactTypes] = useState<ContactFilterType[]>(currentContactTypes)
 
   function applyFilters(
     newStatuts: string[],
     newSecteur: string,
     newScoreMin: number,
     newArchived: boolean,
+    newContactTypes: ContactFilterType[],
   ) {
     const params = new URLSearchParams(searchParams.toString())
     params.set('page', '1')
@@ -71,6 +83,12 @@ export function ProspectsFilters({
       params.delete('archived')
     }
 
+    if (newContactTypes.length > 0) {
+      params.set('contact_type', newContactTypes.join(','))
+    } else {
+      params.delete('contact_type')
+    }
+
     startTransition(() => {
       router.push(`${pathname}?${params.toString()}`)
     })
@@ -81,7 +99,15 @@ export function ProspectsFilters({
       ? statuts.filter((s) => s !== value)
       : [...statuts, value]
     setStatuts(next)
-    applyFilters(next, secteur, scoreMin, archived)
+    applyFilters(next, secteur, scoreMin, archived, contactTypes)
+  }
+
+  function toggleContactType(value: ContactFilterType) {
+    const next = contactTypes.includes(value)
+      ? contactTypes.filter((t) => t !== value)
+      : [...contactTypes, value]
+    setContactTypes(next)
+    applyFilters(statuts, secteur, scoreMin, archived, next)
   }
 
   function handleSecteurChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -90,20 +116,20 @@ export function ProspectsFilters({
 
   function handleSecteurKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
     if (e.key === 'Enter') {
-      applyFilters(statuts, secteur, scoreMin, archived)
+      applyFilters(statuts, secteur, scoreMin, archived, contactTypes)
     }
   }
 
   function handleScoreChange(e: React.ChangeEvent<HTMLInputElement>) {
     const val = parseInt(e.target.value, 10)
     setScoreMin(val)
-    applyFilters(statuts, secteur, val, archived)
+    applyFilters(statuts, secteur, val, archived, contactTypes)
   }
 
   function toggleArchived() {
     const next = !archived
     setArchived(next)
-    applyFilters(statuts, secteur, scoreMin, next)
+    applyFilters(statuts, secteur, scoreMin, next, contactTypes)
   }
 
   function handleReset() {
@@ -111,12 +137,18 @@ export function ProspectsFilters({
     setSecteur('')
     setScoreMin(0)
     setArchived(false)
+    setContactTypes([])
     startTransition(() => {
       router.push(pathname)
     })
   }
 
-  const hasFilters = statuts.length > 0 || secteur || scoreMin > 0 || archived
+  const hasFilters =
+    statuts.length > 0 ||
+    secteur ||
+    scoreMin > 0 ||
+    archived ||
+    contactTypes.length > 0
   const scorePercent = scoreMin
 
   return (
@@ -162,7 +194,7 @@ export function ProspectsFilters({
         {/* Séparateur vertical — masqué sur mobile */}
         <div className="hidden h-auto w-px self-stretch bg-gray-100 dark:bg-gray-800 sm:block" aria-hidden="true" />
 
-        {/* Colonne droite : recherche + score */}
+        {/* Colonne droite : recherche + score + filtres complémentaires */}
         <div className="flex flex-col gap-3 sm:w-64">
           {/* Recherche secteur */}
           <div>
@@ -195,7 +227,7 @@ export function ProspectsFilters({
                 value={secteur}
                 onChange={handleSecteurChange}
                 onKeyDown={handleSecteurKeyDown}
-                onBlur={() => applyFilters(statuts, secteur, scoreMin, archived)}
+                onBlur={() => applyFilters(statuts, secteur, scoreMin, archived, contactTypes)}
                 placeholder="ex : Transport..."
                 className="w-full rounded-lg border border-gray-200 bg-white py-2 pl-9 pr-3 text-sm text-gray-900 placeholder-gray-400 transition focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-500/20 dark:border-gray-700 dark:bg-gray-800 dark:text-white dark:placeholder-gray-600"
               />
@@ -257,6 +289,37 @@ export function ProspectsFilters({
             </div>
           </div>
 
+          {/* Type de contact disponible */}
+          <fieldset>
+            <legend className="mb-1.5 text-xs font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">
+              Contact dispo
+            </legend>
+            <div
+              className="flex flex-wrap gap-1.5"
+              role="group"
+              aria-label="Filtrer par canal de contact disponible"
+            >
+              {ALL_CONTACT_TYPES.map(({ value, label }) => {
+                const isActive = contactTypes.includes(value)
+                return (
+                  <button
+                    key={value}
+                    type="button"
+                    onClick={() => toggleContactType(value)}
+                    aria-pressed={isActive}
+                    className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition-all duration-150 ${
+                      isActive
+                        ? 'border-green-500 bg-green-50 text-green-700 shadow-sm dark:border-green-600 dark:bg-green-950/50 dark:text-green-400'
+                        : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300 hover:bg-gray-50 dark:border-gray-700 dark:bg-transparent dark:text-gray-400 dark:hover:border-gray-600 dark:hover:bg-gray-800/50'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                )
+              })}
+            </div>
+          </fieldset>
+
           {/* Toggle archivés — masqués par défaut, accessibles via filtre */}
           <div>
             <button
@@ -314,6 +377,10 @@ export function ProspectsFilters({
               secteur && `secteur "${secteur}"`,
               scoreMin > 0 && `score ≥ ${scoreMin}`,
               archived && 'archivés',
+              contactTypes.length > 0 &&
+                `contact : ${contactTypes
+                  .map((t) => ALL_CONTACT_TYPES.find((c) => c.value === t)?.label ?? t)
+                  .join(' / ')}`,
             ]
               .filter(Boolean)
               .join(' · ')}
