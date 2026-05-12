@@ -4,6 +4,8 @@ import { createClient } from '@/lib/supabase/server'
 import type { Prospect, ProspectStatus } from '@/lib/types'
 import { ProspectsFilters } from '@/components/prospects/prospects-filters'
 import { AddToDailyListButton } from '@/components/prospects/add-to-daily-list-button'
+import { ProspectActionsMenu } from '@/components/prospects/prospect-actions-menu'
+import { TopPriorities } from '@/components/prospects/top-priorities'
 
 // Force le rendu dynamique — la table prospects change à chaque run agent
 // et après chaque feedback d'appel (statut mis à jour)
@@ -12,6 +14,7 @@ export const dynamic = 'force-dynamic'
 // ── Constants ─────────────────────────────────────────────────────────────────
 
 const PAGE_SIZE = 20
+const TOP_PRIORITIES_LIMIT = 20
 
 const STATUS_LABELS: Record<ProspectStatus, string> = {
   sourced: 'Sourcé',
@@ -148,7 +151,12 @@ interface SearchParams {
   statut?: string
   secteur?: string
   score_min?: string
+  /** "1" pour afficher uniquement les prospects archivés. */
+  archived?: string
 }
+
+// Statuts terminaux exclus du Top 20 par défaut (déjà traités côté commercial).
+const TERMINAL_STATUTS_TOP: ProspectStatus[] = ['converted', 'rejected']
 
 export default async function ProspectsPage({
   searchParams,
@@ -170,6 +178,7 @@ export default async function ProspectsPage({
   const statutFilter = params.statut ? params.statut.split(',') : []
   const secteurFilter = params.secteur ?? ''
   const scoreMin = params.score_min ? parseInt(params.score_min, 10) : 0
+  const showArchived = params.archived === '1'
 
   const from = (page - 1) * PAGE_SIZE
   const to = from + PAGE_SIZE - 1
@@ -182,6 +191,14 @@ export default async function ProspectsPage({
     .order(sortCol, { ascending: sortOrder })
     .range(from, to)
 
+  // Mode "archivés" : on affiche uniquement les prospects archivés.
+  // Mode normal (défaut) : on masque les archivés.
+  if (showArchived) {
+    query = query.not('archived_at', 'is', null)
+  } else {
+    query = query.is('archived_at', null)
+  }
+
   if (statutFilter.length > 0) {
     query = query.in('statut', statutFilter)
   }
@@ -192,7 +209,25 @@ export default async function ProspectsPage({
     query = query.gte('score_priorite', scoreMin)
   }
 
-  const { data: prospects, count } = await query
+  // Top 20 priorités — vue défaut, calculée indépendamment des filtres tabulaires
+  // pour rester stable même quand l'utilisateur explore. On l'affiche uniquement
+  // dans le mode "non archivés" (ça n'aurait pas de sens sur la pile d'archives).
+  const topPrioritiesPromise = showArchived
+    ? Promise.resolve({ data: [] as Prospect[] })
+    : supabase
+        .from('prospects')
+        .select('*')
+        .eq('user_id', user.id)
+        .is('archived_at', null)
+        .not('statut', 'in', `(${TERMINAL_STATUTS_TOP.join(',')})`)
+        .order('score_priorite', { ascending: false })
+        .limit(TOP_PRIORITIES_LIMIT)
+
+  const [{ data: prospects, count }, topRes] = await Promise.all([
+    query,
+    topPrioritiesPromise,
+  ])
+  const topPriorities = (topRes.data ?? []) as unknown as Prospect[]
 
   const totalPages = Math.ceil((count ?? 0) / PAGE_SIZE)
 
@@ -204,6 +239,7 @@ export default async function ProspectsPage({
       ...(params.statut ? { statut: params.statut } : {}),
       ...(secteurFilter ? { secteur: secteurFilter } : {}),
       ...(scoreMin > 0 ? { score_min: String(scoreMin) } : {}),
+      ...(showArchived ? { archived: '1' } : {}),
       ...newParams,
     }
     const qs = new URLSearchParams(merged).toString()
@@ -233,11 +269,15 @@ export default async function ProspectsPage({
         </div>
       </div>
 
+      {/* Top 20 priorités — axe principal de l'app */}
+      {!showArchived && <TopPriorities prospects={topPriorities} />}
+
       {/* Filtres */}
       <ProspectsFilters
         currentStatuts={statutFilter}
         currentSecteur={secteurFilter}
         currentScoreMin={scoreMin}
+        currentArchived={showArchived}
       />
 
       {/* Tableau */}
@@ -451,10 +491,18 @@ export default async function ProspectsPage({
 
                       {/* Actions */}
                       <td className="px-4 py-3.5 text-right">
-                        <AddToDailyListButton
-                          prospectId={prospect.id}
-                          prospectName={prospect.raison_sociale}
-                        />
+                        <div className="flex items-center justify-end gap-2">
+                          <AddToDailyListButton
+                            prospectId={prospect.id}
+                            prospectName={prospect.raison_sociale}
+                          />
+                          <ProspectActionsMenu
+                            prospectId={prospect.id}
+                            prospectName={prospect.raison_sociale}
+                            currentStatut={prospect.statut}
+                            archived={Boolean(prospect.archived_at)}
+                          />
+                        </div>
                       </td>
                     </tr>
                   )

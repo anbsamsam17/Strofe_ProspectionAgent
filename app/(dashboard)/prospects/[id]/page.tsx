@@ -2,6 +2,8 @@ import { notFound, redirect } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import type { Prospect, ProspectStatus, ScoreDetails, IntentionSignal } from '@/lib/types'
+import { ProspectActionsMenu } from '@/components/prospects/prospect-actions-menu'
+import { ProspectNotes } from '@/components/prospects/prospect-notes'
 
 export const dynamic = 'force-dynamic'
 
@@ -218,6 +220,37 @@ export default async function ProspectDetailPage({ params }: PageProps) {
             >
               {priority.label}
             </span>
+
+            {/* Badge archive */}
+            {prospect.archived_at && (
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-orange-200 bg-orange-50 px-3 py-1 text-sm font-medium text-orange-700 dark:border-orange-800 dark:bg-orange-950/40 dark:text-orange-400">
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="12"
+                  height="12"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden="true"
+                >
+                  <polyline points="21 8 21 21 3 21 3 8" />
+                  <rect x="1" y="3" width="22" height="5" />
+                  <line x1="10" y1="12" x2="14" y2="12" />
+                </svg>
+                Archivé
+              </span>
+            )}
+
+            {/* Menu actions CRM */}
+            <ProspectActionsMenu
+              prospectId={prospect.id}
+              prospectName={prospect.raison_sociale}
+              currentStatut={prospect.statut}
+              archived={Boolean(prospect.archived_at)}
+            />
           </div>
         </div>
       </div>
@@ -584,6 +617,13 @@ export default async function ProspectDetailPage({ params }: PageProps) {
         )}
       </SectionCard>
 
+      {/* ── Section Notes (édition inline avec debounce) ── */}
+      <div id="notes" className="scroll-mt-6">
+        <SectionCard title="Notes">
+          <ProspectNotes prospectId={prospect.id} initialNotes={prospect.notes ?? null} />
+        </SectionCard>
+      </div>
+
       {/* ── Section Historique ── */}
       <SectionCard title="Historique">
         <dl className="grid grid-cols-1 gap-3 sm:grid-cols-3">
@@ -602,6 +642,16 @@ export default async function ProspectDetailPage({ params }: PageProps) {
               </dt>
               <dd className="mt-1 text-sm font-medium text-gray-900 dark:text-white">
                 {formatDate(prospect.enriched_at, { dateStyle: 'long' }) ?? '—'}
+              </dd>
+            </div>
+          )}
+          {prospect.archived_at && (
+            <div>
+              <dt className="text-xs font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">
+                Archivé le
+              </dt>
+              <dd className="mt-1 text-sm font-medium text-gray-900 dark:text-white">
+                {formatDate(prospect.archived_at, { dateStyle: 'long' }) ?? '—'}
               </dd>
             </div>
           )}
