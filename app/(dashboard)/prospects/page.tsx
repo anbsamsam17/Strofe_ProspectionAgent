@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/server'
 import type { Prospect, ProspectStatus } from '@/lib/types'
 import { ProspectsFilters } from '@/components/prospects/prospects-filters'
 import { AddToDailyListButton } from '@/components/prospects/add-to-daily-list-button'
+import { RunStatusBanner } from '@/components/dashboard/run-status-banner'
 
 // Force le rendu dynamique — la table prospects change à chaque run agent
 // et après chaque feedback d'appel (statut mis à jour)
@@ -220,6 +221,10 @@ export default async function ProspectsPage({
 
   return (
     <div className="mx-auto max-w-7xl space-y-5">
+      {/* Bandeau live run agent — visible quand un sourcing est en cours,
+          même si l'utilisateur a navigué hors du dashboard. */}
+      <RunStatusBanner />
+
       {/* En-tête */}
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>

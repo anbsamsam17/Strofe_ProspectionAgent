@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { useAgentRunStatus } from '@/lib/hooks/use-agent-run-status'
 
 interface GenerateListButtonProps {
   hasExistingList: boolean
@@ -19,7 +20,21 @@ export function GenerateListButton({
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState(false)
 
+  // Source de vérité globale : un autre run (sourcing ou liste) tourne déjà.
+  // On désactive le bouton pour éviter le 409 RUN_IN_PROGRESS côté API.
+  const { isRunning } = useAgentRunStatus()
+
+  // Désactivé si fetch local en cours OU si un run agent tourne déjà.
+  const disabled = isLoading || isRunning
+
   async function handleClick() {
+    // Double-garde : si un run a démarré entre temps (autre onglet), on bloque
+    // côté UI avant de partir taper l'API et de prendre un 409.
+    if (isRunning) {
+      setError('Un run est déjà en cours — patientez.')
+      return
+    }
+
     setIsLoading(true)
     setError(null)
     setSuccess(false)
@@ -45,9 +60,13 @@ export function GenerateListButton({
 
   const buttonLabel = 'Générer la liste du jour'
 
-  const ariaLabel = hasExistingList
-    ? `Régénérer la liste du jour (${listItemCount} appel${listItemCount > 1 ? 's' : ''} actuellement)`
-    : 'Générer la liste du jour'
+  const ariaLabel = isRunning
+    ? 'Un run est déjà en cours — patientez'
+    : hasExistingList
+      ? `Régénérer la liste du jour (${listItemCount} appel${listItemCount > 1 ? 's' : ''} actuellement)`
+      : 'Générer la liste du jour'
+
+  const tooltip = isRunning ? 'Un run est déjà en cours' : undefined
 
   // Texte d'aide : affiche le total courant uniquement si une liste existe
   const helpText = hasExistingList
@@ -113,8 +132,10 @@ export function GenerateListButton({
 
       <button
         onClick={handleClick}
-        disabled={isLoading}
+        disabled={disabled}
         aria-label={ariaLabel}
+        aria-disabled={disabled}
+        title={tooltip}
         className="group relative inline-flex items-center gap-2.5 overflow-hidden rounded-xl bg-green-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition-all hover:bg-green-700 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60 dark:focus:ring-offset-gray-900"
       >
         {/* Shimmer d'arrière-plan au survol */}
@@ -123,7 +144,7 @@ export function GenerateListButton({
           aria-hidden="true"
         />
 
-        {isLoading ? (
+        {isLoading || isRunning ? (
           <>
             <svg
               className="animate-spin"
@@ -140,7 +161,11 @@ export function GenerateListButton({
             >
               <path d="M21 12a9 9 0 1 1-6.219-8.56" />
             </svg>
-            <span>Génération en cours...</span>
+            <span>
+              {isRunning && !isLoading
+                ? 'Run en cours...'
+                : 'Génération en cours...'}
+            </span>
           </>
         ) : (
           <>

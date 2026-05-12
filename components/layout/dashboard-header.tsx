@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import type { AgentRun, DailyList, DailyListStatus } from '@/lib/types'
 import { SourcingModal } from '@/components/dashboard/sourcing-modal'
+import { useAgentRunStatus } from '@/lib/hooks/use-agent-run-status'
 
 interface DashboardHeaderProps {
   userName: string
@@ -64,12 +65,21 @@ function AgentStatusBadge({ status }: { status: DailyListStatus | null }) {
 export function DashboardHeader({ userName, agentRun, dailyList }: DashboardHeaderProps) {
   const [isModalOpen, setIsModalOpen] = useState(false)
 
+  // Statut SSR (depuis layout) + statut live (polling /api/agent/status).
+  // Le hook prend le pas dès qu'il a fait son premier fetch — évite qu'un run
+  // démarré dans un autre onglet ne soit invisible jusqu'au prochain refresh.
+  const { isRunning: liveIsRunning } = useAgentRunStatus()
+  const ssrIsRunning = agentRun?.status === 'running'
+  const isAgentRunning = liveIsRunning || ssrIsRunning
+
   function handleLaunchAgent() {
+    // Garde-fou : si un run tourne déjà, on n'ouvre pas la modal pour éviter
+    // que l'utilisateur ne lance un POST qui sera bloqué par le 409 côté API.
+    if (isAgentRunning) return
     setIsModalOpen(true)
   }
 
   const dailyListStatus = dailyList?.status ?? null
-  const isAgentRunning = agentRun?.status === 'running'
   const isDisabled = isAgentRunning
 
   // Initiale de l'utilisateur pour l'avatar
@@ -108,7 +118,9 @@ export function DashboardHeader({ userName, agentRun, dailyList }: DashboardHead
         <button
           onClick={handleLaunchAgent}
           disabled={isDisabled}
-          aria-label={isAgentRunning ? "Agent en cours d'exécution" : "Lancer l'agent de prospection"}
+          aria-disabled={isDisabled}
+          aria-label={isAgentRunning ? "Un run est déjà en cours" : "Lancer l'agent de prospection"}
+          title={isAgentRunning ? 'Un run est déjà en cours' : undefined}
           className={`relative inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold text-white shadow-sm transition-all duration-150 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60 dark:focus:ring-offset-gray-950 ${
             isDisabled
               ? 'bg-green-600'

@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { createPortal } from 'react-dom'
+import { useAgentRunStatus } from '@/lib/hooks/use-agent-run-status'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -132,6 +133,13 @@ export function SourcingModal({ isOpen, onClose }: SourcingModalProps) {
   const abortRef = useRef<AbortController | null>(null)
 
   const isLoading = view === 'running'
+
+  // Détection « run global déjà en cours » (ex. lancé depuis un autre onglet).
+  // On utilise la même source de vérité que les autres déclencheurs : le hook
+  // qui poll /api/agent/status. On filtre le cas « c'est nous qui tournons »
+  // sinon on s'auto-désactiverait pendant notre propre run en cours.
+  const { isRunning: globalRunActive } = useAgentRunStatus()
+  const externalRunActive = globalRunActive && !isLoading
 
   // Setup mount flag une seule fois côté client
   useEffect(() => {
@@ -268,6 +276,13 @@ export function SourcingModal({ isOpen, onClose }: SourcingModalProps) {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setError(null)
+
+    // Court-circuit anti multi-onglet : si un autre run tourne déjà côté
+    // serveur, on bloque ici plutôt que d'aller chercher un 409 RUN_IN_PROGRESS.
+    if (externalRunActive) {
+      setError('Un run est déjà en cours — patientez la fin avant d\'en lancer un autre.')
+      return
+    }
 
     const min = parseInt(formData.effectifMin, 10)
     const max = parseInt(formData.effectifMax, 10)
@@ -787,7 +802,9 @@ export function SourcingModal({ isOpen, onClose }: SourcingModalProps) {
 
                 <button
                   type="submit"
-                  disabled={isLoading}
+                  disabled={isLoading || externalRunActive}
+                  aria-disabled={isLoading || externalRunActive}
+                  title={externalRunActive ? 'Un run est déjà en cours' : undefined}
                   className="inline-flex items-center gap-2 rounded-lg bg-green-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition-all hover:bg-green-700 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60 dark:focus:ring-offset-gray-900"
                 >
                   <svg
