@@ -3,6 +3,7 @@ import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import type { AgentRun, DailyList, DailyListItem, Prospect } from '@/lib/types'
 import { GenerateListButton } from '@/components/dashboard/generate-list-button'
+import { RunStatusBanner } from '@/components/dashboard/run-status-banner'
 
 // Force le rendu dynamique à chaque requête — interdit tout cache SSR stale
 // qui afficherait un ancien run échoué même après un run réussi plus récent.
@@ -322,6 +323,11 @@ export default async function DashboardPage() {
           </div>
         )}
       </div>
+
+      {/* ── Bandeau live run agent ────────────────────────────── */}
+      {/* Affiche un statut temps-réel tant qu'un run est en cours.
+          Disparait sinon (sauf toast de fin pendant quelques secondes). */}
+      <RunStatusBanner />
 
       {/* ── Métriques du jour ─────────────────────────────────── */}
       <section aria-labelledby="metrics-title">

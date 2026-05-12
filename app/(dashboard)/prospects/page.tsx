@@ -7,6 +7,7 @@ import { AddToDailyListButton } from '@/components/prospects/add-to-daily-list-b
 import { ProspectActionsMenu } from '@/components/prospects/prospect-actions-menu'
 import { TopPriorities } from '@/components/prospects/top-priorities'
 import { buildBegesUrl } from '@/lib/utils/beges-url'
+import { RunStatusBanner } from '@/components/dashboard/run-status-banner'
 
 // ── Types contact filter ──────────────────────────────────────────────────────
 
@@ -286,6 +287,10 @@ export default async function ProspectsPage({
 
   return (
     <div className="mx-auto max-w-7xl space-y-5">
+      {/* Bandeau live run agent — visible quand un sourcing est en cours,
+          même si l'utilisateur a navigué hors du dashboard. */}
+      <RunStatusBanner />
+
       {/* En-tête */}
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
