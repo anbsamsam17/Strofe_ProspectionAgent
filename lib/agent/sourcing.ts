@@ -82,6 +82,27 @@ const SIRENE_DELAY_MS = 2_100   // ~28 req/min avec marge de sécurité
 const RETRY_ATTEMPTS = 2
 const RETRY_DELAY_MS = 1_000
 
+/**
+ * Nombre max de codes NAF dans une seule clause `OR` Lucene envoyée à Sirene.
+ *
+ * Sirene v3.11 (Solr en backend) refuse les disjonctions trop larges sur les
+ * champs multivalués avec HTTP 400 "Erreur de syntaxe dans le paramètre q".
+ * La limite empirique observée en prod (2026-05-12) est entre 25 et 32 termes.
+ * On vise 20 par marge de sécurité — au-delà on chunke et on construit un
+ * curseur composite `chunkN|rawCursor` pour itérer chunk après chunk.
+ *
+ * Cf. memory/hindsight.md 2026-04-06 (filtre Lucene vide) et 2026-05-12 (41 NAFs).
+ */
+const SIRENE_MAX_NAF_PER_QUERY = 20
+
+/**
+ * Préfixe du curseur composite utilisé quand `nafCodes.length > SIRENE_MAX_NAF_PER_QUERY`.
+ * Format : `${COMPOSITE_CURSOR_PREFIX}${chunkIndex}|${rawCursor}`.
+ * Détectable côté caller — un curseur ne commençant pas par ce préfixe est traité
+ * comme un curseur raw legacy (chunk 0 implicite).
+ */
+const COMPOSITE_CURSOR_PREFIX = 'chunk:'
+
 // Tranches d'effectifs INSEE correspondant à >= 50 salariés (21 = 50-99, 53 = 10 000+)
 // On cible tranche >= 21 pour avoir 50+ salariés : les 200+ ont une obligation BEGES légale,
 // mais les 50-199 sont des cibles pertinentes pour une démarche volontaire.
@@ -382,19 +403,94 @@ function validateSourcerParams(params: SourcerEntreprisesParams): {
 }
 
 /**
+ * Normalise une liste de codes NAF au format attendu par Sirene (sans point, uppercase).
+ * Filtre les entrées vides et déduplique en conservant l'ordre d'entrée (important pour
+ * la stabilité du chunking entre runs : tant que `nafCodes` ne change pas, le découpage
+ * en chunks reste identique et le curseur composite reste valide).
+ */
+function normalizeNafCodes(nafCodes: string[]): string[] {
+  const seen = new Set<string>()
+  const out: string[] = []
+  for (const c of nafCodes) {
+    const cleaned = c.replace('.', '').trim().toUpperCase()
+    if (cleaned.length === 0 || seen.has(cleaned)) continue
+    seen.add(cleaned)
+    out.push(cleaned)
+  }
+  return out
+}
+
+/**
+ * Découpe une liste de codes NAF en chunks de taille fixe (`SIRENE_MAX_NAF_PER_QUERY`).
+ * Préserve l'ordre — chunk 0 contient les `N` premiers codes, etc.
+ *
+ * Retourne `[[]]` (un seul chunk vide) si la liste est vide, pour préserver l'invariant
+ * "il y a toujours au moins un chunk à interroger" côté caller.
+ */
+export function chunkNafCodes(
+  nafCodes: string[],
+  chunkSize: number = SIRENE_MAX_NAF_PER_QUERY,
+): string[][] {
+  if (nafCodes.length === 0) return [[]]
+  const chunks: string[][] = []
+  for (let i = 0; i < nafCodes.length; i += chunkSize) {
+    chunks.push(nafCodes.slice(i, i + chunkSize))
+  }
+  return chunks
+}
+
+/**
+ * Parse un curseur composite `chunk:<index>|<rawCursor>` ou un curseur raw legacy.
+ *
+ * - `chunk:0|*`         → `{ chunkIndex: 0, rawCursor: '*' }`
+ * - `chunk:2|abc123`    → `{ chunkIndex: 2, rawCursor: 'abc123' }`
+ * - `*` (legacy)        → `{ chunkIndex: 0, rawCursor: '*' }`
+ * - `someRawCursor`     → `{ chunkIndex: 0, rawCursor: 'someRawCursor' }`
+ *
+ * Tolérant : un préfixe malformé retombe sur le chunk 0 avec le curseur d'origine
+ * (assume curseur raw legacy).
+ */
+export function parseCompositeCursor(
+  cursor: string,
+): { chunkIndex: number; rawCursor: string } {
+  if (!cursor.startsWith(COMPOSITE_CURSOR_PREFIX)) {
+    return { chunkIndex: 0, rawCursor: cursor }
+  }
+  const body = cursor.slice(COMPOSITE_CURSOR_PREFIX.length)
+  const sepIdx = body.indexOf('|')
+  if (sepIdx === -1) {
+    return { chunkIndex: 0, rawCursor: cursor }
+  }
+  const indexPart = body.slice(0, sepIdx)
+  const rawPart = body.slice(sepIdx + 1)
+  const parsed = Number.parseInt(indexPart, 10)
+  if (!Number.isInteger(parsed) || parsed < 0) {
+    return { chunkIndex: 0, rawCursor: cursor }
+  }
+  return { chunkIndex: parsed, rawCursor: rawPart.length > 0 ? rawPart : '*' }
+}
+
+/**
+ * Sérialise un curseur composite. Format inverse de `parseCompositeCursor`.
+ * Utilisé uniquement quand `totalChunks > 1` (sinon on retourne le rawCursor pour
+ * compatibilité descendante avec les callers qui persistent un curseur raw).
+ */
+function serializeCompositeCursor(chunkIndex: number, rawCursor: string): string {
+  return `${COMPOSITE_CURSOR_PREFIX}${chunkIndex}|${rawCursor}`
+}
+
+/**
  * Construit la requête Lucene Sirene à partir des filtres fournis.
  * Format attendu par INSEE (codes NAF sans point, range lexicographique).
+ *
+ * `nafCodes` doit être pré-normalisé (cf. `normalizeNafCodes`) et pré-chunké
+ * (cf. `chunkNafCodes`) — cette fonction se contente d'assembler la query.
  */
 function buildLuceneQuery(
   nafCodes: string[],
   effectifTranches: string[],
   codePostalRange: [string, string],
 ): string {
-  // L'API Sirene attend les codes NAF SANS point (ex. "0121Z" au lieu de "01.21Z").
-  const cleanedNafCodes = nafCodes
-    .map((c) => c.replace('.', '').trim().toUpperCase())
-    .filter((c) => c.length > 0)
-
   // Tranches : déduplication + tri + énumération via "OR" (toujours valide même pour 1 élément).
   const uniqueTranches = [...new Set(effectifTranches)].sort()
   const tranchesClause = `trancheEffectifsEtablissement:(${uniqueTranches.join(' OR ')})`
@@ -407,8 +503,8 @@ function buildLuceneQuery(
 
   // N'ajouter le filtre NAF que si la liste est non vide — sinon on cible tous les secteurs
   // (éviter le bug HTTP 400 sur `activitePrincipaleEtablissement:()`).
-  if (cleanedNafCodes.length > 0) {
-    queryParts.push(`activitePrincipaleEtablissement:(${cleanedNafCodes.join(' OR ')})`)
+  if (nafCodes.length > 0) {
+    queryParts.push(`activitePrincipaleEtablissement:(${nafCodes.join(' OR ')})`)
   }
 
   return queryParts.join(' AND ')
@@ -437,10 +533,40 @@ export async function sourcerEntreprises(
   const { nafCodes, effectifTranches, codePostalRange, curseur, pageSize, maxPages, excludeSirens } = validated
 
   const apiKey = getInseeApiKey()
-  const query = buildLuceneQuery(nafCodes, effectifTranches, codePostalRange)
 
+  // ----------------------------------------------------------------
+  // CHUNKING NAF — contourne la limite Solr Sirene (~25 termes par OR).
+  // ----------------------------------------------------------------
+  // Sirene v3.11 répond HTTP 400 "Erreur de syntaxe dans le paramètre q" quand
+  // `activitePrincipaleEtablissement:(...)` contient trop de codes. On découpe
+  // les NAF en chunks de SIRENE_MAX_NAF_PER_QUERY et on itère chunk après chunk,
+  // chacun avec son propre curseur Sirene encapsulé dans un curseur composite
+  // `chunk:<index>|<rawCursor>` exposé au caller. Quand le dernier chunk est
+  // épuisé, on remet `curseurSuivant === curseur` pour signaler `exhausted`.
+  //
+  // Si nafCodes ≤ SIRENE_MAX_NAF_PER_QUERY, un seul chunk → curseur raw
+  // legacy (rétrocompat totale avec les tests Wave 3 et le state stocké en DB).
+  const normalizedNaf = normalizeNafCodes(nafCodes)
+  const nafChunks = chunkNafCodes(normalizedNaf)
+  const isComposite = nafChunks.length > 1
+
+  // Le curseur d'entrée peut être :
+  //   - composite `chunk:N|raw` → on extrait chunkIndex + rawCursor
+  //   - raw legacy (`*`, `c2`, …) → assume chunk 0
+  const parsedCursor = parseCompositeCursor(curseur)
+  let currentChunkIndex = Math.min(parsedCursor.chunkIndex, nafChunks.length - 1)
+  let currentRawCursor = parsedCursor.rawCursor
+
+  const buildQueryForChunk = (idx: number): string =>
+    buildLuceneQuery(nafChunks[idx], effectifTranches, codePostalRange)
+
+  // ----------------------------------------------------------------
+  // PAGINATION
+  // ----------------------------------------------------------------
   const collected: SireneEtablissement[] = []
-  let currentCurseur = curseur
+  // `curseur` à exposer en sortie : on conserve l'input du caller.
+  const inputCurseur = curseur
+  // `nextCurseur` final : peut être composite ou raw selon isComposite.
   let nextCurseur = curseur
   let totalAvailable = 0
   let pagesLoaded = 0
@@ -448,10 +574,10 @@ export async function sourcerEntreprises(
 
   for (let page = 1; page <= maxPages; page++) {
     const url = new URL(INSEE_SIRET_URL)
-    url.searchParams.set('q', query)
+    url.searchParams.set('q', buildQueryForChunk(currentChunkIndex))
     url.searchParams.set('nombre', String(pageSize))
     // URLSearchParams encode automatiquement les caractères spéciaux du curseur (* devient %2A, + → %2B, etc.)
-    url.searchParams.set('curseur', currentCurseur)
+    url.searchParams.set('curseur', currentRawCursor)
 
     let response: Response
     try {
@@ -464,42 +590,58 @@ export async function sourcerEntreprises(
     } catch (err) {
       // Erreur réseau / timeout après retries → propager pour permettre fallback
       throw new SireneApiError(
-        `Sirene: erreur réseau page ${page} curseur=${currentCurseur} — ${
+        `Sirene: erreur réseau page ${page} chunk=${currentChunkIndex}/${nafChunks.length} curseur=${currentRawCursor} — ${
           err instanceof Error ? err.message : String(err)
         }`,
       )
     }
 
     if (response.status === 404) {
-      // 404 = aucun résultat — univers vide pour ce filtre
-      // universeEmpty=true uniquement si c'est la 1ère page (aucune entreprise dans l'univers).
-      // Sur une page > 1, un 404 signifie juste la fin de pagination, pas un univers vide.
-      if (pagesLoaded === 0) {
-        universeEmpty = true
-      }
+      // 404 sur le chunk courant = aucun résultat pour ce sous-ensemble de NAF.
+      // En mode composite, on essaie le chunk suivant avant de conclure à un univers vide.
+      // En mode mono-chunk (legacy), 404 sur la 1ère page = univers vide.
       console.log(
         JSON.stringify({
           level: 'info',
           module: 'sourcing',
           phase: 'sirene_page',
           page,
-          curseur: currentCurseur,
-          curseurSuivant: currentCurseur,
+          chunk_index: currentChunkIndex,
+          chunk_count: nafChunks.length,
+          curseur: currentRawCursor,
+          curseurSuivant: currentRawCursor,
           returned: 0,
           header_total: 0,
-          msg: 'Sirene 404 — univers vide',
+          msg: 'Sirene 404 — chunk vide',
         }),
       )
-      nextCurseur = currentCurseur
+
+      if (isComposite && currentChunkIndex < nafChunks.length - 1) {
+        // Passer au chunk suivant sans incrémenter pagesLoaded (404 = pas de page chargée).
+        currentChunkIndex++
+        currentRawCursor = '*'
+        nextCurseur = serializeCompositeCursor(currentChunkIndex, '*')
+        if (page < maxPages) {
+          await sleep(SIRENE_DELAY_MS)
+        }
+        continue
+      }
+
+      // Dernier chunk (ou mono-chunk) avec 404 : univers déclaré vide UNIQUEMENT
+      // si AUCUNE page n'a été chargée jusque-là (cf. hindsight 2026-05-12).
+      if (pagesLoaded === 0) {
+        universeEmpty = true
+      }
+      // Convention `exhausted` : nextCurseur === inputCurseur. Un 404 termine la
+      // pagination — on signale donc l'exhaustion en remettant nextCurseur=inputCurseur,
+      // que l'on soit en mode mono-chunk legacy ou au dernier chunk composite.
+      nextCurseur = inputCurseur
       break
     }
 
     if (response.status >= 400 && response.status < 500) {
-      // 4xx hors 404 = erreur de requête (auth, validation). On THROW pour que
-      // le caller (`runAdaptiveSourcing`) déclenche le fallback Recherche Entreprises.
-      // Le break silencieux précédent retournait { etablissements: [], exhausted: true }
-      // sans signal d'erreur → la modal affichait à tort "Univers épuisé / 0 trouvés"
-      // alors qu'il s'agissait d'une clé INSEE invalide. Cf. hindsight 2026-05-11.
+      // 4xx hors 404 = erreur de requête (auth, validation, syntaxe q=). On THROW pour
+      // que le caller (`runAdaptiveSourcing`) déclenche le fallback Recherche Entreprises.
       const body = await response.text().catch(() => '')
       console.log(
         JSON.stringify({
@@ -507,14 +649,16 @@ export async function sourcerEntreprises(
           module: 'sourcing',
           phase: 'sirene_page',
           page,
-          curseur: currentCurseur,
+          chunk_index: currentChunkIndex,
+          chunk_count: nafChunks.length,
+          curseur: currentRawCursor,
           status: response.status,
           body: body.slice(0, 200),
           msg: 'Sirene HTTP 4xx — throw SireneApiError pour fallback',
         }),
       )
       throw new SireneApiError(
-        `Sirene: HTTP ${response.status} page ${page} curseur=${currentCurseur} body=${body.slice(0, 200)}`,
+        `Sirene: HTTP ${response.status} page ${page} chunk=${currentChunkIndex}/${nafChunks.length} curseur=${currentRawCursor} body=${body.slice(0, 200)}`,
         response.status,
       )
     }
@@ -523,7 +667,7 @@ export async function sourcerEntreprises(
       // 5xx persistants → erreur fatale typée
       const body = await response.text().catch(() => '')
       throw new SireneApiError(
-        `Sirene: HTTP ${response.status} page ${page} curseur=${currentCurseur} body=${body.slice(0, 200)}`,
+        `Sirene: HTTP ${response.status} page ${page} chunk=${currentChunkIndex}/${nafChunks.length} curseur=${currentRawCursor} body=${body.slice(0, 200)}`,
         response.status,
       )
     }
@@ -533,7 +677,7 @@ export async function sourcerEntreprises(
       data = (await response.json()) as SireneResponse
     } catch (err) {
       throw new SireneApiError(
-        `Sirene: parse JSON échoué page ${page} curseur=${currentCurseur} — ${
+        `Sirene: parse JSON échoué page ${page} chunk=${currentChunkIndex}/${nafChunks.length} curseur=${currentRawCursor} — ${
           err instanceof Error ? err.message : String(err)
         }`,
       )
@@ -542,6 +686,8 @@ export async function sourcerEntreprises(
     pagesLoaded++
 
     // Le total déclaré est figé sur la PREMIÈRE page chargée dans cet appel.
+    // En mode composite, totalAvailable du chunk 0 n'est PAS le total univers complet,
+    // mais c'est l'info la plus utile dont on dispose côté caller (header_total premier chunk).
     if (pagesLoaded === 1) {
       totalAvailable = data.header?.total ?? 0
     }
@@ -551,7 +697,7 @@ export async function sourcerEntreprises(
 
     // Curseur suivant — Sirene renvoie `curseurSuivant` égal au curseur courant en fin d'univers.
     // Fallback prudent : si absent du header, considérer terminal.
-    const headerCurseurSuivant = data.header?.curseurSuivant ?? currentCurseur
+    const headerCurseurSuivant = data.header?.curseurSuivant ?? currentRawCursor
 
     console.log(
       JSON.stringify({
@@ -559,26 +705,43 @@ export async function sourcerEntreprises(
         module: 'sourcing',
         phase: 'sirene_page',
         page,
-        curseur: currentCurseur,
+        chunk_index: currentChunkIndex,
+        chunk_count: nafChunks.length,
+        curseur: currentRawCursor,
         curseurSuivant: headerCurseurSuivant,
         returned: etablissements.length,
         header_total: data.header?.total ?? 0,
       }),
     )
 
-    nextCurseur = headerCurseurSuivant
+    // Sérialiser le `curseurSuivant` exposé au caller : composite si on chunke.
+    nextCurseur = isComposite
+      ? serializeCompositeCursor(currentChunkIndex, headerCurseurSuivant)
+      : headerCurseurSuivant
 
-    // Condition d'arrêt INSEE : curseurSuivant === curseur courant => univers épuisé
-    if (headerCurseurSuivant === currentCurseur) {
+    // Condition d'arrêt INSEE pour le chunk courant : curseurSuivant === curseur courant.
+    const chunkExhausted =
+      headerCurseurSuivant === currentRawCursor || etablissements.length === 0
+
+    if (chunkExhausted) {
+      // En mode composite, passer au chunk suivant si possible — sinon univers global épuisé.
+      if (isComposite && currentChunkIndex < nafChunks.length - 1) {
+        currentChunkIndex++
+        currentRawCursor = '*'
+        nextCurseur = serializeCompositeCursor(currentChunkIndex, '*')
+        if (page < maxPages) {
+          await sleep(SIRENE_DELAY_MS)
+        }
+        continue
+      }
+      // Dernier chunk épuisé (ou mono-chunk) → on retourne avec exhausted=true.
+      // On force nextCurseur === inputCurseur pour respecter la convention.
+      nextCurseur = inputCurseur
       break
     }
 
-    // Garde-fou : page vide alors que curseur "avance" — situation anormale mais safe à stopper
-    if (etablissements.length === 0) {
-      break
-    }
-
-    currentCurseur = headerCurseurSuivant
+    // Page non-terminale : continuer la pagination sur le MÊME chunk.
+    currentRawCursor = headerCurseurSuivant
 
     // Respect du rate-limit Sirene (~28 req/min) entre les pages
     if (page < maxPages) {
@@ -586,10 +749,9 @@ export async function sourcerEntreprises(
     }
   }
 
-  // `exhausted` = vrai ssi le curseur suivant final est égal au curseur courant à la
-  // dernière itération réussie (convention INSEE : page terminale). Couvre aussi les
-  // cas 404 / 4xx / page vide où on a remis nextCurseur = currentCurseur.
-  const finalExhausted = nextCurseur === currentCurseur
+  // `exhausted` = vrai ssi le curseur suivant final est égal au curseur d'entrée.
+  // Couvre aussi les cas 404 / 4xx / page vide où on a remis nextCurseur = inputCurseur.
+  const finalExhausted = nextCurseur === inputCurseur
 
   // Filtrage post-fetch : exclure les SIREN déjà connus du caller (pas géré côté API Sirene).
   const filtered = excludeSirens.size > 0
@@ -598,7 +760,7 @@ export async function sourcerEntreprises(
 
   return {
     etablissements: filtered,
-    curseur,
+    curseur: inputCurseur,
     curseurSuivant: nextCurseur,
     totalAvailable,
     pagesLoaded,
