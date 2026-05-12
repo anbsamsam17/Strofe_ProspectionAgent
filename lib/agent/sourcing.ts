@@ -82,6 +82,80 @@ const SIRENE_DELAY_MS = 2_100   // ~28 req/min avec marge de sécurité
 const RETRY_ATTEMPTS = 2
 const RETRY_DELAY_MS = 1_000
 
+// ------------------------------------------------------------
+// CIRCUIT BREAKER — Recherche Entreprises (api.gouv.fr)
+// ------------------------------------------------------------
+//
+// Contexte (Vercel timeout 300s 2026-05-12) :
+//   `rechercherTelephone()` est appelé pour CHAQUE prospect lors de l'enrichissement
+//   ADEME (batches de 20 en parallèle dans `enrichAndScore`). Quand Recherche
+//   Entreprises tombe (panne ou rate-limit), chaque appel partait en `fetch failed`
+//   → 3 tentatives × backoff cumulatif 1+2s = ~3s par échec. Sur 142 prospects,
+//   le timeout Vercel sautait avant la fin de la phase.
+//
+// Solution : compteur d'échecs consécutifs au niveau module. Au-delà du seuil,
+// on coupe `rechercherTelephone` pour le reste du process (warm instance Vercel).
+// Le compteur se reset au cold start ET dès qu'un appel réussit (autoreprise).
+//
+// Le compteur reste in-memory (pas de Redis). Acceptable car :
+//   - une instance Vercel sert ~1 user (pas de contention)
+//   - le pire cas est un faux positif après warm reuse, ce qui dégrade
+//     l'enrichissement téléphone mais ne casse pas le pipeline.
+// ------------------------------------------------------------
+
+const RE_PHONE_TIMEOUT_MS = 5_000
+const RE_PHONE_CIRCUIT_BREAKER_THRESHOLD = 5
+let _rePhoneConsecutiveFailures = 0
+let _rePhoneCircuitOpenedAt: number | null = null
+
+/** Indique si le circuit breaker Recherche Entreprises (téléphone) est actuellement ouvert. */
+export function isRePhoneCircuitOpen(): boolean {
+  return _rePhoneConsecutiveFailures >= RE_PHONE_CIRCUIT_BREAKER_THRESHOLD
+}
+
+/** Réinitialise le compteur d'échecs (cold start / tests). */
+export function resetRePhoneCircuit(): void {
+  _rePhoneConsecutiveFailures = 0
+  _rePhoneCircuitOpenedAt = null
+}
+
+/** Expose des stats minimales pour le logging orchestrator. */
+export function getRePhoneCircuitState(): {
+  consecutiveFailures: number
+  open: boolean
+  openedAt: number | null
+} {
+  return {
+    consecutiveFailures: _rePhoneConsecutiveFailures,
+    open: isRePhoneCircuitOpen(),
+    openedAt: _rePhoneCircuitOpenedAt,
+  }
+}
+
+function recordRePhoneFailure(siren: string, errorMsg: string): void {
+  _rePhoneConsecutiveFailures += 1
+  if (_rePhoneConsecutiveFailures === RE_PHONE_CIRCUIT_BREAKER_THRESHOLD) {
+    _rePhoneCircuitOpenedAt = Date.now()
+    console.log(
+      JSON.stringify({
+        level: 'warn',
+        module: 'sourcing',
+        phase: 'enrichment_phone',
+        msg: `Circuit breaker Recherche Entreprises (téléphone) ouvert après ${RE_PHONE_CIRCUIT_BREAKER_THRESHOLD} échecs consécutifs — enrichissement téléphone désactivé pour le reste du process`,
+        siren_dernier_echec: siren,
+        derniere_erreur: errorMsg.slice(0, 200),
+      }),
+    )
+  }
+}
+
+function recordRePhoneSuccess(): void {
+  if (_rePhoneConsecutiveFailures > 0) {
+    _rePhoneConsecutiveFailures = 0
+    _rePhoneCircuitOpenedAt = null
+  }
+}
+
 // Tranches d'effectifs INSEE correspondant à >= 50 salariés (21 = 50-99, 53 = 10 000+)
 // On cible tranche >= 21 pour avoir 50+ salariés : les 200+ ont une obligation BEGES légale,
 // mais les 50-199 sont des cibles pertinentes pour une démarche volontaire.
@@ -843,6 +917,13 @@ export async function verifierBegesAdeme(siren: string): Promise<AdemeBegesEnric
  * 1. API Recherche Entreprises (recherche-entreprises.api.gouv.fr) — champ siege.telephone
  * 2. Retourne null si aucune source ne fournit de téléphone
  *
+ * Garanties anti-timeout (Vercel 300s — fix 2026-05-12) :
+ *   - 1 tentative SANS retry (les retries amplifiaient la panne d'API gouv).
+ *   - `AbortSignal.timeout(5_000)` : appel borné à 5s max (un fetch sans signal
+ *     peut hang plusieurs minutes côté Node18 si la connexion TCP traîne).
+ *   - Circuit breaker module-level : 5 échecs consécutifs → on coupe pour le
+ *     reste du process (warm instance). Auto-reset au premier succès.
+ *
  * Note : l'API Entreprise (entreprise.api.gouv.fr/v3) nécessite un token SIRET-specific
  * non public — elle n'est pas utilisée ici.
  * L'API Annuaire Entreprises (annuaire-entreprises.data.gouv.fr) ne retourne pas de champ
@@ -852,6 +933,9 @@ export async function rechercherTelephone(siren: string): Promise<string | null>
   // Validation SIREN : 9 chiffres
   if (!/^\d{9}$/.test(siren)) return null
 
+  // Circuit breaker : si trop d'échecs consécutifs, on évite de bloquer la phase.
+  if (isRePhoneCircuitOpen()) return null
+
   const url = new URL(RECHERCHE_ENTREPRISES_URL)
   url.searchParams.set('q', siren)
   url.searchParams.set('per_page', '1')
@@ -859,21 +943,33 @@ export async function rechercherTelephone(siren: string): Promise<string | null>
 
   let response: Response
   try {
-    response = await fetchWithRetry(url.toString(), {
+    // Pas de fetchWithRetry ici : c'est l'amplificateur du bug Vercel 300s.
+    // Un seul essai, timeout 5s, échec silencieux → enrichment tel best-effort.
+    response = await fetch(url.toString(), {
       headers: { Accept: 'application/json' },
+      signal: AbortSignal.timeout(RE_PHONE_TIMEOUT_MS),
     })
-  } catch {
+  } catch (err) {
+    recordRePhoneFailure(siren, err instanceof Error ? err.message : String(err))
     return null
   }
 
-  if (!response.ok) return null
+  if (!response.ok) {
+    // 4xx/5xx : on incrémente le compteur (un 503 répété justifie aussi le breaker).
+    recordRePhoneFailure(siren, `HTTP ${response.status}`)
+    return null
+  }
 
   let data: { results?: Array<{ siege?: { telephone?: string }; matching_etablissements?: Array<{ telephone?: string }> }> }
   try {
     data = await response.json()
-  } catch {
+  } catch (err) {
+    recordRePhoneFailure(siren, `parse: ${err instanceof Error ? err.message : String(err)}`)
     return null
   }
+
+  // Succès réseau : on reset le compteur (auto-reprise du breaker).
+  recordRePhoneSuccess()
 
   const results = data?.results ?? []
   if (results.length === 0) return null

@@ -1172,3 +1172,197 @@ describe('runPipelineSourcing — cible adaptative (Cat. G)', () => {
     expect(pages).toBe(10)
   })
 })
+
+// ============================================================
+// CATÉGORIE H — Cap enrichissement + soft timeout (fix Vercel 300s 2026-05-12)
+// ============================================================
+//
+// Contexte : `rechercherTelephone()` était appelée pour chaque prospect via
+// `enrichirProspect()`, avec retries x3 sur fetch failed → 142 prospects ×
+// ~3s/échec = 400s > 300s timeout Vercel.
+//
+// Garde-fous testés :
+//   H1 — ENRICH_MAX_ETABLISSEMENTS (80) : au-delà, mode dégradé.
+//   H2 — log warn explicite quand l'overflow se déclenche.
+//   H3 — soft timeout : `enrichirProspect` lent → on bascule en dégradé.
+
+describe('runPipelineSourcing — cap enrichissement + soft timeout (Cat. H)', () => {
+  it('H1: 200 etabs collectés → seuls 80 sont enrichis ADEME, 120 en mode dégradé', async () => {
+    // Arrange : 1 page de 200 etabs (target atteint).
+    const { client } = mockSupabaseAdminClient({
+      profiles: {
+        selectResponse: { data: { sourcing_state: null }, error: null },
+        updateResponse: { data: null, error: null },
+      },
+      prospects: {
+        selectResponse: { data: [], error: null },
+        // 200 prospects upsert → batches de 50 = 4 appels.
+        upsertResponses: [
+          upsertResponseAllNew(50, 'b1-'),
+          upsertResponseAllNew(50, 'b2-'),
+          upsertResponseAllNew(50, 'b3-'),
+          upsertResponseAllNew(50, 'b4-'),
+        ],
+      },
+    })
+
+    mockedSourcerEntreprises.mockResolvedValueOnce(
+      buildSourcerPage({ count: 200, curseur: '*', curseurSuivant: 'cAfter' }),
+    )
+
+    // enrichirProspect : mock par défaut (rapide, fulfilled).
+    mockedEnrichirProspect.mockImplementation(makeEnrichSuccess())
+
+    const { pushLog, calls } = makePushLog()
+
+    // Act
+    const output = await runPipelineSourcing({
+      userId: 'user-h1',
+      runId: 'run-h1',
+      params: {},
+      settings: makeSettings(),
+      supabase: client,
+      pushLog,
+    })
+
+    // Assert :
+    //   - 200 etabs collectés mais seulement 80 appels à `enrichirProspect`.
+    //   - les 200 prospects sont insérés en DB (80 enrichis + 120 dégradés).
+    expect(output.outcome?.etablissements).toHaveLength(200)
+    expect(mockedEnrichirProspect).toHaveBeenCalledTimes(80)
+    expect(output.scored).toHaveLength(200)
+
+    // Log warn cap explicite
+    const capLog = calls.find(
+      (c) => c.phase === 'enrichissement' && c.message.includes("Cap d'enrichissement atteint"),
+    )
+    expect(capLog).toBeDefined()
+    expect(capLog?.level).toBe('warn')
+    expect(capLog?.data).toMatchObject({ cap: 80, overflow: 120, total: 200 })
+  })
+
+  it('H2: 60 etabs (< cap) → tous enrichis ADEME, pas de log overflow', async () => {
+    // Arrange : 60 < 80 → tout passe par enrichirProspect.
+    const { client } = mockSupabaseAdminClient({
+      profiles: {
+        selectResponse: { data: { sourcing_state: null }, error: null },
+        updateResponse: { data: null, error: null },
+      },
+      prospects: {
+        selectResponse: { data: [], error: null },
+        upsertResponses: [
+          upsertResponseAllNew(50, 'b1-'),
+          upsertResponseAllNew(10, 'b2-'),
+        ],
+      },
+    })
+
+    mockedSourcerEntreprises.mockResolvedValueOnce(
+      buildSourcerPage({ count: 60, curseur: '*', curseurSuivant: 'cAfter' }),
+    )
+    mockedEnrichirProspect.mockImplementation(makeEnrichSuccess())
+
+    const { pushLog, calls } = makePushLog()
+
+    // Act
+    await runPipelineSourcing({
+      userId: 'user-h2',
+      runId: 'run-h2',
+      params: {},
+      settings: makeSettings(),
+      supabase: client,
+      pushLog,
+    })
+
+    // Assert
+    expect(mockedEnrichirProspect).toHaveBeenCalledTimes(60)
+    const capLog = calls.find(
+      (c) => c.phase === 'enrichissement' && c.message.includes("Cap d'enrichissement atteint"),
+    )
+    expect(capLog).toBeUndefined()
+  })
+
+  it('H3: soft timeout déclenché → log warn + restants en mode dégradé (fake timers)', async () => {
+    // Cible : ENRICH_SOFT_TIMEOUT_MS = 180_000ms. On simule des batches lents
+    // (60s chacun) sur 80 etabs (= 4 batches de 20) → après le 3e batch, on est
+    // à 180s et le 4e doit être skip en dégradé.
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    try {
+      const { client } = mockSupabaseAdminClient({
+        profiles: {
+          selectResponse: { data: { sourcing_state: null }, error: null },
+          updateResponse: { data: null, error: null },
+        },
+        prospects: {
+          selectResponse: { data: [], error: null },
+          upsertResponses: [
+            upsertResponseAllNew(50, 'b1-'),
+            upsertResponseAllNew(30, 'b2-'),
+          ],
+        },
+      })
+
+      mockedSourcerEntreprises.mockResolvedValueOnce(
+        buildSourcerPage({ count: 80, curseur: '*', curseurSuivant: 'cAfter' }),
+      )
+
+      // enrichirProspect lent : avance le temps de 70s à chaque batch d'appels.
+      // Chaque batch contient 20 calls → 70s/20 = 3.5s par appel virtuel, mais
+      // comme c'est Promise.allSettled, on avance le temps une fois par batch.
+      // Pour ce mock, on profite du fait que makePushLog accumule en ordre :
+      // on incrémente un compteur module-level.
+      let batchCount = 0
+      mockedEnrichirProspect.mockImplementation(async (etab) => {
+        // 20 calls par batch — on n'avance qu'à la 1ère call du batch.
+        const callIndex = mockedEnrichirProspect.mock.calls.length - 1
+        if (callIndex % 20 === 0) {
+          batchCount++
+          // Le 1er batch démarre à t=0, le 2e à t=70s, le 3e à t=140s.
+          // Soft timeout=180s → le 4e batch doit être skip.
+          vi.advanceTimersByTime(70_000)
+        }
+        return {
+          siren: etab.siren,
+          siret: etab.siret,
+          raison_sociale: 'TEST',
+          source: 'sirene_api',
+          signaux: [],
+          beges_publie: false,
+          obligation_beges: false,
+          user_id: 'user-h3',
+        }
+      })
+
+      const { pushLog, calls } = makePushLog()
+
+      // Act
+      const output = await runPipelineSourcing({
+        userId: 'user-h3',
+        runId: 'run-h3',
+        params: {},
+        settings: makeSettings(),
+        supabase: client,
+        pushLog,
+      })
+
+      // Assert :
+      //   - les 80 etabs sont insérés (degraded inclus).
+      //   - moins de 80 appels à enrichirProspect (soft timeout).
+      //   - log warn explicite.
+      expect(output.scored).toHaveLength(80)
+      expect(mockedEnrichirProspect.mock.calls.length).toBeLessThan(80)
+      expect(batchCount).toBeGreaterThan(0)
+
+      const timeoutLog = calls.find(
+        (c) =>
+          c.phase === 'enrichissement' &&
+          c.message.includes('Soft timeout enrichissement atteint'),
+      )
+      expect(timeoutLog).toBeDefined()
+      expect(timeoutLog?.level).toBe('warn')
+      expect(timeoutLog?.data).toHaveProperty('timeout_ms', 180_000)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+})

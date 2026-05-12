@@ -19,6 +19,8 @@ import type { SupabaseAdminClient } from '@/lib/supabase/server'
 import type { AgentLog, AgentRun, ProfileSettings, Prospect, SireneEtablissement } from '@/lib/types'
 import {
   enrichirProspect,
+  getRePhoneCircuitState,
+  resetRePhoneCircuit,
   SireneApiError,
   sourcerEntreprises,
   sourcerEntreprisesFallback,
@@ -133,6 +135,17 @@ const ADEME_BATCH_SIZE = 20
 // Caps de sécurité pour la boucle adaptative (cron Vercel timeout à 5 min).
 const HARD_CAP_PAGES = 50
 const HARD_CAP_DURATION_MS = 4 * 60 * 1000 // 4 min
+
+// Soft timeout pour la phase d'enrichissement (ADEME + téléphone Recherche Entreprises).
+// Au-delà, on coupe et on persiste les prospects partiellement enrichis (upsert idempotent —
+// les SIREN ignorés seront retentés au prochain run via la même cascade).
+// Calibré pour laisser ~80s de budget pour upsert + finalisation côté Vercel 300s.
+const ENRICH_SOFT_TIMEOUT_MS = 180 * 1000
+
+// Cap d'établissements à enrichir par run (anti-timeout supplémentaire au cas où
+// Recherche Entreprises répond lentement sans déclencher le circuit breaker).
+// 80 × ~2s/SIREN (ADEME parallèle + tel) ≈ 160s — confortable sous le soft timeout.
+const ENRICH_MAX_ETABLISSEMENTS = 80
 
 // Reset du curseur si l'univers a été déclaré épuisé il y a moins de N jours
 // (nouveaux établissements créés depuis dernière épuisement).
@@ -582,7 +595,43 @@ interface EnrichScoreOutcome {
 }
 
 /**
+ * Construit un prospect en mode dégradé (sans BEGES ni téléphone) à partir d'un
+ * établissement Sirene. Utilisé quand l'enrichissement ADEME ou Recherche Entreprises
+ * échoue ou est skip (cap / soft timeout).
+ *
+ * L'upsert sur `(user_id, siren)` est idempotent → un prochain run réessaiera
+ * l'enrichissement complet pour ces SIREN.
+ */
+function buildDegradedProspect(
+  etab: SireneEtablissement,
+  userId: string,
+): Partial<Prospect> {
+  return {
+    siren: etab.siren,
+    siret: etab.siret,
+    raison_sociale:
+      etab.denominationUniteLegale ??
+      etab.denominationUsuelle1UniteLegale ??
+      'Inconnu',
+    user_id: userId,
+    source: 'sirene_api',
+    signaux: [],
+    beges_publie: false,
+    obligation_beges: false,
+  }
+}
+
+/**
  * Enrichit (ADEME BEGES, batches de 20) et score un set d'établissements.
+ *
+ * Garde-fous anti-timeout Vercel 300s (fix 2026-05-12) :
+ *   - Cap dur : `ENRICH_MAX_ETABLISSEMENTS` (80) — au-delà, les surnuméraires
+ *     sont insérés en mode dégradé (sans BEGES ni tel) et seront retentés
+ *     au prochain run (upsert idempotent sur `(user_id, siren)`).
+ *   - Soft timeout : `ENRICH_SOFT_TIMEOUT_MS` (180s) — dès qu'il est dépassé
+ *     entre deux batches, on arrête `enrichirProspect()` et on bascule les
+ *     restants en mode dégradé.
+ *
  * Mode dégradé : un échec ADEME par SIREN logué `warn`, l'établissement passe sans BEGES.
  */
 async function enrichAndScore(
@@ -590,10 +639,60 @@ async function enrichAndScore(
   etablissements: SireneEtablissement[],
   pushLog: (phase: string, message: string, level: 'info' | 'warn' | 'error', data?: Record<string, unknown>) => void,
 ): Promise<EnrichScoreOutcome> {
-  const enrichis: Array<Partial<Prospect>> = []
+  // Reset du circuit breaker téléphone au début de chaque phase d'enrichissement.
+  // Cohérent avec la philosophie "1 run = 1 budget réseau" : on retente RE même
+  // si une instance Vercel chaude a connu une panne précédente.
+  resetRePhoneCircuit()
 
-  for (let i = 0; i < etablissements.length; i += ADEME_BATCH_SIZE) {
-    const batch = etablissements.slice(i, i + ADEME_BATCH_SIZE)
+  const enrichis: Array<Partial<Prospect>> = []
+  const phaseStartedAt = Date.now()
+
+  // Cap dur : au-delà de ENRICH_MAX_ETABLISSEMENTS, on insère en mode dégradé.
+  // Les SIREN sont triés par ordre d'arrivée Sirene (déjà priorisés par tranche).
+  const toEnrich = etablissements.slice(0, ENRICH_MAX_ETABLISSEMENTS)
+  const overflow = etablissements.slice(ENRICH_MAX_ETABLISSEMENTS)
+
+  if (overflow.length > 0) {
+    pushLog(
+      'enrichissement',
+      `Cap d'enrichissement atteint — ${overflow.length} SIREN insérés en mode dégradé (seront retentés au prochain run)`,
+      'warn',
+      {
+        cap: ENRICH_MAX_ETABLISSEMENTS,
+        overflow: overflow.length,
+        total: etablissements.length,
+      },
+    )
+  }
+
+  let softTimeoutTriggered = false
+  let processedCount = 0
+
+  for (let i = 0; i < toEnrich.length; i += ADEME_BATCH_SIZE) {
+    // Vérification soft timeout entre les batches (pas au milieu — on laisse
+    // le batch en cours se terminer pour éviter de gâcher les appels en vol).
+    if (Date.now() - phaseStartedAt > ENRICH_SOFT_TIMEOUT_MS) {
+      softTimeoutTriggered = true
+      const restants = toEnrich.length - processedCount
+      pushLog(
+        'enrichissement',
+        `Soft timeout enrichissement atteint (${ENRICH_SOFT_TIMEOUT_MS}ms) — ${restants} SIREN restants insérés en mode dégradé`,
+        'warn',
+        {
+          processed: processedCount,
+          remaining: restants,
+          timeout_ms: ENRICH_SOFT_TIMEOUT_MS,
+        },
+      )
+      // Bascule les restants vers le mode dégradé via la branche overflow ci-dessous.
+      const skipped = toEnrich.slice(processedCount)
+      for (const etab of skipped) {
+        enrichis.push(buildDegradedProspect(etab, userId))
+      }
+      break
+    }
+
+    const batch = toEnrich.slice(i, i + ADEME_BATCH_SIZE)
     const batchResults = await Promise.allSettled(batch.map((etab) => enrichirProspect(etab)))
 
     for (let j = 0; j < batchResults.length; j++) {
@@ -612,24 +711,39 @@ async function enrichAndScore(
           },
         )
         // Mode dégradé : on insère quand même l'établissement (sans données BEGES)
-        enrichis.push({
-          siren: etab.siren,
-          siret: etab.siret,
-          raison_sociale:
-            etab.denominationUniteLegale ??
-            etab.denominationUsuelle1UniteLegale ??
-            'Inconnu',
-          user_id: userId,
-          source: 'sirene_api',
-          signaux: [],
-          beges_publie: false,
-          obligation_beges: false,
-        })
+        enrichis.push(buildDegradedProspect(etab, userId))
       }
     }
+    processedCount += batch.length
   }
 
-  pushLog('enrichissement', `${enrichis.length} prospects enrichis`, 'info')
+  // Overflow : insère les SIREN au-delà du cap en mode dégradé.
+  for (const etab of overflow) {
+    enrichis.push(buildDegradedProspect(etab, userId))
+  }
+
+  // Logging final du state du circuit breaker téléphone (visible côté agent_runs).
+  const circuitState = getRePhoneCircuitState()
+  if (circuitState.open) {
+    pushLog(
+      'enrichment_contact',
+      `Circuit breaker RE activé après ${circuitState.consecutiveFailures} échecs consécutifs — enrichissement partiel`,
+      'warn',
+      {
+        enrichis_ok: processedCount,
+        skip_rest: enrichis.length - processedCount,
+        soft_timeout_triggered: softTimeoutTriggered,
+      },
+    )
+  }
+
+  pushLog('enrichissement', `${enrichis.length} prospects enrichis`, 'info', {
+    processed: processedCount,
+    degraded: enrichis.length - processedCount,
+    soft_timeout_triggered: softTimeoutTriggered,
+    re_phone_circuit_open: circuitState.open,
+    re_phone_consecutive_failures: circuitState.consecutiveFailures,
+  })
 
   const scored: Array<Partial<Prospect>> = enrichis.map((p) => {
     const score = calculerScore(p, false)
