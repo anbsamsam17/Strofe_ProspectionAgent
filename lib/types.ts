@@ -90,6 +90,10 @@ export interface Prospect {
   statut: ProspectStatus
   source: string
   enriched_at?: string
+  /** Horodatage de mise en archive — NULL/undefined = prospect actif. */
+  archived_at?: string
+  /** Notes libres CRM saisies par l'utilisateur. */
+  notes?: string
   created_at: string
   updated_at: string
 }

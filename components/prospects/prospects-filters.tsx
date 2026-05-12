@@ -8,6 +8,7 @@ interface ProspectsFiltersProps {
   currentStatuts: string[]
   currentSecteur: string
   currentScoreMin: number
+  currentArchived: boolean
 }
 
 const ALL_STATUTS: { value: ProspectStatus; label: string; dot: string }[] = [
@@ -25,6 +26,7 @@ export function ProspectsFilters({
   currentStatuts,
   currentSecteur,
   currentScoreMin,
+  currentArchived,
 }: ProspectsFiltersProps) {
   const router = useRouter()
   const pathname = usePathname()
@@ -34,11 +36,13 @@ export function ProspectsFilters({
   const [statuts, setStatuts] = useState<string[]>(currentStatuts)
   const [secteur, setSecteur] = useState(currentSecteur)
   const [scoreMin, setScoreMin] = useState(currentScoreMin)
+  const [archived, setArchived] = useState<boolean>(currentArchived)
 
   function applyFilters(
     newStatuts: string[],
     newSecteur: string,
-    newScoreMin: number
+    newScoreMin: number,
+    newArchived: boolean,
   ) {
     const params = new URLSearchParams(searchParams.toString())
     params.set('page', '1')
@@ -61,6 +65,12 @@ export function ProspectsFilters({
       params.delete('score_min')
     }
 
+    if (newArchived) {
+      params.set('archived', '1')
+    } else {
+      params.delete('archived')
+    }
+
     startTransition(() => {
       router.push(`${pathname}?${params.toString()}`)
     })
@@ -71,7 +81,7 @@ export function ProspectsFilters({
       ? statuts.filter((s) => s !== value)
       : [...statuts, value]
     setStatuts(next)
-    applyFilters(next, secteur, scoreMin)
+    applyFilters(next, secteur, scoreMin, archived)
   }
 
   function handleSecteurChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -80,26 +90,33 @@ export function ProspectsFilters({
 
   function handleSecteurKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
     if (e.key === 'Enter') {
-      applyFilters(statuts, secteur, scoreMin)
+      applyFilters(statuts, secteur, scoreMin, archived)
     }
   }
 
   function handleScoreChange(e: React.ChangeEvent<HTMLInputElement>) {
     const val = parseInt(e.target.value, 10)
     setScoreMin(val)
-    applyFilters(statuts, secteur, val)
+    applyFilters(statuts, secteur, val, archived)
+  }
+
+  function toggleArchived() {
+    const next = !archived
+    setArchived(next)
+    applyFilters(statuts, secteur, scoreMin, next)
   }
 
   function handleReset() {
     setStatuts([])
     setSecteur('')
     setScoreMin(0)
+    setArchived(false)
     startTransition(() => {
       router.push(pathname)
     })
   }
 
-  const hasFilters = statuts.length > 0 || secteur || scoreMin > 0
+  const hasFilters = statuts.length > 0 || secteur || scoreMin > 0 || archived
   const scorePercent = scoreMin
 
   return (
@@ -178,7 +195,7 @@ export function ProspectsFilters({
                 value={secteur}
                 onChange={handleSecteurChange}
                 onKeyDown={handleSecteurKeyDown}
-                onBlur={() => applyFilters(statuts, secteur, scoreMin)}
+                onBlur={() => applyFilters(statuts, secteur, scoreMin, archived)}
                 placeholder="ex : Transport..."
                 className="w-full rounded-lg border border-gray-200 bg-white py-2 pl-9 pr-3 text-sm text-gray-900 placeholder-gray-400 transition focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-500/20 dark:border-gray-700 dark:bg-gray-800 dark:text-white dark:placeholder-gray-600"
               />
@@ -239,6 +256,52 @@ export function ProspectsFilters({
               <span>100</span>
             </div>
           </div>
+
+          {/* Toggle archivés — masqués par défaut, accessibles via filtre */}
+          <div>
+            <button
+              type="button"
+              onClick={toggleArchived}
+              aria-pressed={archived}
+              className={`inline-flex w-full items-center justify-between rounded-lg border px-3 py-2 text-xs font-medium transition-colors ${
+                archived
+                  ? 'border-orange-300 bg-orange-50 text-orange-700 dark:border-orange-700 dark:bg-orange-950/40 dark:text-orange-400'
+                  : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300 hover:bg-gray-50 dark:border-gray-700 dark:bg-transparent dark:text-gray-400 dark:hover:bg-gray-800/50'
+              }`}
+            >
+              <span className="inline-flex items-center gap-2">
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="13"
+                  height="13"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden="true"
+                >
+                  <polyline points="21 8 21 21 3 21 3 8" />
+                  <rect x="1" y="3" width="22" height="5" />
+                  <line x1="10" y1="12" x2="14" y2="12" />
+                </svg>
+                Voir les archivés
+              </span>
+              <span
+                className={`relative inline-block h-4 w-7 rounded-full transition-colors ${
+                  archived ? 'bg-orange-500' : 'bg-gray-300 dark:bg-gray-700'
+                }`}
+                aria-hidden="true"
+              >
+                <span
+                  className={`absolute top-0.5 h-3 w-3 rounded-full bg-white shadow-sm transition-transform ${
+                    archived ? 'translate-x-3.5' : 'translate-x-0.5'
+                  }`}
+                />
+              </span>
+            </button>
+          </div>
         </div>
       </div>
 
@@ -250,6 +313,7 @@ export function ProspectsFilters({
               statuts.length > 0 && `${statuts.length} statut${statuts.length > 1 ? 's' : ''}`,
               secteur && `secteur "${secteur}"`,
               scoreMin > 0 && `score ≥ ${scoreMin}`,
+              archived && 'archivés',
             ]
               .filter(Boolean)
               .join(' · ')}

@@ -31,6 +31,15 @@ const PROSPECT_STATUTS: [ProspectStatus, ...ProspectStatus[]] = [
 // Schéma de validation PATCH (tous les champs sont optionnels)
 // ------------------------------------------------------------
 
+// Statuts considérés comme "terminaux" pour la suppression :
+// converti / rdv pris / intéressé — supprimer ces lignes ferait perdre du contexte
+// commercial, on les protège (sauf si l'utilisateur a explicitement archivé).
+const PROTECTED_STATUTS: ProspectStatus[] = ['interested', 'rdv', 'converted']
+
+// Limites notes : 4000 char ≈ 1 page A4 — largement suffisant pour des notes CRM,
+// borne la taille pour éviter les abus / payload géants.
+const NOTES_MAX_LENGTH = 4000
+
 const PatchBodySchema = z.object({
   // Infos de contact
   contact_nom: z.string().max(100).trim().optional(),
@@ -55,6 +64,12 @@ const PatchBodySchema = z.object({
   // Données BEGES (correction manuelle possible)
   beges_publie: z.boolean().optional(),
   obligation_beges: z.boolean().optional(),
+
+  // CRM — actions axe principal /prospects
+  /** true → archive (archived_at = now()), false → désarchive (archived_at = null). */
+  archived: z.boolean().optional(),
+  /** Notes libres ; null pour effacer, string (vide ok) pour remplacer. */
+  notes: z.string().max(NOTES_MAX_LENGTH).nullable().optional(),
 })
 
 // ------------------------------------------------------------
@@ -192,9 +207,17 @@ export async function PATCH(
     )
   }
 
+  // Transformer `archived: bool` (DX côté UI) → `archived_at: timestamp | null` (colonne DB).
+  // On extrait `archived` du payload Zod et on injecte `archived_at` dans la maj DB.
+  const { archived, ...rest } = parsed.data
+  const updatePayload: Record<string, unknown> = { ...rest }
+  if (archived !== undefined) {
+    updatePayload.archived_at = archived ? new Date().toISOString() : null
+  }
+
   const { data: updatedProspect, error: updateError } = await supabase
     .from('prospects')
-    .update(parsed.data)
+    .update(updatePayload)
     .eq('id', id)
     .eq('user_id', user.id) // ownership garanti
     .select()
@@ -258,10 +281,10 @@ export async function DELETE(
     )
   }
 
-  // Vérifier l'existence avant suppression pour retourner un 404 propre
+  // Récupérer statut + archived_at pour appliquer la règle métier de suppression.
   const { data: existing } = await supabase
     .from('prospects')
-    .select('id')
+    .select('id, statut, archived_at')
     .eq('id', id)
     .eq('user_id', user.id)
     .maybeSingle()
@@ -270,6 +293,21 @@ export async function DELETE(
     return NextResponse.json(
       { error: 'Prospect introuvable', code: 'NOT_FOUND' },
       { status: 404 },
+    )
+  }
+
+  // Règle métier : un prospect avec un statut "à valeur commerciale"
+  // (interested / rdv / converted) ne peut être hard-delete que s'il est
+  // d'abord archivé — pour éviter les pertes accidentelles de pipeline.
+  const isProtected = PROTECTED_STATUTS.includes(existing.statut as ProspectStatus)
+  if (isProtected && existing.archived_at === null) {
+    return NextResponse.json(
+      {
+        error:
+          'Ce prospect ne peut pas être supprimé directement (statut protégé). Archivez-le d’abord.',
+        code: 'DELETE_FORBIDDEN',
+      },
+      { status: 409 },
     )
   }
 
@@ -295,6 +333,5 @@ export async function DELETE(
     )
   }
 
-  // 204 No Content — suppression réussie
-  return new NextResponse(null, { status: 204 })
+  return NextResponse.json({ data: { deleted: true } }, { status: 200 })
 }

@@ -83,6 +83,8 @@ export type Database = {
           statut: string
           source: string
           enriched_at: string | null
+          archived_at: string | null
+          notes: string | null
           created_at: string
           updated_at: string
         }
@@ -114,6 +116,8 @@ export type Database = {
           statut?: string
           source?: string
           enriched_at?: string | null
+          archived_at?: string | null
+          notes?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -142,6 +146,8 @@ export type Database = {
           signaux?: Json
           statut?: string
           enriched_at?: string | null
+          archived_at?: string | null
+          notes?: string | null
           updated_at?: string
         }
         Relationships: [
