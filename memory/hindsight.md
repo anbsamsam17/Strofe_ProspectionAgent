@@ -476,4 +476,34 @@ Trier une relation imbriquée via `.order('colonne', { referencedTable: 'table_e
 - Ajouter des logs `level: info` au démarrage de chaque appel API (avant le fetch) et après (avec le résultat parsé) — un log "0 champs enrichis sur N prospects" aurait immédiatement révélé le problème.
 - Les logs de type `HTTP 401 pour SIREN X` dans les warn Vercel doivent être traités comme des bugs critiques (pas des warnings mineurs) quand ils apparaissent sur 100% des prospects.
 
+## 2026-05-12 — Refonte prompt pitch-gen (PROMPT v2)
+
+**Avant** : `accroche` = phrase d'ouverture orale (2-3 phrases pour le téléphone). `pitch` = argumentaire commercial (3-4 phrases ROI / image / financements).
+
+**Après** :
+- `accroche` = proposition d'EMAIL complet prête à envoyer (template Strofe), 120-200 mots, format texte brut, salutation personnalisée "Bonjour <prénom>," (1er prénom propre uniquement, dédupliqué en amont par `cleanFirstName`), constat factuel adapté à l'état BEGES (expiré / jamais publié / à jour), proposition d'accompagnement Strofe, référence sobre à l'article L. 229-25 (JAMAIS en ouverture).
+- `pitch` = FICHE ENTREPRISE en bullet points "- " (5-8 lignes) : secteur libellé NAF, dirigeant + qualité, CA estimé (ou "non renseigné"), effectif, nombre de sites, périmètre FR/intl/Inconnu, état BEGES, signaux d'intention. Brief factuel pour le consultant AVANT l'appel.
+- `objections`, `meilleur_creneau`, `contact_type`, `ton` : structure inchangée. Ordre obligatoire ROI > image > légal s'applique désormais aux **objections** uniquement (pas au mail).
+
+**Raison** : feedback user 2026-05-12 (Commentaires outil prospection.docx). Le consultant veut un email prêt à envoyer + un brief factuel pour maîtriser l'appel, pas un argumentaire générique formaté pour le téléphone. Le mail-first reflète mieux l'usage réel : la majorité des contacts froids passent par email avant le téléphone.
+
+**Garde-fous ajoutés** :
+- `accrocheOpensWithLegal()` : guardrail post-parse qui détecte si le mail s'ouvre sur "Obligation", "Article L. 229-25", "Amende", "Conformément à l'article", "Vous êtes en infraction" → log warn (non bloquant, le consultant peut éditer avant envoi).
+- `cleanFirstName(raw)` : helper dans `contact-enrichment.ts` qui dédoublonne les prénoms multi-tokens ("Jean-Marc Pierre" → "Jean", "MARIE SOPHIE" → "Marie"). Appliqué à toutes les sources (Recherche Entreprises, Pappers, Hunter) avant injection en DB / dans le prompt.
+- `contact_linkedin` : priorité Pappers `lien_linkedin` (dirigeant nommé, source de vérité) > Hunter (matché par domaine). Renseigné de manière systématique dès qu'une source le fournit. TODO documenté pour un fallback `linkedin.com/search?keywords=...` non utilisé comme contact_linkedin officiel.
+
+**Dry-run procédure (à exécuter manuellement avec OPENAI_API_KEY valide)** :
+1. Sélectionner 3 SIREN test représentatifs :
+   - `552032534` (LVMH — grand groupe luxe/intl, BEGES à jour) → vérifier qu'accroche utilise l'angle "renouvellement"
+   - SIREN ETI santé avec BEGES expiré > 4 ans → vérifier mention "L'échéance des 4 ans étant dépassée"
+   - SIREN PME industrie sans BEGES + obligation → vérifier "Aucune publication n'apparaît à ce jour"
+2. Lancer `genererPitch(prospect, settings)` localement avec un script Node ad hoc.
+3. Vérifier : (a) `accroche` est un mail ≤ 200 mots non-légal-first, (b) `pitch` est une fiche bullets factuelle, (c) `objections[0]` traite ROI, (d) prénom propre dans la salutation.
+4. Archiver les 3 outputs dans une nouvelle entrée hindsight datée si OK ; revert sinon.
+
+**À ne pas répéter** :
+- Ne pas mélanger deux livrables (mail + fiche) dans un même champ texte — séparer dans `accroche` vs `pitch` permet aux composants UI downstream d'afficher différemment.
+- Ne pas faire confiance aux sources externes pour le prénom : Recherche Entreprises et Pappers retournent souvent "Jean-Marc Pierre" ou "MARIE SOPHIE" tels quels — toujours passer par `cleanFirstName`.
+- Ne pas hardcoder LinkedIn de Hunter en priorité 1 : Hunter retourne souvent des LinkedIn génériques d'employés, alors que Pappers retourne le LinkedIn du dirigeant nommé. Pappers > Hunter > RE.
+
 <!-- Les entrées suivantes seront ajoutées automatiquement par Claude après chaque session -->
