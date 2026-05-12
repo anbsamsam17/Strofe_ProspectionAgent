@@ -66,3 +66,4 @@ coverage/
 
 .vercel
 runs.json
+.supabase/

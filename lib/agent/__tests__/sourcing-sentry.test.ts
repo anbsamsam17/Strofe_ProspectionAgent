@@ -128,7 +128,10 @@ describe('sourcerEntreprises — capture Sentry sur erreurs (observabilité)', (
   }, 15_000)
 
   it("N'appelle PAS captureWithContext sur HTTP 404 (univers vide — pas une erreur)", async () => {
-    const fetchMock = vi.fn().mockResolvedValueOnce(
+    // Avec NAF_PRIORITAIRES (41 codes) chunké à 20, on a 3 chunks. Chacun renvoie
+    // 404 → univers réellement vide. `mockResolvedValue` (pas `Once`) couvre les
+    // 3 appels sans que le 2e tombe sur `undefined` (qui déclencherait `fetch failed`).
+    const fetchMock = vi.fn().mockResolvedValue(
       makeResponse({ status: 404, ok: false }),
     )
     vi.stubGlobal('fetch', fetchMock)

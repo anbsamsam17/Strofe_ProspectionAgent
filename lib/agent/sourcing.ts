@@ -707,12 +707,16 @@ export async function sourcerEntreprises(
 
       if (isComposite && currentChunkIndex < nafChunks.length - 1) {
         // Passer au chunk suivant sans incrémenter pagesLoaded (404 = pas de page chargée).
+        // `page--` neutralise l'incrément de la boucle for : on garde le même budget de
+        // pages côté caller, l'advance de chunk ne doit pas consommer une itération
+        // (cf. test sourcing-sentry 404 univers vide avec maxPages=1 et 3 chunks).
         currentChunkIndex++
         currentRawCursor = '*'
         nextCurseur = serializeCompositeCursor(currentChunkIndex, '*')
         if (page < maxPages) {
           await sleep(SIRENE_DELAY_MS)
         }
+        page--
         continue
       }
 
