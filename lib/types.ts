@@ -103,10 +103,15 @@ export interface Prospect {
 export interface ScoreDetails {
   obligation_beges: number
   secteur_prioritaire: number
+  /** Points pour BEGES jamais publié (beges_publie = false). Mutuellement exclusif avec beges_expire. */
   beges_non_publie: number
+  /** Points pour BEGES publié mais expiré (>4 ans). Cible la plus chaude commercialement. */
+  beges_expire: number
   signaux_intention: number
   taille_entreprise: number
   contact_trouve: number
+  /** Bonus si le secteur NAF est déjà acculturé au BEGES (santé / transport routier / agro-alimentaire). */
+  secteur_beges_mature: number
   penalite_deja_contacte: number
   penalite_rejete: number
 }

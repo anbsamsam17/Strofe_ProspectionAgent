@@ -51,10 +51,12 @@ function makeProspect(overrides: Partial<Prospect> = {}): Prospect {
     score_details: {
       obligation_beges: 30,
       secteur_prioritaire: 20,
-      beges_non_publie: 15,
+      beges_non_publie: 0,    // BEGES publié → 0 (le bonus est dans beges_expire)
+      beges_expire: 25,        // BEGES expiré (beges_valide=false) — tuning 2026-05-13
       signaux_intention: 5,
-      taille_entreprise: 6,
-      contact_trouve: 5,
+      taille_entreprise: 10,   // effectif 999 → tranche 800-1999 (tuning 2026-05-13)
+      contact_trouve: 10,      // tuning 2026-05-13 : 5 → 10
+      secteur_beges_mature: 0, // NAF "47.11F" non mature dans cette fixture
       penalite_deja_contacte: 0,
       penalite_rejete: 0,
     },

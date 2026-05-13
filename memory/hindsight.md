@@ -506,4 +506,33 @@ Trier une relation imbriquée via `.order('colonne', { referencedTable: 'table_e
 - Ne pas faire confiance aux sources externes pour le prénom : Recherche Entreprises et Pappers retournent souvent "Jean-Marc Pierre" ou "MARIE SOPHIE" tels quels — toujours passer par `cleanFirstName`.
 - Ne pas hardcoder LinkedIn de Hunter en priorité 1 : Hunter retourne souvent des LinkedIn génériques d'employés, alors que Pappers retourne le LinkedIn du dirigeant nommé. Pappers > Hunter > RE.
 
+## 2026-05-13 — Tuning scoring : BEGES expiré > vierge + sweet spot effectif
+
+**Avant** :
+- `POINTS_BEGES_NON_PUBLIE = 20`, `POINTS_BEGES_EXPIRE = 15` (mêlés dans `score_details.beges_non_publie`)
+- `POINTS_TAILLE_MAX = 10`, barème : 200-499 = 3 / 500-999 = 6 / 1000-4999 = 8 / ≥5000 = 10
+- `POINTS_CONTACT_TELEPHONE = 5`
+- Pas de bonus secteur mature
+
+**Après** :
+- `POINTS_BEGES_NON_PUBLIE = 15`, `POINTS_BEGES_EXPIRE = 25` (champs distincts dans `ScoreDetails`)
+- Barème effectif inversé : <250 = 0 / 250-799 = 15 (sweet spot) / 800-1999 = 10 / 2000-4999 = 5 / ≥5000 = 2 (CAC40)
+- `POINTS_CONTACT_TELEPHONE = 10` (téléphone direct ×3 sur taux de contact)
+- `POINTS_SECTEUR_BEGES_MATURE = 5` (santé 86.10Z/86.21Z, transport 49.41A/B + 52.10B, agro préfixe `10.`)
+- Helper exporté `estSecteurBegesMature(naf)` et `NAF_BEGES_MATURE`.
+
+**Raison** : feedback expert prospection — BEGES expiré 4-6 ans = budget alloué historiquement, projet récurrent, prospect plus chaud qu'un vierge. Sweet spot 250-800 = décideur unique accessible vs CAC40 où Big4 (Deloitte, EY, KPMG, PwC) est incumbent. Téléphone direct multiplie le taux de contact ×3. Secteurs déjà acculturés au BEGES (santé hospitalière, transport, agro sous pression scope 3) = cycle de vente plus court.
+
+**Tests** : 26 cas couverts (vs 9 avant). Nouveaux :
+- CAS 10 — BEGES expiré 5 ans + santé 86.10Z + 400 sal + tel → 95 (chaud)
+- CAS 11 — BEGES jamais publié + CAC40 5000 sal → 47 (moyen)
+- CAS 12 — BEGES récent valide + PME 50 sal → 0 (froid)
+- CAS 13 — Cumul max → 100 (clamp)
+- CAS 14 — Exclusivité beges_non_publie ↔ beges_expire (4 sous-tests)
+- CAS 7bis — `estSecteurBegesMature`
+
+**À ne pas répéter** :
+- Le clamp est l'unique garantie de l'invariant somme ≤ 100 (cumul théorique max désormais 120).
+- Patcher TOUTES les fixtures `score_details` construites en dur (TS strict refuse les 2 nouveaux champs manquants — cf. `pitch-gen.test.ts`).
+
 <!-- Les entrées suivantes seront ajoutées automatiquement par Claude après chaque session -->
