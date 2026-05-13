@@ -75,20 +75,22 @@ describe('cleanFirstName', () => {
 
 describe('enrichirContact — étape 5 LinkedIn page entreprise', () => {
   const mockedFindLinkedin = vi.mocked(findLinkedinCompanyUrl)
-  let fetchSpy: ReturnType<typeof vi.spyOn>
+  let fetchSpy: ReturnType<typeof vi.fn>
 
   beforeEach(() => {
     mockedFindLinkedin.mockReset()
 
     // Neutralise toutes les sources réseau de la cascade (RE/Pappers/Hunter)
     // en simulant un échec HTTP 503. La cascade traite ça comme "rien trouvé"
-    // sans propager d'erreur.
-    fetchSpy = vi.spyOn(global, 'fetch').mockResolvedValue({
+    // sans propager d'erreur. vi.stubGlobal — convention du projet (cf.
+    // sourcing.test.ts) qui évite les frictions de typing avec vi.spyOn.
+    fetchSpy = vi.fn().mockResolvedValue({
       ok: false,
       status: 503,
       json: async () => ({}),
       text: async () => '',
     } as unknown as Response)
+    vi.stubGlobal('fetch', fetchSpy)
 
     // Désactive Pappers/Hunter via env pour eviter la décrémentation des
     // quotas (et garder le test deterministe).

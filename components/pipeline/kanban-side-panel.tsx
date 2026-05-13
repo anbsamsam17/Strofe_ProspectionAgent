@@ -122,6 +122,7 @@ function formatScoreDetailLabel(key: keyof ScoreDetails): string {
     taille_entreprise: 'Taille',
     contact_trouve: 'Contact trouvé',
     secteur_beges_mature: 'Secteur mature',
+    bonus_infraction_legale: 'Bonus infraction L. 229-25',
     penalite_deja_contacte: 'Déjà contacté',
     penalite_rejete: 'Rejeté',
   }

@@ -105,14 +105,17 @@ describe('buildLinkedinSlug', () => {
 // ------------------------------------------------------------
 
 describe('headLinkedinCompany', () => {
-  let fetchSpy: ReturnType<typeof vi.spyOn>
+  // vi.fn() + vi.stubGlobal — convention du projet (cf. sourcing.test.ts).
+  // Évite les frictions de typing avec vi.spyOn sur l'overload `fetch`.
+  let fetchSpy: ReturnType<typeof vi.fn>
 
   beforeEach(() => {
-    fetchSpy = vi.spyOn(global, 'fetch')
+    fetchSpy = vi.fn()
+    vi.stubGlobal('fetch', fetchSpy)
   })
 
   afterEach(() => {
-    fetchSpy.mockRestore()
+    vi.unstubAllGlobals()
   })
 
   it('retourne exists=true pour HTTP 200', async () => {
@@ -187,14 +190,15 @@ describe('headLinkedinCompany', () => {
 // ------------------------------------------------------------
 
 describe('findLinkedinCompanyUrl', () => {
-  let fetchSpy: ReturnType<typeof vi.spyOn>
+  let fetchSpy: ReturnType<typeof vi.fn>
 
   beforeEach(() => {
-    fetchSpy = vi.spyOn(global, 'fetch')
+    fetchSpy = vi.fn()
+    vi.stubGlobal('fetch', fetchSpy)
   })
 
   afterEach(() => {
-    fetchSpy.mockRestore()
+    vi.unstubAllGlobals()
   })
 
   it('retourne l\'URL canonique sur HTTP 200', async () => {

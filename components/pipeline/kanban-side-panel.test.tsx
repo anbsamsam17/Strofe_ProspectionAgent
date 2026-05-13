@@ -50,6 +50,7 @@ function makeProspect(overrides: Partial<Prospect> = {}): Prospect {
       taille_entreprise: 15,
       contact_trouve: 10,
       secteur_beges_mature: 5,
+      bonus_infraction_legale: 0,
       penalite_deja_contacte: 0,
       penalite_rejete: 0,
     },
