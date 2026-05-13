@@ -37,19 +37,28 @@ export async function AgentStats({ range }: AgentStatsProps) {
   const windowStart = rangeStartISO(range)
 
   // RLS implicite — pas de filtre user_id côté SSR.
-  const runsQuery = supabase
+  // ⚠️ Important : on SELECT seulement les colonnes utilisées, pour éviter
+  // de récupérer les JSONB lourds (`logs` peut être massif avec heartbeat 30s
+  // + Sentry captures). `select('*')` causait un crash Lambda en prod (réponse
+  // dépassant les limites Vercel sur des centaines de prospects × JSONB).
+  //
+  // Note bug Supabase JS : `.gte()` après l'init du builder retourne un nouveau
+  // builder qu'il faut RÉASSIGNER (sinon le filtre est silencieusement ignoré).
+  let runsQuery = supabase
     .from('agent_runs')
-    .select('*')
+    .select('id, status, started_at, completed_at, prospects_sourced, prospects_qualified, error_message, logs')
     .order('started_at', { ascending: false })
     .limit(TIMESERIES_MAX_RUNS)
 
   if (windowStart !== null) {
-    runsQuery.gte('started_at', windowStart)
+    runsQuery = runsQuery.gte('started_at', windowStart)
   }
 
+  // Pour `sourcingMix` + `topSectors` on n'a besoin que de 2 colonnes — pas
+  // de récupérer tout score_details, signaux, contact_*, etc.
   const prospectsQuery = supabase
     .from('prospects')
-    .select('*')
+    .select('source, secteur_libelle')
     .is('archived_at', null)
 
   const [{ data: runsRaw }, { data: prospectsRaw }] = await Promise.all([
