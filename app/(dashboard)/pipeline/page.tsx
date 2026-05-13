@@ -1,11 +1,16 @@
 import { redirect } from 'next/navigation'
-import { createClient } from '@/lib/supabase/server'
-import type { Prospect, ProspectStatus } from '@/lib/types'
-import { PipelineClient } from '@/components/pipeline/pipeline-client'
 
-// Force le rendu dynamique — le Kanban pipeline change après chaque appel
-// (statut prospect mis à jour via PATCH /api/daily-list/[id]/feedback)
+import { createClient } from '@/lib/supabase/server'
+import { PipelineClient } from '@/components/pipeline/pipeline-client'
+import { PeriodToggle, parseRange } from '@/components/pipeline/period-toggle'
+import type { Prospect, ProspectStatus } from '@/lib/types'
+
+// Force le rendu dynamique — KPI + Kanban dépendent des données + searchParams.
 export const dynamic = 'force-dynamic'
+
+interface PipelinePageProps {
+  searchParams: Promise<{ range?: string; archive?: string }>
+}
 
 // Colonnes Kanban dans l'ordre logique du pipeline
 const PIPELINE_COLUMNS: { status: ProspectStatus; label: string; color: string }[] = [
@@ -16,7 +21,25 @@ const PIPELINE_COLUMNS: { status: ProspectStatus; label: string; color: string }
   { status: 'converted', label: 'Converti', color: 'green' },
 ]
 
-export default async function PipelinePage() {
+// Statuts visibles par défaut. `interested` est visuellement fusionné dans `qualified`
+// (cf. PipelineClient + badge "intéressé"). `rejected`/`on_hold` ne sont visibles que
+// si l'utilisateur active l'archive toggle — la requête SSR les charge quand même
+// pour permettre le toggle côté client sans round-trip.
+const KANBAN_STATUSES: ProspectStatus[] = [
+  'sourced',
+  'qualified',
+  'interested',
+  'contacted',
+  'rdv',
+  'converted',
+  'rejected',
+  'on_hold',
+]
+
+export default async function PipelinePage({ searchParams }: PipelinePageProps) {
+  const params = await searchParams
+  const range = parseRange(params.range)
+
   const supabase = await createClient()
 
   const {
@@ -25,12 +48,11 @@ export default async function PipelinePage() {
 
   if (!user) redirect('/login')
 
-  // Récupère tous les prospects présents dans les colonnes pipeline
+  // RLS filtre implicitement sur user_id — pas de .eq('user_id', ...) ici.
   const { data: prospects } = await supabase
     .from('prospects')
     .select('*')
-    .eq('user_id', user.id)
-    .in('statut', PIPELINE_COLUMNS.map((c) => c.status))
+    .in('statut', KANBAN_STATUSES)
     .order('score_priorite', { ascending: false })
 
   const prospectsByStatus: Record<ProspectStatus, Prospect[]> = {
@@ -45,55 +67,28 @@ export default async function PipelinePage() {
   }
 
   for (const prospect of (prospects ?? []) as unknown as Prospect[]) {
-    const status = prospect.statut as ProspectStatus
+    const status = prospect.statut
     if (prospectsByStatus[status]) {
       prospectsByStatus[status].push(prospect)
     }
   }
 
-  const totalCount = (prospects ?? []).length
-
   return (
-    <div className="space-y-5">
-      {/* En-tête */}
-      <div className="flex flex-wrap items-end justify-between gap-3">
+    <div className="space-y-6">
+      {/* Header sticky */}
+      <header className="sticky top-0 z-20 -mx-4 flex flex-wrap items-end justify-between gap-3 border-b border-gray-200 bg-white/80 px-4 py-4 backdrop-blur supports-[backdrop-filter]:bg-white/60 dark:border-gray-800 dark:bg-gray-950/80 dark:supports-[backdrop-filter]:bg-gray-950/60 sm:-mx-6 sm:px-6">
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-gray-900 dark:text-white">
-            Pipeline CRM
+            Pipeline
           </h1>
           <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-            <span className="font-semibold text-gray-700 dark:text-gray-300">{totalCount}</span>{' '}
-            prospect{totalCount > 1 ? 's' : ''} dans le pipeline
+            Vue d&apos;ensemble du pipeline CRM et de l&apos;activité agent
           </p>
         </div>
-
-        {/* Légende rapide */}
-        <div className="hidden items-center gap-3 sm:flex">
-          {PIPELINE_COLUMNS.map((col) => {
-            const count = prospectsByStatus[col.status].length
-            return (
-              <div key={col.status} className="flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400">
-                <span
-                  className={`h-2 w-2 rounded-full ${
-                    col.color === 'gray'
-                      ? 'bg-gray-400'
-                      : col.color === 'blue'
-                        ? 'bg-blue-500'
-                        : col.color === 'yellow'
-                          ? 'bg-yellow-500'
-                          : col.color === 'purple'
-                            ? 'bg-purple-500'
-                            : 'bg-green-500'
-                  }`}
-                  aria-hidden="true"
-                />
-                <span className="font-medium">{count}</span>
-                <span>{col.label}</span>
-              </div>
-            )
-          })}
+        <div className="flex items-center gap-2">
+          <PeriodToggle current={range} />
         </div>
-      </div>
+      </header>
 
       {/* Kanban */}
       <PipelineClient
