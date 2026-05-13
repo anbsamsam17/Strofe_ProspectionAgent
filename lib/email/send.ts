@@ -5,7 +5,6 @@
 
 import { Resend } from 'resend'
 import * as React from 'react'
-import { DailyReadyEmail } from './templates/daily-ready'
 import { WelcomeEmail } from './templates/welcome'
 
 // ------------------------------------------------------------
@@ -35,24 +34,6 @@ interface SendResult {
   success: boolean
   id?: string
   error?: string
-}
-
-export interface SendDailyReadyOptions {
-  to: string
-  userName: string
-  /** Format humain, ex : "lundi 5 avril 2026" */
-  date: string
-  /** Nombre d'appels dans la liste quotidienne */
-  callsCount: number
-  /** Les 3 premiers prospects pour la preview email */
-  topProspects: Array<{
-    raison_sociale: string
-    secteur_libelle: string
-    priorite: string
-    score: number
-  }>
-  /** URL complète vers la liste du jour, ex : https://decarbonleads.strofe.fr/dashboard/daily-list */
-  appUrl: string
 }
 
 export interface SendWelcomeOptions {
@@ -110,15 +91,6 @@ async function sendEmail(options: SendOptions): Promise<SendResult> {
       return { success: false, error: error.message }
     }
 
-    console.info(JSON.stringify({
-      level: 'info',
-      service: 'email',
-      message: 'Email envoyé avec succès',
-      to: options.to,
-      subject: options.subject,
-      resend_id: data?.id,
-    }))
-
     return { success: true, id: data?.id }
   } catch (err) {
     const errorMessage = err instanceof Error ? err.message : 'Erreur inconnue lors de l\'envoi email'
@@ -132,29 +104,6 @@ async function sendEmail(options: SendOptions): Promise<SendResult> {
     }))
     return { success: false, error: errorMessage }
   }
-}
-
-// ------------------------------------------------------------
-// sendDailyReadyEmail — notification "liste quotidienne prête"
-// Appelé par l'orchestrateur en fin de run agent
-// ------------------------------------------------------------
-
-export async function sendDailyReadyEmail(options: SendDailyReadyOptions): Promise<{ success: boolean }> {
-  const subject = `Vos ${options.callsCount} appels du ${options.date} sont prêts ✅`
-
-  const result = await sendEmail({
-    to: options.to,
-    subject,
-    react: React.createElement(DailyReadyEmail, {
-      userName: options.userName,
-      date: options.date,
-      callsCount: options.callsCount,
-      topProspects: options.topProspects,
-      appUrl: options.appUrl,
-    }),
-  })
-
-  return { success: result.success }
 }
 
 // ------------------------------------------------------------
