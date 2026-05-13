@@ -1,6 +1,8 @@
+import { Suspense } from 'react'
 import { redirect } from 'next/navigation'
 
 import { createClient } from '@/lib/supabase/server'
+import { KpiCards, KpiCardsSkeleton } from '@/components/pipeline/kpi-cards'
 import { PipelineClient } from '@/components/pipeline/pipeline-client'
 import { PeriodToggle, parseRange } from '@/components/pipeline/period-toggle'
 import type { Prospect, ProspectStatus } from '@/lib/types'
@@ -89,6 +91,11 @@ export default async function PipelinePage({ searchParams }: PipelinePageProps) 
           <PeriodToggle current={range} />
         </div>
       </header>
+
+      {/* KPI cards (Server Component, lazy via Suspense) */}
+      <Suspense fallback={<KpiCardsSkeleton />}>
+        <KpiCards range={range} />
+      </Suspense>
 
       {/* Kanban */}
       <PipelineClient
