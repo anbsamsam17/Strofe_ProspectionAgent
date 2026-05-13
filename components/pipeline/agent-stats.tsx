@@ -33,46 +33,63 @@ interface AgentStatsProps {
  *  - Top 5 secteurs sourcés (liste horizontale)
  */
 export async function AgentStats({ range }: AgentStatsProps) {
-  const supabase = await createClient()
-  const windowStart = rangeStartISO(range)
+  let runStats: RunStat[]
+  let mix: ReturnType<typeof sourcingMix>
+  let sectors: SectorStat[]
+  try {
+    const supabase = await createClient()
+    const windowStart = rangeStartISO(range)
 
-  // RLS implicite — pas de filtre user_id côté SSR.
-  // ⚠️ Important : on SELECT seulement les colonnes utilisées, pour éviter
-  // de récupérer les JSONB lourds (`logs` peut être massif avec heartbeat 30s
-  // + Sentry captures). `select('*')` causait un crash Lambda en prod (réponse
-  // dépassant les limites Vercel sur des centaines de prospects × JSONB).
-  //
-  // Note bug Supabase JS : `.gte()` après l'init du builder retourne un nouveau
-  // builder qu'il faut RÉASSIGNER (sinon le filtre est silencieusement ignoré).
-  let runsQuery = supabase
-    .from('agent_runs')
-    .select('id, status, started_at, completed_at, prospects_sourced, prospects_qualified, error_message, logs')
-    .order('started_at', { ascending: false })
-    .limit(TIMESERIES_MAX_RUNS)
+    // RLS implicite — pas de filtre user_id côté SSR.
+    // ⚠️ Important : on SELECT seulement les colonnes utilisées, pour éviter
+    // de récupérer les JSONB lourds (`logs` peut être massif avec heartbeat 30s
+    // + Sentry captures). `select('*')` causait un crash Lambda en prod (réponse
+    // dépassant les limites Vercel sur des centaines de prospects × JSONB).
+    //
+    // Note bug Supabase JS : `.gte()` après l'init du builder retourne un nouveau
+    // builder qu'il faut RÉASSIGNER (sinon le filtre est silencieusement ignoré).
+    let runsQuery = supabase
+      .from('agent_runs')
+      .select('id, status, started_at, completed_at, prospects_sourced, prospects_qualified, error_message, logs')
+      .order('started_at', { ascending: false })
+      .limit(TIMESERIES_MAX_RUNS)
 
-  if (windowStart !== null) {
-    runsQuery = runsQuery.gte('started_at', windowStart)
+    if (windowStart !== null) {
+      runsQuery = runsQuery.gte('started_at', windowStart)
+    }
+
+    // Pour `sourcingMix` + `topSectors` on n'a besoin que de 2 colonnes — pas
+    // de récupérer tout score_details, signaux, contact_*, etc.
+    const prospectsQuery = supabase
+      .from('prospects')
+      .select('source, secteur_libelle')
+      .is('archived_at', null)
+
+    const [
+      { data: runsRaw, error: rErr },
+      { data: prospectsRaw, error: pErr },
+    ] = await Promise.all([runsQuery, prospectsQuery])
+
+    if (rErr || pErr) {
+      console.error('[AgentStats] Supabase query error', {
+        runs_error: rErr?.message,
+        prospects_error: pErr?.message,
+      })
+      return <AgentStatsError reason={rErr?.message ?? pErr?.message ?? 'unknown'} />
+    }
+
+    const runs = (runsRaw ?? []) as unknown as AgentRun[]
+    const prospects = (prospectsRaw ?? []) as unknown as Prospect[]
+
+    // Inverse les runs pour avoir le plus ancien à gauche dans la viz.
+    runStats = runs.slice().reverse().map(toRunStat)
+    mix = sourcingMix(prospects, runs)
+    sectors = topSectors(prospects, 5)
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    console.error('[AgentStats] Render error', { message: msg, stack: err instanceof Error ? err.stack : undefined })
+    return <AgentStatsError reason={msg} />
   }
-
-  // Pour `sourcingMix` + `topSectors` on n'a besoin que de 2 colonnes — pas
-  // de récupérer tout score_details, signaux, contact_*, etc.
-  const prospectsQuery = supabase
-    .from('prospects')
-    .select('source, secteur_libelle')
-    .is('archived_at', null)
-
-  const [{ data: runsRaw }, { data: prospectsRaw }] = await Promise.all([
-    runsQuery,
-    prospectsQuery,
-  ])
-
-  const runs = (runsRaw ?? []) as unknown as AgentRun[]
-  const prospects = (prospectsRaw ?? []) as unknown as Prospect[]
-
-  // Inverse les runs pour avoir le plus ancien à gauche dans la viz.
-  const runStats: RunStat[] = runs.slice().reverse().map(toRunStat)
-  const mix = sourcingMix(prospects, runs)
-  const sectors = topSectors(prospects, 5)
 
   return (
     <section
@@ -297,6 +314,27 @@ function TopSectors({ sectors }: { sectors: SectorStat[] }) {
         ))}
       </ul>
     </div>
+  )
+}
+
+// ── Fallback erreur (try/catch interne AgentStats) ──────────────────────────
+
+function AgentStatsError({ reason }: { reason: string }) {
+  return (
+    <section
+      role="alert"
+      className="rounded-2xl border border-amber-200 bg-amber-50 p-5 dark:border-amber-900/40 dark:bg-amber-950/30"
+    >
+      <h2 className="text-sm font-semibold uppercase tracking-wider text-amber-700 dark:text-amber-400">
+        Activité agent — indisponible
+      </h2>
+      <p className="mt-2 text-sm text-amber-700 dark:text-amber-400">
+        Le chargement des stats agent a échoué côté serveur. Le pipeline reste utilisable.
+      </p>
+      <p className="mt-2 break-words font-mono text-xs text-amber-700 dark:text-amber-400">
+        {reason}
+      </p>
+    </section>
   )
 }
 

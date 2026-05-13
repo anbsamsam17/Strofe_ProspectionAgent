@@ -134,23 +134,41 @@ interface KpiCardsProps {
 }
 
 export async function KpiCards({ range }: KpiCardsProps) {
-  const supabase = await createClient()
-  const windowStart = rangeStartISO(range)
+  let kpis: ReturnType<typeof computeKpis>
+  try {
+    const supabase = await createClient()
+    const windowStart = rangeStartISO(range)
 
-  // RLS implicite — pas de filtre user_id.
-  const [{ data: prospectsRaw }, { data: itemsRaw }, { data: runsRaw }] = await Promise.all([
-    supabase.from('prospects').select('statut, beges_publie, archived_at, created_at'),
-    supabase
-      .from('daily_list_items')
-      .select('call_result, called_at, created_at'),
-    supabase.from('agent_runs').select('status, started_at, completed_at'),
-  ])
+    // RLS implicite — pas de filtre user_id.
+    const [
+      { data: prospectsRaw, error: pErr },
+      { data: itemsRaw, error: iErr },
+      { data: runsRaw, error: rErr },
+    ] = await Promise.all([
+      supabase.from('prospects').select('statut, beges_publie, archived_at, created_at'),
+      supabase.from('daily_list_items').select('call_result, called_at, created_at'),
+      supabase.from('agent_runs').select('status, started_at, completed_at'),
+    ])
 
-  const prospects = (prospectsRaw ?? []) as unknown as ProspectRow[]
-  const items = (itemsRaw ?? []) as unknown as DailyListItemRow[]
-  const runs = (runsRaw ?? []) as unknown as AgentRunRow[]
+    if (pErr || iErr || rErr) {
+      console.error('[KpiCards] Supabase query error', {
+        prospects_error: pErr?.message,
+        items_error: iErr?.message,
+        runs_error: rErr?.message,
+      })
+      return <KpiCardsError reason={pErr?.message ?? iErr?.message ?? rErr?.message ?? 'unknown'} />
+    }
 
-  const kpis = computeKpis(prospects, items, runs, windowStart)
+    const prospects = (prospectsRaw ?? []) as unknown as ProspectRow[]
+    const items = (itemsRaw ?? []) as unknown as DailyListItemRow[]
+    const runs = (runsRaw ?? []) as unknown as AgentRunRow[]
+
+    kpis = computeKpis(prospects, items, runs, windowStart)
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    console.error('[KpiCards] Render error', { message: msg, stack: err instanceof Error ? err.stack : undefined })
+    return <KpiCardsError reason={msg} />
+  }
 
   return (
     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -243,6 +261,34 @@ function KpiCard({ label, value, sublabel, icon, deltaPositive, inverted }: KpiC
       >
         {sublabel}
       </p>
+    </div>
+  )
+}
+
+// ── Fallback erreur (try/catch interne KpiCards) ──────────────────────────────
+
+function KpiCardsError({ reason }: { reason: string }) {
+  return (
+    <div
+      role="alert"
+      className="grid grid-cols-1 gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 dark:border-amber-900/40 dark:bg-amber-950/30 sm:grid-cols-2"
+    >
+      <div>
+        <p className="text-xs font-semibold uppercase tracking-wider text-amber-700 dark:text-amber-400">
+          KPI indisponibles
+        </p>
+        <p className="mt-1 text-sm text-amber-700 dark:text-amber-400">
+          Le calcul des indicateurs a échoué côté serveur. Le pipeline reste utilisable.
+        </p>
+      </div>
+      <div>
+        <p className="text-xs font-semibold uppercase tracking-wider text-amber-700 dark:text-amber-400">
+          Diagnostic
+        </p>
+        <p className="mt-1 break-words font-mono text-xs text-amber-700 dark:text-amber-400">
+          {reason}
+        </p>
+      </div>
     </div>
   )
 }
