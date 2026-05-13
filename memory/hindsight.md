@@ -535,4 +535,82 @@ Trier une relation imbriquée via `.order('colonne', { referencedTable: 'table_e
 - Le clamp est l'unique garantie de l'invariant somme ≤ 100 (cumul théorique max désormais 120).
 - Patcher TOUTES les fixtures `score_details` construites en dur (TS strict refuse les 2 nouveaux champs manquants — cf. `pitch-gen.test.ts`).
 
+---
+
+## 2026-05-13 — F3 : LinkedIn page entreprise en dernier recours (post-cascade enrichment)
+
+**Contexte** : beaucoup de prospects sortent SANS aucun canal de contact direct
+(ni téléphone direct, ni email, ni LinkedIn dirigeant) et sont écartés du Top
+15 par le filter `hasContact` côté UI. Demande user : récupérer en dernier
+recours une URL de PAGE ENTREPRISE LinkedIn pour permettre une recherche
+manuelle via Sales Navigator côté humain.
+
+**Décisions prises** :
+
+1. **Distinguer deux colonnes LinkedIn** plutôt qu'un champ polymorphe :
+   - `contact_linkedin` = profil PERSONNEL (dirigeant nommé, source Pappers/Hunter)
+   - `contact_linkedin_entreprise` = URL PAGE ENTREPRISE (fallback Sales Nav)
+   Justification : un consultant utilise les deux différemment. Un préfixe
+   `[entreprise] ` dans le même champ aurait été un anti-pattern (parsing
+   fragile côté UI, requêtes SQL polluées).
+
+2. **Vanity URL + HEAD HTTP** plutôt que API LinkedIn (refus prévisible) ou
+   scraping (ToS interdit). `https://www.linkedin.com/company/<slug>/` est
+   prédictible pour la majorité des ETI/PME françaises. Le HEAD valide
+   l'existence sans charger le HTML — moins de risque rate-limit.
+
+3. **Sources évaluées et rejetées** :
+   - Pages Jaunes : pas d'API publique ouverte, scraping gris.
+   - Google Places : payant à la requête, ROI insuffisant.
+   - société.com : scraping interdit par ToS.
+   - Cognism/Lusha/Apollo : payant abonnement, hors scope POC.
+   - LinkedIn Public API : refusera notre cas d'usage (Vetted Marketing).
+
+**Ce qui a bien marché** :
+- Slug-builder avec **collapse des sigles ponctués** ("S.A." → "sa") via
+  regex `(?:[a-z]\.){2,}` avant tokenisation. Sans ça, "L'Oréal S.A." donnait
+  "loreal-s-a" car "s" et "a" pris isolément ne matchent pas la forme "sa".
+- HEAD HTTP avec `redirect: 'manual'` pour traiter 301/302 comme existence
+  confirmée (LinkedIn redirige vers l'URL canonique avec slug normalisé).
+- Test unitaire vi.mock du helper depuis `contact-enrichment.test.ts` :
+  permet de tester l'étape 5 sans réseau LinkedIn ni la cascade complète.
+
+**Ce qui n'a pas marché (du premier coup)** :
+- Tentative initiale du slug : "L'Oréal S.A." → "loreal-s-a". Le test échoue
+  car le retrait des formes juridiques se fait par token, et les single-letters
+  "s" puis "a" séparés ne sont pas reconnus.
+- Premier tic : j'avais étendu `orchestrator.ts` pour SELECT le nouveau champ
+  → rollback immédiat (interdit par scope F3, "NE TOUCHE PAS orchestrator").
+  L'idempotence se gère côté `enrichirContact` via le check
+  `existingContact.contact_linkedin_entreprise`. L'orchestrator peut être
+  étendu plus tard sans impact rétrocompat.
+
+**À ne pas répéter** :
+- Ne PAS scraper le HTML LinkedIn — HEAD suffit pour vérifier l'existence,
+  et c'est l'unique méthode "soft" qui n'enfreint pas les ToS.
+- Ne PAS retry agressif sur HTTP 999 (rate-limit) : traiter comme "inconnu",
+  return null silencieux. Un retry exponentiel cumulerait les bans.
+- Ne PAS logger la raison sociale brute (peut contenir un nom de famille de
+  dirigeant solo / EI). Log uniquement le slug normalisé.
+
+**À refaire** :
+- Pour toute nouvelle source d'enrichissement : pattern "post-cascade" avec
+  garde `hasNoDirectContact` (idempotent, non destructif sur champs préexistants).
+- Whitelist SSRF : ajouter explicitement `www.linkedin.com` dans
+  `.claude/rules/security.md` lors de la prochaine pass docs (currently à
+  documenter — la fonction utilise un URL hardcoded donc OK code-side).
+
+**Métriques attendues en prod** (à vérifier après 1 semaine de prod) :
+- Taux de match LinkedIn entreprise sur prospects sans contact : **>60%**
+  pour les ETI/PME >100 salariés (présence LinkedIn quasi-systématique).
+- Taux de rate-limit HTTP 999 : surveiller, si >10% → ralentir la cascade
+  (delay 500ms entre HEAD).
+
+**Fichiers** :
+- `supabase/migrations/008_prospect_contact_linkedin_entreprise.sql`
+- `lib/agent/linkedin-company.ts` (helper + slug-builder + HEAD)
+- `lib/agent/contact-enrichment.ts` (étape 5 post-cascade)
+- `lib/types.ts` (champ additif sur `Prospect`)
+- Tests : `linkedin-company.test.ts` (28 cas) + `contact-enrichment.test.ts` (9 nouveaux cas)
+
 <!-- Les entrées suivantes seront ajoutées automatiquement par Claude après chaque session -->
