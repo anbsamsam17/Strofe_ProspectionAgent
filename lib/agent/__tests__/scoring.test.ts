@@ -2,7 +2,8 @@
 // TESTS UNITAIRES — scoring.ts
 // Vitest — pattern AAA (Arrange / Act / Assert)
 // Tuning 2026-05-13 : BEGES expiré +25 > vierge +15, sweet spot 250-800 +15,
-// téléphone +10, secteur mature +5. Voir memory/hindsight.md.
+// téléphone +10, secteur mature +5, bonus_infraction_legale +20 (obligé sans
+// BEGES publié = infraction L. 229-25). Voir memory/hindsight.md.
 // ============================================================
 
 import { describe, expect, it } from 'vitest'
@@ -34,15 +35,17 @@ function makeProspect(overrides: Partial<Prospect> = {}): Partial<Prospect> {
 }
 
 // ── CAS 1 : Prospect idéal ──────────────────────────────────────────────────
-// obligation +30, secteur prio +20, BEGES non publié +15, taille 999 +10,
-// contact tel +10, secteur agro mature +5 = 90
+// Profil "infraction" (obligation=true && beges_publie=false) + tous bonus :
+// obligation +30, secteur prio +20, BEGES non publié +15, bonus infraction +20,
+// taille 999 +10, contact tel +10, secteur agro mature +5 = 110 → clamp 100
 
 describe('calculerScore — cas nominal', () => {
-  it('attribue un score élevé au prospect idéal sans pénalité', () => {
+  it('attribue un score maximal (clamp 100) au prospect idéal "infraction"', () => {
     const prospect = makeProspect()
     const score = calculerScore(prospect, false)
 
-    expect(score).toBe(90)
+    // Brut = 30 + 20 + 15 + 20 (bonus infraction) + 10 + 10 + 5 = 110 → clampé 100
+    expect(score).toBe(100)
     expect(score).toBeGreaterThanOrEqual(60)
     expect(score).toBeLessThanOrEqual(100)
   })
@@ -58,6 +61,7 @@ describe('calculerScore — cas nominal', () => {
     expect(details.taille_entreprise).toBe(10)
     expect(details.contact_trouve).toBe(10)
     expect(details.secteur_beges_mature).toBe(5)
+    expect(details.bonus_infraction_legale).toBe(20)
   })
 })
 
@@ -70,7 +74,10 @@ describe('calculerScore — prospect rejeté', () => {
     const details = getScoreDetails(prospect, false)
 
     expect(details.penalite_rejete).toBe(-50)
-    expect(score).toBe(40) // 90 - 50
+    // Brut = 110 - 50 = 60 (le clamp à 100 s'applique avant la pénalité au niveau
+    // de la somme : 110 - 50 = 60, pas 100 - 50 = 50, car le clamp est appliqué
+    // une seule fois sur la somme finale)
+    expect(score).toBe(60)
   })
 })
 
@@ -84,8 +91,10 @@ describe('calculerScore — déjà contacté', () => {
     const details = getScoreDetails(prospect, true)
 
     expect(details.penalite_deja_contacte).toBe(-20)
-    expect(scoreDejaContacte).toBe(scoreNoContact - 20)
-    expect(scoreDejaContacte).toBe(70)
+    // Sans pénalité : brut 110 clampé à 100. Avec pénalité : brut 90 (110-20),
+    // pas clampé. La différence apparente n'est donc pas -20 mais -10.
+    expect(scoreNoContact).toBe(100)
+    expect(scoreDejaContacte).toBe(90)
   })
 })
 
@@ -253,6 +262,7 @@ describe('getScoreDetails', () => {
       details.taille_entreprise +
       details.contact_trouve +
       details.secteur_beges_mature +
+      details.bonus_infraction_legale +
       details.penalite_deja_contacte +
       details.penalite_rejete
     const scoreFromDetails = Math.max(0, Math.min(100, sum))
@@ -295,10 +305,10 @@ describe('calculerScore — BEGES expiré 5 ans + santé 400 sal + téléphone t
   })
 })
 
-// ── CAS 11 : BEGES jamais publié + CAC40 → MOYEN ────────────────────────────
+// ── CAS 11 : BEGES jamais publié + CAC40 → HAUTE (infraction L. 229-25) ─────
 
 describe('calculerScore — BEGES jamais publié + CAC40 5000 sal.', () => {
-  it('produit un score moyen — cycle long, Big4 incumbent', () => {
+  it('produit un score haut grâce au bonus infraction — obligé + BEGES absent', () => {
     const prospect = makeProspect({
       secteur_naf: '64.19Z',
       obligation_beges: true,
@@ -316,10 +326,10 @@ describe('calculerScore — BEGES jamais publié + CAC40 5000 sal.', () => {
     expect(details.beges_non_publie).toBe(15)
     expect(details.beges_expire).toBe(0)
     expect(details.secteur_beges_mature).toBe(0)
-    // 30 + 0 + 15 + 0 + 0 + 2 + 0 + 0 = 47
-    expect(score).toBe(47)
-    expect(score).toBeGreaterThanOrEqual(30)
-    expect(score).toBeLessThan(60)
+    expect(details.bonus_infraction_legale).toBe(20)
+    // 30 + 0 + 15 + 0 + 0 + 2 + 0 + 0 + 20 = 67
+    expect(score).toBe(67)
+    expect(score).toBeGreaterThanOrEqual(60) // priorité haute garantie
   })
 })
 
@@ -409,5 +419,110 @@ describe('calculerScore — BEGES expiré vs non publié sont exclusifs', () => 
       effectif_max: 0, contact_telephone: undefined, signaux: [],
     })
     expect(calculerScore(pExpire, false)).toBeGreaterThan(calculerScore(pVierge, false))
+  })
+})
+
+// ── CAS 15 : Bonus infraction L. 229-25 — profil minimal en haut du Top ─────
+// Garantie business : un prospect "obligé + BEGES absent" doit dépasser
+// même un prospect très bien équipé MAIS pas en infraction (BEGES expiré).
+
+describe('calculerScore — bonus infraction L. 229-25 garantit le top', () => {
+  it('attribue +20 au profil "obligé + beges_publie=false" — infraction', () => {
+    const pInfraction = makeProspect({
+      // Minimaliste : pas de NAF prioritaire, pas de NAF mature, pas de tel,
+      // pas de signaux, effectif sous sweet spot — UNIQUEMENT obligation + BEGES absent.
+      secteur_naf: '47.11F',
+      obligation_beges: true,
+      beges_publie: false,
+      effectif_min: 100,
+      effectif_max: 200, // < 250 → 0 pt taille
+      contact_telephone: undefined,
+      signaux: [],
+    })
+
+    const details = getScoreDetails(pInfraction, false)
+    const score = calculerScore(pInfraction, false)
+
+    expect(details.obligation_beges).toBe(30)
+    expect(details.beges_non_publie).toBe(15)
+    expect(details.bonus_infraction_legale).toBe(20)
+    // 30 + 0 + 15 + 0 + 0 + 0 + 0 + 0 + 20 = 65 — exactement le seuil haute (60)
+    expect(score).toBe(65)
+    expect(score).toBeGreaterThanOrEqual(60) // priorité haute garantie sans autre critère
+  })
+
+  it('domine un prospect "tout bon SAUF BEGES expiré" (pas en infraction)', () => {
+    // Profil "infraction" minimal — voir test précédent
+    const pInfractionMinimal = makeProspect({
+      secteur_naf: '47.11F',
+      obligation_beges: true,
+      beges_publie: false,
+      effectif_min: 100,
+      effectif_max: 200,
+      contact_telephone: undefined,
+      signaux: [],
+    })
+
+    // Profil "tout bon" mais BEGES expiré (publié + obsolète, pas absent)
+    // → pas en infraction L. 229-25 → bonus_infraction_legale = 0
+    const pToutBonSaufExpire = makeProspect({
+      secteur_naf: '47.11F', // non prio, non mature
+      obligation_beges: false, // PAS obligé
+      beges_publie: true,
+      beges_valide: false, // expiré → +25
+      effectif_min: 300,
+      effectif_max: 500, // sweet spot → +15
+      contact_telephone: '0145000000', // → +10
+      signaux: [{ type: 'job_posting', description: 'RSE', weight: 10 }], // → +10
+    })
+
+    const scoreInfraction = calculerScore(pInfractionMinimal, false)
+    const scoreToutBon = calculerScore(pToutBonSaufExpire, false)
+
+    // Infraction = 65 ; tout bon sauf expiré = 0 + 0 + 0 + 25 + 10 + 15 + 10 + 0 = 60
+    expect(scoreInfraction).toBe(65)
+    expect(scoreToutBon).toBe(60)
+    expect(scoreInfraction).toBeGreaterThanOrEqual(scoreToutBon)
+  })
+})
+
+// ── CAS 16 : BEGES expiré != infraction (le bonus ne s'applique PAS) ────────
+
+describe('calculerScore — bonus infraction NE s\'applique PAS si BEGES expiré', () => {
+  it('obligation=true && beges_publie=true && beges_valide=false → bonus_infraction_legale=0', () => {
+    // Un BEGES expiré n'est PAS une infraction L. 229-25 — un bilan existe,
+    // l'obligation initiale est remplie. Seul le renouvellement quadriennal
+    // est dépassé. Cas géré par POINTS_BEGES_EXPIRE = 25.
+    const prospect = makeProspect({
+      obligation_beges: true,
+      beges_publie: true,
+      beges_valide: false,
+    })
+
+    const details = getScoreDetails(prospect, false)
+
+    expect(details.obligation_beges).toBe(30)
+    expect(details.beges_non_publie).toBe(0)
+    expect(details.beges_expire).toBe(25)
+    expect(details.bonus_infraction_legale).toBe(0) // pas d'infraction
+  })
+})
+
+// ── CAS 17 : PME pas obligée (le bonus ne s'applique PAS) ───────────────────
+
+describe('calculerScore — bonus infraction NE s\'applique PAS si non obligé', () => {
+  it('obligation=false && beges_publie=false → bonus_infraction_legale=0', () => {
+    // Une PME (< 500 sal., hors Région ≥ 250) sans BEGES n'est PAS en infraction —
+    // elle n'a pas l'obligation. Le bonus ne doit pas s'appliquer.
+    const prospect = makeProspect({
+      obligation_beges: false,
+      beges_publie: false,
+    })
+
+    const details = getScoreDetails(prospect, false)
+
+    expect(details.obligation_beges).toBe(0)
+    expect(details.beges_non_publie).toBe(15) // points BEGES absent restent
+    expect(details.bonus_infraction_legale).toBe(0) // mais pas le bonus infraction
   })
 })
