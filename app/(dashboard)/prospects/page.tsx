@@ -35,7 +35,10 @@ export const dynamic = 'force-dynamic'
 // ── Constants ─────────────────────────────────────────────────────────────────
 
 const PAGE_SIZE = 20
-const TOP_PRIORITIES_LIMIT = 20
+// Aligné sur `daily_call_target` standard (15 appels/jour) — voir CLAUDE.md.
+const TOP_PRIORITIES_LIMIT = 15
+// Cible du lien "Voir tout le top 50" depuis le hero Top 15.
+const TOP_ALL_LIMIT = 50
 
 const STATUS_LABELS: Record<ProspectStatus, string> = {
   sourced: 'Sourcé',
@@ -177,7 +180,7 @@ interface SearchParams {
   contact_type?: string
 }
 
-// Statuts terminaux exclus du Top 20 par défaut (déjà traités côté commercial).
+// Statuts terminaux exclus du Top 15 par défaut (déjà traités côté commercial).
 const TERMINAL_STATUTS_TOP: ProspectStatus[] = ['converted', 'rejected']
 
 export default async function ProspectsPage({
@@ -239,7 +242,7 @@ export default async function ProspectsPage({
     query = query.or(orClause)
   }
 
-  // Top 20 priorités — vue défaut, calculée indépendamment des filtres tabulaires
+  // Top 15 priorités — vue défaut, calculée indépendamment des filtres tabulaires
   // pour rester stable même quand l'utilisateur explore. On l'affiche uniquement
   // dans le mode "non archivés" (ça n'aurait pas de sens sur la pile d'archives).
   const topPrioritiesPromise = showArchived
@@ -253,11 +256,35 @@ export default async function ProspectsPage({
         .order('score_priorite', { ascending: false })
         .limit(TOP_PRIORITIES_LIMIT)
 
-  const [{ data: prospects, count }, topRes] = await Promise.all([
+  // Compteur "nouveaux dernier run" — récupère le started_at du dernier run agent
+  // pour le user courant, puis compte les prospects créés depuis. RLS filtre
+  // implicitement (session SSR). Si pas de run, on omet le segment côté UI.
+  const lastRunPromise = supabase
+    .from('agent_runs')
+    .select('started_at')
+    .order('started_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+
+  const [{ data: prospects, count }, topRes, lastRunRes] = await Promise.all([
     query,
     topPrioritiesPromise,
+    lastRunPromise,
   ])
   const topPriorities = (topRes.data ?? []) as unknown as Prospect[]
+
+  const lastRunStartedAt =
+    (lastRunRes.data as { started_at: string } | null)?.started_at ?? null
+
+  // Le compteur ne fait sens que s'il existe un run de référence.
+  let newSinceLastRun = 0
+  if (lastRunStartedAt) {
+    const { count: newCount } = await supabase
+      .from('prospects')
+      .select('id', { count: 'exact', head: true })
+      .gte('created_at', lastRunStartedAt)
+    newSinceLastRun = newCount ?? 0
+  }
 
   const totalPages = Math.ceil((count ?? 0) / PAGE_SIZE)
 
@@ -299,22 +326,44 @@ export default async function ProspectsPage({
           </h1>
           <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
             <span className="font-semibold text-gray-700 dark:text-gray-300">{count ?? 0}</span>{' '}
-            prospect{(count ?? 0) > 1 ? 's' : ''} au total
+            au total
+            {newSinceLastRun > 0 && (
+              <>
+                {' · '}
+                <span className="font-semibold text-green-700 dark:text-green-400">
+                  {newSinceLastRun} nouveau{newSinceLastRun > 1 ? 'x' : ''}
+                </span>{' '}
+                dernier run
+              </>
+            )}
           </p>
         </div>
       </div>
 
-      {/* Top 20 priorités — axe principal de l'app */}
-      {!showArchived && <TopPriorities prospects={topPriorities} />}
+      {/* Top 15 priorités — hero, axe principal de l'app.
+          Le lien "Voir tout le top 50" ramène le tableau en haut de page,
+          trié par score décroissant — l'utilisateur paginera 20+20+10 pour
+          parcourir le top 50 (PAGE_SIZE=20). `TOP_ALL_LIMIT` reste un label
+          sémantique côté CTA, pas un paramètre d'URL. */}
+      {!showArchived && (
+        <TopPriorities
+          prospects={topPriorities}
+          topAllHref="/prospects?sort=score_priorite&order=desc&page=1"
+        />
+      )}
 
-      {/* Filtres */}
-      <ProspectsFilters
-        currentStatuts={statutFilter}
-        currentSecteur={secteurFilter}
-        currentScoreMin={scoreMin}
-        currentArchived={showArchived}
-        currentContactTypes={contactTypes}
-      />
+      {/* Filtres — sticky en haut du scroll pour rester accessibles en exploration.
+          Wrapper -mx-... pour étendre le fond jusqu'aux bords du <main> et masquer
+          le contenu qui passe derrière le sticky (sinon halo visuel). */}
+      <div className="sticky top-0 z-10 -mx-4 border-b border-gray-200/80 bg-gray-50/95 px-4 py-3 backdrop-blur supports-[backdrop-filter]:bg-gray-50/80 dark:border-gray-800/80 dark:bg-gray-950/95 dark:supports-[backdrop-filter]:bg-gray-950/80 sm:-mx-6 sm:px-6">
+        <ProspectsFilters
+          currentStatuts={statutFilter}
+          currentSecteur={secteurFilter}
+          currentScoreMin={scoreMin}
+          currentArchived={showArchived}
+          currentContactTypes={contactTypes}
+        />
+      </div>
 
       {/* Tableau */}
       <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-900">
