@@ -141,8 +141,8 @@ export async function POST(request: NextRequest) {
 
     // Lancer les runs de sourcing en parallèle — chaque user reçoit son propre
     // client admin pour éviter la contention sur le pool de connexions.
-    // Le cron nocturne alimente uniquement le pipeline de prospects.
-    // La daily list est générée séparément via POST /api/daily-list/generate.
+    // Le cron nocturne alimente uniquement le pipeline `prospects` (sourcing +
+    // enrichissement ADEME/contacts + scoring). Pas de daily list générée.
     const adminClients = userIds.map(() => createAdminClient())
 
     const results = await Promise.allSettled(
@@ -216,8 +216,8 @@ export async function POST(request: NextRequest) {
   const supabaseAdmin = createAdminClient()
 
   // -- Vérification anti-concurrence : un seul run actif à la fois par user --
-  // Deux runs simultanés peuvent créer une condition de course sur daily_list_items
-  // (DELETE + INSERT concurrent). On retourne 409 si un run est déjà en cours.
+  // Deux runs simultanés peuvent créer une condition de course sur l'upsert
+  // de `prospects`. On retourne 409 si un run est déjà en cours.
   const { data: existingRun } = await supabaseAdmin
     .from('agent_runs')
     .select('id')
@@ -236,10 +236,9 @@ export async function POST(request: NextRequest) {
     )
   }
 
-  // MODE MANUEL : compatibilité descendante — appelle runAgentNocturne()
-  // (sourcing + daily list en un seul run, pour les utilisateurs qui l'utilisaient déjà).
+  // MODE MANUEL : appelle runAgentNocturne() — sourcing + enrichissement +
+  // scoring + upsert prospects. Pas de daily list générée.
   // Pour un sourcing pur avec paramètres : POST /api/agent/sourcing
-  // Pour générer la daily list seule : POST /api/daily-list/generate
   let run: AgentRun
   try {
     run = await runAgentNocturne(targetUserId, supabaseAdmin)

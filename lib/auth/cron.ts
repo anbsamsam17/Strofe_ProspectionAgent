@@ -23,7 +23,7 @@ import { timingSafeEqual } from 'crypto'
  *
  * Utilise par :
  * - POST /api/agent/run (cron nocturne Vercel 22h)
- * - POST /api/notifications/daily (notification matin)
+ * - POST /api/agent/reap-stale (cron toutes les 10 min)
  */
 export function isCronRequest(request: NextRequest): boolean {
   const cronSecret = process.env.CRON_SECRET

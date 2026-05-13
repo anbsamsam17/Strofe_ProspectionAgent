@@ -2,7 +2,6 @@
 // POST /api/agent/sourcing
 // Déclenchement d'un run de sourcing pur avec paramètres custom.
 // Cherche de nouvelles entreprises et les ajoute dans `prospects`.
-// NE GÉNÈRE PAS la daily list (cf. POST /api/daily-list/generate).
 //
 // Auth         : session Supabase obligatoire (pas de mode cron ici).
 // Anti-concurrent : refuse 409 si un run status='running' existe.
