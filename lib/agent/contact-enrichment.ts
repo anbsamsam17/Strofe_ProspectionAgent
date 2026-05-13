@@ -7,6 +7,8 @@
 //   2. Pappers.fr — téléphone standard + site web (optionnel, désactivé si crédits épuisés)
 //   3. Hunter.io Domain Search par company= — domaine + emails (si pas de domaine via Pappers)
 //   4. Hunter.io Email Finder — email nominatif si nom connu + domaine validé
+//   5. LinkedIn company URL (dernier recours, gratuit) — page entreprise pour
+//      Sales Navigator manuel, uniquement si AUCUN contact direct trouvé
 //
 // Toutes les sources sont best-effort et silencieuses sur erreur.
 // Fonctionne sans API keys (mode dégradé — retourne {} pour chaque prospect).
@@ -15,6 +17,8 @@
 //   PAPPERS_API_KEY  — pappers.fr/api, crédits one-shot
 //   HUNTER_API_KEY   — hunter.io, 50 crédits/mois gratuits
 // ============================================================
+
+import { findLinkedinCompanyUrl } from './linkedin-company'
 
 // ------------------------------------------------------------
 // TYPES
@@ -27,6 +31,13 @@ export interface EnrichedContact {
   contact_telephone?: string
   contact_email?: string
   contact_linkedin?: string
+  /**
+   * URL LinkedIn de la PAGE ENTREPRISE (linkedin.com/company/<slug>).
+   * Distinct de `contact_linkedin` (profil personnel d'un dirigeant).
+   * Renseigné par l'étape 5 quand aucun contact direct n'est trouvé,
+   * pour que le consultant puisse rebondir via Sales Navigator manuel.
+   */
+  contact_linkedin_entreprise?: string
 }
 
 // ------------------------------------------------------------
@@ -1285,11 +1296,45 @@ export async function enrichirContact(
     )
   }
 
-  // TODO(samir): fallback search URL — si aucune source ne fournit un profil
-  // LinkedIn réel, on pourrait forger une URL de recherche LinkedIn
-  // (https://www.linkedin.com/search/results/people/?keywords=<prenom>+<nom>+<entreprise>)
-  // pour aider le consultant à retrouver le contact. Volontairement NON peuplée
-  // dans contact_linkedin (le user veut un profil réel, pas une URL de recherche).
+  // --------------------------------------------------------
+  // SOURCE 5 (POST-CASCADE) : LINKEDIN PAGE ENTREPRISE
+  // Dernier recours quand AUCUN canal de contact direct n'a été trouvé
+  // (ni email, ni téléphone, ni LinkedIn dirigeant). On forge l'URL de
+  // la page entreprise LinkedIn pour permettre au consultant de
+  // chercher manuellement le bon contact via Sales Navigator.
+  //
+  // Conditions :
+  //  - raisonSociale disponible (slug-builder)
+  //  - pas de contact_linkedin_entreprise déjà renseigné (idempotence)
+  //  - aucun contact direct (email, téléphone, LinkedIn perso) trouvé
+  //    par les sources 1-4 ni dans existingContact
+  //
+  // Gratuit, pas de quota — mais respect d'un timeout court (3s) pour
+  // ne pas allonger la phase d'enrichissement.
+  // --------------------------------------------------------
+  const hasNoDirectContact =
+    !resolvedEmail &&
+    !resolvedPhone &&
+    !existingContact.contact_linkedin &&
+    !result.contact_linkedin
+  const alreadyHasEntrepriseUrl =
+    Boolean(existingContact.contact_linkedin_entreprise) ||
+    Boolean(result.contact_linkedin_entreprise)
+
+  if (raisonSociale && hasNoDirectContact && !alreadyHasEntrepriseUrl) {
+    const linkedinUrl = await findLinkedinCompanyUrl(raisonSociale)
+    if (linkedinUrl) {
+      result.contact_linkedin_entreprise = linkedinUrl
+      console.log(
+        JSON.stringify({
+          level: 'info',
+          module: 'contact-enrichment',
+          msg: 'LinkedIn page entreprise trouvé (fallback Sales Nav)',
+          siren,
+        }),
+      )
+    }
+  }
 
   logSummary(siren, result)
   return result
@@ -1312,6 +1357,7 @@ function logSummary(siren: string, result: Partial<EnrichedContact>): void {
       telephone_enriched: Boolean(result.contact_telephone),
       nom_enriched: Boolean(result.contact_nom),
       linkedin_enriched: Boolean(result.contact_linkedin),
+      linkedin_entreprise_enriched: Boolean(result.contact_linkedin_entreprise),
     }),
   )
 }

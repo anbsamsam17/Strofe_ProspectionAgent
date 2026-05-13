@@ -1,11 +1,20 @@
 // ============================================================
 // TESTS UNITAIRES — contact-enrichment.ts
-// Focus : cleanFirstName (dédup prénoms multiples / pollution casse)
+// Focus :
+//   1. cleanFirstName (dédup prénoms multiples / pollution casse)
+//   2. enrichirContact — étape 5 post-cascade LinkedIn page entreprise
 // Vitest — pattern AAA (Arrange / Act / Assert)
 // ============================================================
 
-import { describe, expect, it } from 'vitest'
-import { cleanFirstName } from '../contact-enrichment'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+
+// Mock du helper LinkedIn (HEAD HTTP réseau évité)
+vi.mock('../linkedin-company', () => ({
+  findLinkedinCompanyUrl: vi.fn(),
+}))
+
+import { cleanFirstName, enrichirContact } from '../contact-enrichment'
+import { findLinkedinCompanyUrl } from '../linkedin-company'
 
 // ------------------------------------------------------------
 // cleanFirstName — cas du feedback user (verbatim)
@@ -54,5 +63,134 @@ describe('cleanFirstName', () => {
 
   it('normalise une saisie mixed-case ("jEAN" → "Jean")', () => {
     expect(cleanFirstName('jEAN')).toBe('Jean')
+  })
+})
+
+// ------------------------------------------------------------
+// enrichirContact — étape 5 post-cascade (LinkedIn page entreprise)
+// On mocke `findLinkedinCompanyUrl` ET on intercepte `global.fetch`
+// pour neutraliser les appels Recherche Entreprises / Pappers / Hunter
+// (la cascade les fait toujours, on les fait simplement échouer en silence).
+// ------------------------------------------------------------
+
+describe('enrichirContact — étape 5 LinkedIn page entreprise', () => {
+  const mockedFindLinkedin = vi.mocked(findLinkedinCompanyUrl)
+  let fetchSpy: ReturnType<typeof vi.spyOn>
+
+  beforeEach(() => {
+    mockedFindLinkedin.mockReset()
+
+    // Neutralise toutes les sources réseau de la cascade (RE/Pappers/Hunter)
+    // en simulant un échec HTTP 503. La cascade traite ça comme "rien trouvé"
+    // sans propager d'erreur.
+    fetchSpy = vi.spyOn(global, 'fetch').mockResolvedValue({
+      ok: false,
+      status: 503,
+      json: async () => ({}),
+      text: async () => '',
+    } as unknown as Response)
+
+    // Désactive Pappers/Hunter via env pour eviter la décrémentation des
+    // quotas (et garder le test deterministe).
+    delete process.env.PAPPERS_API_KEY
+    delete process.env.HUNTER_API_KEY
+  })
+
+  afterEach(() => {
+    fetchSpy.mockRestore()
+  })
+
+  it('peuple contact_linkedin_entreprise quand AUCUN contact direct', async () => {
+    mockedFindLinkedin.mockResolvedValueOnce(
+      'https://www.linkedin.com/company/foo-bar/',
+    )
+
+    const result = await enrichirContact('123456789', {}, 'Foo Bar SAS')
+
+    expect(result.contact_linkedin_entreprise).toBe(
+      'https://www.linkedin.com/company/foo-bar/',
+    )
+    expect(mockedFindLinkedin).toHaveBeenCalledWith('Foo Bar SAS')
+  })
+
+  it('NE peuple PAS si un contact_email existe déjà', async () => {
+    const result = await enrichirContact(
+      '123456789',
+      { contact_email: 'pre@existant.fr' },
+      'Foo Bar SAS',
+    )
+
+    expect(result.contact_linkedin_entreprise).toBeUndefined()
+    expect(mockedFindLinkedin).not.toHaveBeenCalled()
+  })
+
+  it('NE peuple PAS si un contact_telephone existe déjà', async () => {
+    const result = await enrichirContact(
+      '123456789',
+      { contact_telephone: '0102030405' },
+      'Foo Bar SAS',
+    )
+
+    expect(result.contact_linkedin_entreprise).toBeUndefined()
+    expect(mockedFindLinkedin).not.toHaveBeenCalled()
+  })
+
+  it('NE peuple PAS si contact_linkedin (profil perso) existe déjà', async () => {
+    const result = await enrichirContact(
+      '123456789',
+      { contact_linkedin: 'https://www.linkedin.com/in/jean-doe' },
+      'Foo Bar SAS',
+    )
+
+    expect(result.contact_linkedin_entreprise).toBeUndefined()
+    expect(mockedFindLinkedin).not.toHaveBeenCalled()
+  })
+
+  it('NE peuple PAS si contact_linkedin_entreprise déjà renseigné (idempotence)', async () => {
+    const result = await enrichirContact(
+      '123456789',
+      {
+        contact_linkedin_entreprise: 'https://www.linkedin.com/company/foo-bar/',
+      },
+      'Foo Bar SAS',
+    )
+
+    expect(result.contact_linkedin_entreprise).toBeUndefined()
+    expect(mockedFindLinkedin).not.toHaveBeenCalled()
+  })
+
+  it('NE peuple PAS si findLinkedinCompanyUrl retourne null (404 / rate-limit)', async () => {
+    mockedFindLinkedin.mockResolvedValueOnce(null)
+
+    const result = await enrichirContact('123456789', {}, 'Foo Bar SAS')
+
+    expect(result.contact_linkedin_entreprise).toBeUndefined()
+    expect(mockedFindLinkedin).toHaveBeenCalledTimes(1)
+  })
+
+  it('NE peuple PAS si raisonSociale vide', async () => {
+    const result = await enrichirContact('123456789', {}, '')
+
+    expect(result.contact_linkedin_entreprise).toBeUndefined()
+    expect(mockedFindLinkedin).not.toHaveBeenCalled()
+  })
+
+  it('court-circuit early si email + téléphone existants (aucune source appelée)', async () => {
+    const result = await enrichirContact(
+      '123456789',
+      { contact_email: 'a@b.fr', contact_telephone: '0102030405' },
+      'Foo Bar SAS',
+    )
+
+    // Court-circuit early : aucun enrichissement (return {} immédiat)
+    expect(result).toEqual({})
+    expect(mockedFindLinkedin).not.toHaveBeenCalled()
+  })
+
+  it('retourne undefined sur SIREN invalide', async () => {
+    const result = await enrichirContact('invalid', {}, 'Foo Bar SAS')
+
+    expect(result).toEqual({})
+    expect(mockedFindLinkedin).not.toHaveBeenCalled()
   })
 })
