@@ -74,6 +74,7 @@ export type Database = {
           contact_telephone: string | null
           contact_email: string | null
           contact_linkedin: string | null
+          contact_linkedin_entreprise: string | null
           beges_publie: boolean
           beges_derniere_publication: string | null
           obligation_beges: boolean
@@ -107,6 +108,7 @@ export type Database = {
           contact_telephone?: string | null
           contact_email?: string | null
           contact_linkedin?: string | null
+          contact_linkedin_entreprise?: string | null
           beges_publie?: boolean
           beges_derniere_publication?: string | null
           obligation_beges?: boolean
@@ -138,6 +140,7 @@ export type Database = {
           contact_telephone?: string | null
           contact_email?: string | null
           contact_linkedin?: string | null
+          contact_linkedin_entreprise?: string | null
           beges_publie?: boolean
           beges_derniere_publication?: string | null
           obligation_beges?: boolean
