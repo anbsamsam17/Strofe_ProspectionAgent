@@ -124,7 +124,7 @@ export function LoginForm() {
         return
       }
 
-      router.push('/dashboard')
+      router.push('/prospects')
       router.refresh()
     } finally {
       setLoading(false)

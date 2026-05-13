@@ -11,28 +11,9 @@ interface NavItem {
   icon: React.ReactNode
 }
 
+// Navigation principale : 3 entrées seulement (Prospects = home, Pipeline, Paramètres).
+// Les anciens "Dashboard" et "Liste du jour" ont été supprimés ; /prospects devient la home.
 const navItems: NavItem[] = [
-  {
-    href: '/dashboard',
-    label: 'Dashboard',
-    icon: (
-      <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-        <rect x="3" y="3" width="7" height="7" rx="1" />
-        <rect x="14" y="3" width="7" height="7" rx="1" />
-        <rect x="14" y="14" width="7" height="7" rx="1" />
-        <rect x="3" y="14" width="7" height="7" rx="1" />
-      </svg>
-    ),
-  },
-  {
-    href: '/daily-list',
-    label: 'Liste du jour',
-    icon: (
-      <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-        <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12a19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 3.5 1h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 8.91a16 16 0 0 0 5.27 5.27l1.17-1.17a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 21.28 15l.64 1.92z" />
-      </svg>
-    ),
-  },
   {
     href: '/prospects',
     label: 'Prospects',
@@ -67,6 +48,10 @@ const navItems: NavItem[] = [
   },
 ]
 
+// Indices de référence — évite les magic numbers dans le JSX.
+const PRIMARY_NAV_ITEMS = navItems.slice(0, 2) // Prospects + Pipeline (Paramètres rendu à part)
+const SETTINGS_NAV_ITEM = navItems[2]
+
 export function Sidebar() {
   const pathname = usePathname()
   const router = useRouter()
@@ -79,8 +64,7 @@ export function Sidebar() {
   }
 
   function isActive(href: string): boolean {
-    if (href === '/dashboard') return pathname === '/dashboard'
-    return pathname.startsWith(href)
+    return pathname === href || pathname.startsWith(`${href}/`)
   }
 
   return (
@@ -111,7 +95,7 @@ export function Sidebar() {
           <p className="px-3 mb-2 text-[10px] font-semibold uppercase tracking-widest text-gray-400 dark:text-gray-600">
             Navigation
           </p>
-          {navItems.slice(0, 4).map((item) => {
+          {PRIMARY_NAV_ITEMS.map((item) => {
             const active = isActive(item.href)
             return (
               <Link
@@ -124,7 +108,6 @@ export function Sidebar() {
                     : 'text-gray-500 hover:bg-gray-50 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800/50 dark:hover:text-gray-100'
                 }`}
               >
-                {/* Active indicator */}
                 {active && (
                   <span
                     className="absolute left-0 top-1/2 h-5 w-0.5 -translate-y-1/2 rounded-r-full bg-green-600 dark:bg-green-500"
@@ -140,13 +123,13 @@ export function Sidebar() {
           })}
         </nav>
 
-        {/* Section bas */}
+        {/* Section bas : Paramètres + Déconnexion */}
         <div className="border-t border-gray-100 dark:border-gray-800/60 px-3 py-4 space-y-0.5">
           {(() => {
-            const settingsActive = isActive('/settings')
+            const settingsActive = isActive(SETTINGS_NAV_ITEM.href)
             return (
               <Link
-                href="/settings"
+                href={SETTINGS_NAV_ITEM.href}
                 aria-current={settingsActive ? 'page' : undefined}
                 className={`group relative flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-150 ${
                   settingsActive
@@ -161,9 +144,9 @@ export function Sidebar() {
                   />
                 )}
                 <span className={`transition-colors ${settingsActive ? 'text-green-600 dark:text-green-400' : 'text-gray-400 group-hover:text-gray-600 dark:group-hover:text-gray-300'}`}>
-                  {navItems[4].icon}
+                  {SETTINGS_NAV_ITEM.icon}
                 </span>
-                Paramètres
+                {SETTINGS_NAV_ITEM.label}
               </Link>
             )
           })()}
@@ -185,7 +168,7 @@ export function Sidebar() {
         </div>
       </aside>
 
-      {/* ── Navigation mobile en bas ── */}
+      {/* ── Navigation mobile en bas — 3 entrées (Prospects, Pipeline, Paramètres) ── */}
       <nav
         className="fixed bottom-0 left-0 right-0 z-40 flex items-stretch border-t border-gray-200 bg-white/95 backdrop-blur-sm dark:border-gray-800 dark:bg-gray-950/95 lg:hidden"
         aria-label="Navigation mobile"

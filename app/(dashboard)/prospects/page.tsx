@@ -3,7 +3,6 @@ import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import type { Prospect, ProspectStatus } from '@/lib/types'
 import { ProspectsFilters } from '@/components/prospects/prospects-filters'
-import { AddToDailyListButton } from '@/components/prospects/add-to-daily-list-button'
 import { ProspectActionsMenu } from '@/components/prospects/prospect-actions-menu'
 import { TopPriorities } from '@/components/prospects/top-priorities'
 import { buildBegesUrl } from '@/lib/utils/beges-url'
@@ -528,10 +527,6 @@ export default async function ProspectsPage({
                       {/* Actions */}
                       <td className="px-4 py-3.5 text-right">
                         <div className="flex items-center justify-end gap-2">
-                          <AddToDailyListButton
-                            prospectId={prospect.id}
-                            prospectName={prospect.raison_sociale}
-                          />
                           <ProspectActionsMenu
                             prospectId={prospect.id}
                             prospectName={prospect.raison_sociale}
