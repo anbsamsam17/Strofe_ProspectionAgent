@@ -3,6 +3,8 @@ import { redirect } from 'next/navigation'
 
 import { createClient } from '@/lib/supabase/server'
 import { KpiCards, KpiCardsSkeleton } from '@/components/pipeline/kpi-cards'
+import { ConversionFunnel } from '@/components/pipeline/conversion-funnel'
+import { AgentStats, AgentStatsSkeleton } from '@/components/pipeline/agent-stats'
 import { PipelineClient } from '@/components/pipeline/pipeline-client'
 import { PeriodToggle, parseRange } from '@/components/pipeline/period-toggle'
 import type { Prospect, ProspectStatus } from '@/lib/types'
@@ -75,6 +77,19 @@ export default async function PipelinePage({ searchParams }: PipelinePageProps) 
     }
   }
 
+  // Counts par statut pour le funnel — calcul direct depuis prospectsByStatus
+  // (cohérent avec le Kanban, pas besoin de fetch séparé).
+  const countsByStatus: Record<ProspectStatus, number> = {
+    sourced: prospectsByStatus.sourced.length,
+    qualified: prospectsByStatus.qualified.length,
+    interested: prospectsByStatus.interested.length,
+    contacted: prospectsByStatus.contacted.length,
+    rdv: prospectsByStatus.rdv.length,
+    converted: prospectsByStatus.converted.length,
+    rejected: prospectsByStatus.rejected.length,
+    on_hold: prospectsByStatus.on_hold.length,
+  }
+
   return (
     <div className="space-y-6">
       {/* Header sticky */}
@@ -96,6 +111,14 @@ export default async function PipelinePage({ searchParams }: PipelinePageProps) 
       <Suspense fallback={<KpiCardsSkeleton />}>
         <KpiCards range={range} />
       </Suspense>
+
+      {/* Analytics — funnel conversion + stats agent côte à côte sur desktop */}
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+        <ConversionFunnel countsByStatus={countsByStatus} />
+        <Suspense fallback={<AgentStatsSkeleton />}>
+          <AgentStats range={range} />
+        </Suspense>
+      </div>
 
       {/* Kanban */}
       <PipelineClient
