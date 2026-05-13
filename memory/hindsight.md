@@ -535,4 +535,51 @@ Trier une relation imbriquée via `.order('colonne', { referencedTable: 'table_e
 - Le clamp est l'unique garantie de l'invariant somme ≤ 100 (cumul théorique max désormais 120).
 - Patcher TOUTES les fixtures `score_details` construites en dur (TS strict refuse les 2 nouveaux champs manquants — cf. `pitch-gen.test.ts`).
 
+## 2026-05-13 — Boost scoring : BEGES absent + obligé = +20 (infraction L. 229-25)
+
+**Avant** : Un prospect "obligation_beges=true && beges_publie=false" cumulait au mieux
+30 (obligation) + 15 (non publié) + autres bonus → ~50-90 points selon contact/secteur/taille.
+Sans contact, sans secteur prio, sans sweet spot → score 45 → battu par un prospect "BEGES
+expiré + sweet spot + tel" à 50-75.
+
+**Après** : Bonus combinatoire `POINTS_BONUS_INFRACTION_LEGALE = 20` ajouté à
+`ScoreDetails.bonus_infraction_legale` quand **`obligation_beges === true && beges_publie === false`**.
+Profil minimal "infraction" = 30 + 15 + 20 = **65 pts garantis** (≥ seuil priorité haute = 60).
+Avec contact ou sweet spot ou secteur mature → 75-95. Avec tout → 110 → clamp 100.
+
+**Raison** : feedback expert prospection — ces leads sont en INFRACTION à l'Article L. 229-25
+du Code de l'environnement (amende jusqu'à 10 000 € par BEGES manquant via contrôles DREAL).
+C'est l'argument commercial le plus puissant du marché : le consultant arrive avec une
+"obligation légale non respectée" doublée d'une offre d'accompagnement. Conversion massive.
+Ils DOIVENT être en haut du Top 15, peu importe l'état du téléphone / secteur / taille.
+
+**Bonus s'applique** :
+- `obligation_beges = true` (≥ 500 sal. nationale OU Région ≥ 250)
+- ET `beges_publie = false` (aucune publication ADEME, jamais)
+
+**Bonus NE s'applique PAS** :
+- BEGES **expiré** (`beges_publie=true && beges_valide=false`) — bilan existe, l'obligation
+  initiale est remplie, seul le renouvellement quadriennal est dépassé. Couvert par
+  `POINTS_BEGES_EXPIRE = 25` (mutuellement exclusif).
+- PME pas obligée (`obligation_beges=false`) — pas d'obligation = pas d'infraction.
+- BEGES à jour (`beges_publie=true && beges_valide=true`) — conforme.
+
+**Choix d'option (Option A retenue)** :
+- A : bonus additif +20 → préserve la nuance entre 2 leads "infraction" (avec/sans tel,
+  sweet spot, secteur mature). Score 65 → 100 selon profil.
+- B (rejetée) : `Math.max(score, 80)` plancher dur → perd la granularité, deux leads
+  infraction identiques peu importe leurs autres critères. Tri downstream casse.
+- C (rejetée) : nouvelle macro-priorité `'infraction'` dans le type `Priority` →
+  breaking change downstream (UI badge, filtres, migrations Supabase optional). Le tri
+  par `score_priorite DESC` suffit déjà avec +20 + clamp.
+
+**Tests** : 30 cas (vs 26). Adaptations : CAS 1, 2, 3, 9, 11. Nouveaux : CAS 15 (garantie
+infraction ≥ 60), 16 (expiré != infraction), 17 (non-obligé != infraction).
+
+**À ne pas répéter** :
+- Patcher TOUTES les fixtures `score_details` construites en dur (TS strict refuse le champ
+  manquant — `pitch-gen.test.ts` ligne ~51).
+- Ne pas confondre BEGES expiré et BEGES absent dans la communication consultant : l'expiré
+  n'expose pas à une amende immédiate, juste à une remarque DREAL. L'absent expose à 10k€.
+
 <!-- Les entrées suivantes seront ajoutées automatiquement par Claude après chaque session -->

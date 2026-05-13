@@ -57,6 +57,7 @@ function makeProspect(overrides: Partial<Prospect> = {}): Prospect {
       taille_entreprise: 10,   // effectif 999 → tranche 800-1999 (tuning 2026-05-13)
       contact_trouve: 10,      // tuning 2026-05-13 : 5 → 10
       secteur_beges_mature: 0, // NAF "47.11F" non mature dans cette fixture
+      bonus_infraction_legale: 0, // BEGES publié → pas d'infraction L. 229-25 (tuning 2026-05-13)
       penalite_deja_contacte: 0,
       penalite_rejete: 0,
     },
