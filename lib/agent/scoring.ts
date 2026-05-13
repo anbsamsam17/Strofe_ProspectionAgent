@@ -52,6 +52,34 @@ const POINTS_CONTACT_TELEPHONE = 10
 /** Bonus pour les secteurs déjà acculturés au BEGES (cycle de vente plus court). */
 const POINTS_SECTEUR_BEGES_MATURE = 5
 
+/**
+ * Bonus combinatoire (+20) si l'entreprise est OBLIGÉE au BEGES MAIS n'a rien publié.
+ *
+ * Logique business (feedback expert prospection 2026-05-13) :
+ *  - `obligation_beges = true` (≥ 500 sal. ou Région ≥ 250) + `beges_publie = false`
+ *  = situation d'INFRACTION à l'Article L. 229-25 du Code de l'environnement
+ *  = amende jusqu'à 10 000 € par BEGES manquant (DREAL contrôles)
+ *  = argument commercial massif, lead le PLUS CHAUD du marché.
+ *
+ * Cumul max profil "infraction" minimaliste : 30 (obligation) + 15 (non publié) + 20 (bonus)
+ * = 65 points garantis avant tout autre critère → priorité haute systématique
+ * (seuil `SEUIL_PRIORITE_HAUTE = 60`).
+ *
+ * Choix d'implémentation (Option A vs alternatives) :
+ *  - Option A (retenue) : bonus additif +20 → préserve la nuance entre 2 leads "infraction"
+ *    (avec contact / sweet spot taille / secteur mature) tout en garantissant le top.
+ *  - Option B (rejetée) : `Math.max(score, 80)` plancher dur → perd la granularité,
+ *    deux profils "infraction" avec et sans téléphone obtiennent le même score.
+ *  - Option C (rejetée) : nouvelle macro-priorité `'infraction'` dans `Priority` →
+ *    breaking change downstream (UI / filtres / migrations Supabase) pour un effet
+ *    déjà atteint par +20 + clamp 100.
+ *
+ * NB : un BEGES expiré (publié mais beges_valide=false) N'EST PAS une infraction
+ * (le bilan existe, l'obligation initiale est remplie — seul le renouvellement
+ * quadriennal est dépassé). Couvert par `POINTS_BEGES_EXPIRE = 25`, pas par ce bonus.
+ */
+const POINTS_BONUS_INFRACTION_LEGALE = 20
+
 /** Pénalité si le prospect a déjà été contacté (statut != sourced/qualified) */
 const PENALITE_DEJA_CONTACTE = -20
 
@@ -154,6 +182,7 @@ export function calculerScore(
     details.taille_entreprise +
     details.contact_trouve +
     details.secteur_beges_mature +
+    details.bonus_infraction_legale +
     details.penalite_deja_contacte +
     details.penalite_rejete
 
@@ -256,6 +285,14 @@ function _computeDetails(
   const secteurBegesMature = estSecteurBegesMature(prospect.secteur_naf ?? '')
     ? POINTS_SECTEUR_BEGES_MATURE
     : 0
+
+  // Profil "infraction Article L. 229-25" : obligé + BEGES totalement absent.
+  // Le BEGES expiré (publié mais obsolète) N'EST PAS une infraction — un bilan existe.
+  const bonusInfractionLegale =
+    prospect.obligation_beges === true && prospect.beges_publie === false
+      ? POINTS_BONUS_INFRACTION_LEGALE
+      : 0
+
   const penaliteDejaContacte = dejaContacte ? PENALITE_DEJA_CONTACTE : 0
   const penaliteRejete = estRejete ? PENALITE_REJETE : 0
 
@@ -268,6 +305,7 @@ function _computeDetails(
     taille_entreprise: tailleEntreprise,
     contact_trouve: contactTrouve,
     secteur_beges_mature: secteurBegesMature,
+    bonus_infraction_legale: bonusInfractionLegale,
     penalite_deja_contacte: penaliteDejaContacte,
     penalite_rejete: penaliteRejete,
   }

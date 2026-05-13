@@ -79,6 +79,14 @@ export interface Prospect {
   contact_telephone?: string
   contact_email?: string
   contact_linkedin?: string
+  /**
+   * URL LinkedIn de la PAGE ENTREPRISE (linkedin.com/company/<slug>).
+   * Distinct de `contact_linkedin` qui pointe vers un profil personnel.
+   * Renseigné en dernier recours par l'étape post-cascade
+   * (`lib/agent/linkedin-company.ts`) quand aucun contact direct n'a été
+   * trouvé — sert au consultant pour rebondir manuellement via Sales Navigator.
+   */
+  contact_linkedin_entreprise?: string
   beges_publie: boolean
   beges_derniere_publication?: string
   /** URL directe vers le BEGES sur bilans-ges.ademe.fr */
@@ -112,6 +120,13 @@ export interface ScoreDetails {
   contact_trouve: number
   /** Bonus si le secteur NAF est déjà acculturé au BEGES (santé / transport routier / agro-alimentaire). */
   secteur_beges_mature: number
+  /**
+   * Bonus combinatoire (+20) si l'entreprise est OBLIGÉE au BEGES (≥500 salariés ou Région ≥250)
+   * MAIS n'a publié AUCUN bilan sur l'ADEME (beges_publie=false). Profil "infraction Article L. 229-25"
+   * — lead le plus chaud du marché (amende jusqu'à 10 000 € par BEGES manquant).
+   * Mutuellement exclusif avec `beges_expire` (qui couvre les BEGES publiés mais expirés, hors infraction).
+   */
+  bonus_infraction_legale: number
   penalite_deja_contacte: number
   penalite_rejete: number
 }
