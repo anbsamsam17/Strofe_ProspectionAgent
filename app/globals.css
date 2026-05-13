@@ -19,6 +19,14 @@
 
 @layer base {
   :root {
+    /* Entonnoir de conversion — dégradé vert clair → vert foncé.
+       Utilisé par components/pipeline/conversion-funnel.tsx via var(--funnel-N). */
+    --funnel-1: #bbf7d0;
+    --funnel-2: #86efac;
+    --funnel-3: #4ade80;
+    --funnel-4: #22c55e;
+    --funnel-5: #15803d;
+
     --background: 0 0% 100%;
     --foreground: 222.2 84% 4.9%;
     --card: 0 0% 100%;
