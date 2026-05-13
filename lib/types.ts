@@ -79,6 +79,14 @@ export interface Prospect {
   contact_telephone?: string
   contact_email?: string
   contact_linkedin?: string
+  /**
+   * URL LinkedIn de la PAGE ENTREPRISE (linkedin.com/company/<slug>).
+   * Distinct de `contact_linkedin` qui pointe vers un profil personnel.
+   * Renseigné en dernier recours par l'étape post-cascade
+   * (`lib/agent/linkedin-company.ts`) quand aucun contact direct n'a été
+   * trouvé — sert au consultant pour rebondir manuellement via Sales Navigator.
+   */
+  contact_linkedin_entreprise?: string
   beges_publie: boolean
   beges_derniere_publication?: string
   /** URL directe vers le BEGES sur bilans-ges.ademe.fr */
