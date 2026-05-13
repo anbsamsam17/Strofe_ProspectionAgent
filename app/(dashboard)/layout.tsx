@@ -2,44 +2,26 @@ import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { Sidebar } from '@/components/layout/sidebar'
 import { DashboardHeader } from '@/components/layout/dashboard-header'
-import type { AgentRun, DailyList } from '@/lib/types'
+import type { AgentRun } from '@/lib/types'
 
 // Force le rendu dynamique sur TOUT le layout dashboard :
-// le statut de l'agent (running/completed/failed) et la daily list du jour
-// sont des données temps-réel qui ne doivent jamais être mises en cache par Next.js.
+// le statut de l'agent (running/completed/failed) est une donnée temps-réel
+// qui ne doit jamais être mise en cache par Next.js.
 export const dynamic = 'force-dynamic'
 
-async function getAgentStatus(userId: string): Promise<{
-  agentRun: AgentRun | null
-  dailyList: DailyList | null
-}> {
+async function getAgentRun(userId: string): Promise<AgentRun | null> {
   const supabase = await createClient()
-  const today = new Date().toISOString().split('T')[0]
 
-  const [agentRunResult, dailyListResult] = await Promise.all([
-    supabase
-      .from('agent_runs')
-      .select('*')
-      .eq('user_id', userId)
-      .order('started_at', { ascending: false })
-      // BUG-FIX : .maybeSingle() au lieu de .single()
-      // .single() throw une erreur PGRST116 si aucun run n'existe encore
-      // .maybeSingle() retourne null proprement dans ce cas
-      .maybeSingle(),
-    supabase
-      .from('daily_lists')
-      .select('*')
-      .eq('user_id', userId)
-      .eq('date', today)
-      // BUG-FIX : .maybeSingle() au lieu de .single()
-      // .single() crash si aucune liste n'a encore été générée aujourd'hui
-      .maybeSingle(),
-  ])
+  const { data } = await supabase
+    .from('agent_runs')
+    .select('*')
+    .eq('user_id', userId)
+    .order('started_at', { ascending: false })
+    // .maybeSingle() au lieu de .single() : retourne null proprement
+    // si aucun run n'existe encore pour cet utilisateur.
+    .maybeSingle()
 
-  return {
-    agentRun: agentRunResult.data as AgentRun | null,
-    dailyList: dailyListResult.data as DailyList | null,
-  }
+  return data as AgentRun | null
 }
 
 export default async function DashboardLayout({
@@ -70,7 +52,7 @@ export default async function DashboardLayout({
 
   const profileData = profile as { full_name: string | null; email: string } | null
 
-  const { agentRun, dailyList } = await getAgentStatus(authenticatedUser.id)
+  const agentRun = await getAgentRun(authenticatedUser.id)
 
   const userName =
     profileData?.full_name ?? profileData?.email ?? authenticatedUser.email ?? 'Utilisateur'
@@ -85,7 +67,6 @@ export default async function DashboardLayout({
         <DashboardHeader
           userName={userName ?? 'Utilisateur'}
           agentRun={agentRun}
-          dailyList={dailyList}
         />
 
         {/* Contenu de la page */}

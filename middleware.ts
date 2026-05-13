@@ -52,10 +52,11 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(redirectUrl)
   }
 
-  // Redirige vers /dashboard si déjà authentifié sur une page auth
+  // Redirige vers /prospects (nouvelle home post-login) si déjà authentifié sur une page auth.
+  // /prospects a remplacé /dashboard comme page d'accueil du dashboard.
   if (user && (pathname === '/login' || pathname === '/signup')) {
     const redirectUrl = request.nextUrl.clone()
-    redirectUrl.pathname = '/dashboard'
+    redirectUrl.pathname = '/prospects'
     return NextResponse.redirect(redirectUrl)
   }
 
