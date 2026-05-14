@@ -219,12 +219,10 @@ export default async function PipelinePage({ searchParams }: PipelinePageProps) 
 
       {/* Kanban — ClientErrorBoundary pour capturer un éventuel throw au
           SSR initial ou côté CSR (drag handler, useState init…). */}
-      <ClientErrorBoundary
-        context="PipelineClient"
-        fallback={(err) => (
-          <SectionErrorFallback section="Kanban" message={err.message} />
-        )}
-      >
+      {/* fix digest 450636695 : on ne passe PAS de fonction depuis ce SC vers
+          le Client (sérialisation RSC interdite). Le fallback est hardcodé
+          dans ClientErrorBoundary, on passe juste un label `section`. */}
+      <ClientErrorBoundary context="PipelineClient" section="Kanban">
         <PipelineClient
           columns={PIPELINE_COLUMNS}
           prospectsByStatus={prospectsByStatus}

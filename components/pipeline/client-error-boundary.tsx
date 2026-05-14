@@ -11,19 +11,24 @@ import { Component, type ErrorInfo, type ReactNode } from 'react'
 // component avec `getDerivedStateFromError` + `componentDidCatch`.
 //
 // Pas de dépendance `react-error-boundary` (non installé), pas de
-// dépendance externe — 30 lignes maison.
+// dépendance externe.
+//
+// ⚠️ IMPORTANT (fix digest 450636695) : on n'accepte PAS de prop
+// `fallback` en tant que fonction. Next.js 15 interdit de passer
+// une fonction d'un Server Component à un Client Component (la
+// fonction n'est pas sérialisable via le wire RSC, crash silencieux
+// au render). On hardcode donc le fallback ici, dans le Client.
+// La prop `section` (string, sérialisable) suffit pour customiser
+// le label affiché.
 // ============================================================
 
 interface ClientErrorBoundaryProps {
   /** Le sous-arbre à protéger. */
   children: ReactNode
-  /**
-   * UI de repli rendue quand un child throw. Reçoit l'erreur pour
-   * pouvoir afficher un diagnostic (message uniquement, pas de stack).
-   */
-  fallback: (error: Error) => ReactNode
   /** Contexte court pour le log (ex. "PipelineClient"). Pas de PII. */
   context: string
+  /** Label affiché dans le panel de repli (ex. "Kanban"). */
+  section: string
 }
 
 interface ClientErrorBoundaryState {
@@ -51,7 +56,26 @@ export class ClientErrorBoundary extends Component<
 
   render(): ReactNode {
     if (this.state.error !== null) {
-      return this.props.fallback(this.state.error)
+      // Fallback inline (Client Component → on peut tout faire ici).
+      // Pas de Server Component injecté pour éviter tout couplage cross-boundary.
+      return (
+        <section
+          role="alert"
+          aria-label={`${this.props.section} — section indisponible`}
+          className="rounded-2xl border border-amber-200 bg-amber-50 p-5 dark:border-amber-900/40 dark:bg-amber-950/30"
+        >
+          <h2 className="text-sm font-semibold uppercase tracking-wider text-amber-700 dark:text-amber-400">
+            {this.props.section} — indisponible
+          </h2>
+          <p className="mt-2 text-sm text-amber-700 dark:text-amber-400">
+            Une erreur s&apos;est produite dans cette section. Le reste de la
+            page reste utilisable.
+          </p>
+          <p className="mt-2 break-words font-mono text-xs text-amber-700 dark:text-amber-400">
+            {this.state.error.message}
+          </p>
+        </section>
+      )
     }
     return this.props.children
   }
