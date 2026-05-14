@@ -694,6 +694,22 @@ export async function runAgentNocturne(
   }
 
   // --------------------------------------------------------
+  // PHASE 4.5 : SCORING GEMINI (intérêt commercial + raisons)
+  // Phase NON-FATALE — une erreur ici ne bloque pas le pipeline.
+  // Skippe silencieusement si GEMINI_API_KEY absente (cf. gemini-scoring.ts).
+  // Génère gemini_score (0-100) + gemini_raisons (3-5 args commerciaux) pour
+  // chaque prospect du top (limité par phaseGeminiScoring).
+  // --------------------------------------------------------
+  try {
+    await phaseGeminiScoring(run, supabaseAdmin)
+    await updateRunInDB(run, supabaseAdmin)
+  } catch (err) {
+    log(run, 'gemini_scoring', 'Scoring Gemini échoué — pipeline non bloqué', 'warn', {
+      error: err instanceof Error ? err.message : String(err),
+    })
+  }
+
+  // --------------------------------------------------------
   // PHASE 5 : FINALISATION
   // --------------------------------------------------------
   run.phase = 'completed'

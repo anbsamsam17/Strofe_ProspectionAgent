@@ -125,6 +125,35 @@ const LABEL_TO_NAF_CODES: ReadonlyMap<string, readonly string[]> = new Map([
   ['technologies', []],
   ['education', []],
   ['administration publique', []],
+
+  // Aliases legacy — libellés courts utilisés par d'anciens profils onboardés
+  // (avant la refonte UI vers les NAF multi-select 501 codes). Sans ces alias,
+  // les codes tombent en "unknown_labels" → fallback silencieux sur les 41 codes
+  // NAF_PRIORITAIRES_DEFAULT (cf. R5 cause #3).
+  [
+    'viticulture',
+    ['01.21Z', '01.22Z'], // Culture de la vigne, autres fruits à pépins/noyaux
+  ],
+  [
+    'aeronautique',
+    ['30.30Z'], // Construction aéronautique et spatiale
+  ],
+  [
+    'logistique',
+    ['49.41A', '49.41B', '52.10B', '52.21Z', '52.29A'],
+  ],
+  [
+    'agroalimentaire',
+    ['10.11Z', '10.13A', '10.32Z', '10.51A', '10.71A', '46.17B'],
+  ],
+  [
+    'conseil',
+    ['70.21Z', '70.22Z'], // Conseil RP / Conseil affaires
+  ],
+  [
+    'bureau d etudes',
+    ['71.12B', '71.20B'], // Ingénierie, études techniques / Analyses essais
+  ],
 ])
 
 // ------------------------------------------------------------

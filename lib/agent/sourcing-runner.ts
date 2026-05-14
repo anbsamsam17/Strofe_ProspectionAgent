@@ -44,7 +44,7 @@ import {
   matchesAnyNaf,
   resolveNafFromInput,
 } from './naf-sector-mapping'
-import { calculerScore, getScoreDetails } from './scoring'
+import { calculerScore, determinerPriorite, getScoreDetails } from './scoring'
 
 // ------------------------------------------------------------
 // TYPES PUBLICS
@@ -747,6 +747,12 @@ function buildDegradedProspect(
       etab.denominationUniteLegale ??
       etab.denominationUsuelle1UniteLegale ??
       'Inconnu',
+    // On préserve le code NAF brut Sirene même en mode dégradé : la résolution
+    // du libellé (`secteur_libelle`) se fera côté UI via la cascade
+    // `resolveSectorLabel` dans `lib/pipeline/analytics.ts`. Évite que les
+    // SIREN insérés en mode dégradé (timeout / cap enrichissement) ne soient
+    // tous classés "Secteur inconnu" dans le top sectors.
+    secteur_naf: etab.activitePrincipaleEtablissement,
     user_id: userId,
     source: 'sirene_api',
     signaux: [],
@@ -885,10 +891,13 @@ async function enrichAndScore(
   const scored: Array<Partial<Prospect>> = enrichis.map((p) => {
     const score = calculerScore(p, false, scoringWeights)
     const details = getScoreDetails(p, false, scoringWeights)
+    // priorite qualitative (haute/moyenne/basse) déduite du score numérique.
+    // Persistée pour éviter le défaut DB 'moyenne' systématique sur tous les nouveaux prospects.
     return {
       ...p,
       score_priorite: score,
       score_details: details,
+      priorite: determinerPriorite(score),
       statut: score >= SCORE_QUALIFICATION_SEUIL ? 'qualified' : 'sourced',
     }
   })
