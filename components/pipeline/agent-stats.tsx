@@ -8,8 +8,8 @@ import {
   type RunStat,
   type SectorStat,
 } from '@/lib/pipeline/analytics'
-import type { PipelineRange } from './period-toggle'
-import { rangeStartISO } from './period-toggle'
+import type { PipelineRange } from '@/lib/pipeline/range'
+import { rangeStartISO } from '@/lib/pipeline/range'
 
 // ── Constantes de dessin ────────────────────────────────────────────────────
 
@@ -46,11 +46,18 @@ export async function AgentStats({ range }: AgentStatsProps) {
     // + Sentry captures). `select('*')` causait un crash Lambda en prod (réponse
     // dépassant les limites Vercel sur des centaines de prospects × JSONB).
     //
+    // FIX 2026-05-14 (crash digest 355321305) : `logs` était encore inclus dans
+    // le SELECT malgré l'intention de l'éviter — 30 runs × plusieurs MB de logs
+    // JSONB faisait OOM la Lambda Vercel (process killed → Server Components
+    // render error non capturable par try/catch ou Suspense). `sourcingMix`
+    // fallback sur `logs` ne marche plus mais la branche primaire (prospects.source)
+    // suffit ; analytics.ts retourne `{0,0,0}` proprement si aucune source connue.
+    //
     // Note bug Supabase JS : `.gte()` après l'init du builder retourne un nouveau
     // builder qu'il faut RÉASSIGNER (sinon le filtre est silencieusement ignoré).
     let runsQuery = supabase
       .from('agent_runs')
-      .select('id, status, started_at, completed_at, prospects_sourced, prospects_qualified, error_message, logs')
+      .select('id, status, started_at, completed_at, prospects_sourced, prospects_qualified, error_message')
       .order('started_at', { ascending: false })
       .limit(TIMESERIES_MAX_RUNS)
 

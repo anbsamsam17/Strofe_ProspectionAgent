@@ -9,7 +9,8 @@ import {
   PipelineClient,
   type KanbanStatus,
 } from '@/components/pipeline/pipeline-client'
-import { PeriodToggle, parseRange, type PipelineRange } from '@/components/pipeline/period-toggle'
+import { PeriodToggle } from '@/components/pipeline/period-toggle'
+import { parseRange, type PipelineRange } from '@/lib/pipeline/range'
 import type { Prospect, ProspectStatus } from '@/lib/types'
 
 // Force le rendu dynamique — KPI + Kanban dépendent des données + searchParams.
@@ -183,15 +184,20 @@ export default async function PipelinePage({ searchParams }: PipelinePageProps) 
         </div>
       </header>
 
-      {/* KPI cards (Server Component, lazy via Suspense) */}
+      {/* Pattern Next.js 15 standard : Suspense pour le pending, try/catch
+          interne dans chaque Server Component pour les errors. Pas de wrapper
+          custom — les wrappers précédents (ServerErrorBoundary async,
+          ClientErrorBoundary avec prop fonction) introduisaient des
+          violations RSC (fonctions passées au wire serializer) qui faisaient
+          crash le rendu avant même que la défense ne joue. KpiCards et
+          AgentStats ont déjà chacun leur fallback interne (KpiCardsError /
+          AgentStatsError). Si pipeline-client.tsx (Client Component) throw,
+          c'est l'error.tsx du segment qui prend la main — comportement
+          standard Next.js. */}
       <Suspense fallback={<KpiCardsSkeleton />}>
         <KpiCards range={range} />
       </Suspense>
 
-      {/* Analytics — funnel conversion + stats agent côte à côte sur desktop.
-          ConversionFunnel est isolé dans son propre boundary défensif pour
-          ne pas faire crasher la page si buildFunnel / la geometry SVG throw
-          sur un Record corrompu. */}
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
         <SafeConversionFunnel countsByStatus={countsByStatus} />
         <Suspense fallback={<AgentStatsSkeleton />}>
@@ -199,7 +205,6 @@ export default async function PipelinePage({ searchParams }: PipelinePageProps) 
         </Suspense>
       </div>
 
-      {/* Kanban */}
       <PipelineClient
         columns={PIPELINE_COLUMNS}
         prospectsByStatus={prospectsByStatus}

@@ -3,34 +3,26 @@
 import { useCallback } from 'react'
 import { useRouter, useSearchParams, usePathname } from 'next/navigation'
 
-// ── Types ─────────────────────────────────────────────────────────────────────
-
-export type PipelineRange = '7d' | '30d' | '90d' | 'all'
-
-export const PIPELINE_RANGES: readonly PipelineRange[] = ['7d', '30d', '90d', 'all'] as const
-export const DEFAULT_RANGE: PipelineRange = '30d'
+// Helpers purs déplacés dans `@/lib/pipeline/range` pour pouvoir être appelés
+// depuis Server Components (crash Next.js 15 si une fonction d'un module
+// 'use client' est appelée côté serveur — digest 4022785150).
+// Re-export pour rétrocompat des callers historiques (tests, autres composants
+// qui importaient depuis ce fichier).
+export {
+  parseRange,
+  rangeStartISO,
+  PIPELINE_RANGES,
+  DEFAULT_RANGE,
+  type PipelineRange,
+} from '@/lib/pipeline/range'
+import type { PipelineRange } from '@/lib/pipeline/range'
+import { PIPELINE_RANGES, DEFAULT_RANGE } from '@/lib/pipeline/range'
 
 const RANGE_LABELS: Record<PipelineRange, string> = {
   '7d': '7 jours',
   '30d': '30 jours',
   '90d': '90 jours',
   all: 'Tout',
-}
-
-// ── Helpers exportés (réutilisés par page.tsx + tests) ────────────────────────
-
-export function parseRange(raw: string | string[] | undefined): PipelineRange {
-  if (typeof raw !== 'string') return DEFAULT_RANGE
-  const found = PIPELINE_RANGES.find((r) => r === raw)
-  return found ?? DEFAULT_RANGE
-}
-
-/** Date ISO du début de fenêtre, ou null si `all`. */
-export function rangeStartISO(range: PipelineRange, now: Date = new Date()): string | null {
-  if (range === 'all') return null
-  const days = range === '7d' ? 7 : range === '30d' ? 30 : 90
-  const d = new Date(now.getTime() - days * 24 * 60 * 60 * 1000)
-  return d.toISOString()
 }
 
 // ── Composant ─────────────────────────────────────────────────────────────────
