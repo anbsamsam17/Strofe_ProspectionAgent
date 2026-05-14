@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
-import type { Profile, ProfileSettings } from '@/lib/types'
+import { DEFAULT_SCORING_WEIGHTS, type Profile, type ProfileSettings } from '@/lib/types'
 import { SettingsForm } from '@/components/settings/settings-form'
 
 // Force le rendu dynamique — les settings doivent toujours refléter la valeur
@@ -42,12 +42,17 @@ export default async function SettingsPage() {
 
   const profile = profileData as Profile | null
 
+  const persistedSettings = (profile?.settings as Partial<ProfileSettings> | undefined) ?? {}
+
   const settings: ProfileSettings = {
     daily_call_target: 15,
     target_sectors: [],
+    target_postal_codes: [],
     target_city: '',
     offer_description: '',
-    ...(profile?.settings as Partial<ProfileSettings> ?? {}),
+    notification_email: '',
+    scoring_weights: { ...DEFAULT_SCORING_WEIGHTS },
+    ...persistedSettings,
   }
 
   return (

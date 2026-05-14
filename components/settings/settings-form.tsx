@@ -1,50 +1,100 @@
 'use client'
 
-import { useState } from 'react'
-import type { ProfileSettings } from '@/lib/types'
+import { useMemo, useState } from 'react'
+import { useRouter } from 'next/navigation'
+import { DEFAULT_SCORING_WEIGHTS, type ProfileSettings, type ScoringWeights } from '@/lib/types'
 
 interface SettingsFormProps {
   initialSettings: ProfileSettings
   secteursDisponibles: string[]
 }
 
+type ScoringPilier = keyof ScoringWeights
+
+const SCORING_TOTAL = 100
+const POSTAL_CODE_REGEX = /^\d{5}$/
+
+const PILIERS_INFO: Record<ScoringPilier, { label: string; description: string; accent: string }> = {
+  taille: {
+    label: 'Taille',
+    description: 'Score max à effectif ~500, dégradation au-delà.',
+    accent: 'green',
+  },
+  beges: {
+    label: 'BEGES',
+    description: 'Score max si BEGES manquant ou expiré (obligation L. 229-25).',
+    accent: 'orange',
+  },
+  contact: {
+    label: 'Contact',
+    description: 'Score max si téléphone direct. Email = 50 %, LinkedIn = 25 %, rien = 0.',
+    accent: 'blue',
+  },
+}
+
+/**
+ * Re-projection proportionnelle entière à 100. Si la somme est nulle, on retombe
+ * sur les défauts. L'arrondi est absorbé par le pilier `contact` pour préserver
+ * l'invariant somme === 100. Aligné avec `normalizeScoringWeights` côté agent.
+ */
+function normalizeWeightsClient(w: ScoringWeights): ScoringWeights {
+  const sanitize = (n: number): number => (Number.isFinite(n) && n >= 0 ? n : 0)
+  const taille = sanitize(w.taille)
+  const beges = sanitize(w.beges)
+  const contact = sanitize(w.contact)
+  const sum = taille + beges + contact
+  if (sum <= 0) return { ...DEFAULT_SCORING_WEIGHTS }
+  const tailleN = Math.round((taille * SCORING_TOTAL) / sum)
+  const begesN = Math.round((beges * SCORING_TOTAL) / sum)
+  const contactN = SCORING_TOTAL - tailleN - begesN
+  return { taille: tailleN, beges: begesN, contact: contactN }
+}
+
 export function SettingsForm({ initialSettings, secteursDisponibles }: SettingsFormProps) {
-  const [settings, setSettings] = useState<ProfileSettings>(initialSettings)
+  const [settings, setSettings] = useState<ProfileSettings>({
+    ...initialSettings,
+    scoring_weights: initialSettings.scoring_weights ?? { ...DEFAULT_SCORING_WEIGHTS },
+  })
+  const [postalCodeInput, setPostalCodeInput] = useState('')
+  const [postalCodeError, setPostalCodeError] = useState<string | null>(null)
+  const [isAdvancedOpen, setIsAdvancedOpen] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const [saveStatus, setSaveStatus] = useState<'idle' | 'success' | 'error'>('idle')
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault()
-    setIsSaving(true)
-    setSaveStatus('idle')
-    setErrorMessage(null)
+  const weights: ScoringWeights = settings.scoring_weights ?? { ...DEFAULT_SCORING_WEIGHTS }
+  const weightsSum = weights.taille + weights.beges + weights.contact
+  const isWeightsBalanced = weightsSum === SCORING_TOTAL
 
-    try {
-      const response = await fetch('/api/profile/settings', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          offer_description: settings.offer_description,
-          target_sectors: settings.target_sectors,
-          target_city: settings.target_city,
-          daily_call_target: settings.daily_call_target,
-        }),
-      })
+  const selectedSecteurs = settings.target_sectors ?? []
+  const charCount = (settings.offer_description ?? '').length
+  const postalCodes = useMemo(
+    () => settings.target_postal_codes ?? [],
+    [settings.target_postal_codes],
+  )
 
-      if (!response.ok) {
-        const data = await response.json() as { error?: string }
-        throw new Error(data.error ?? 'Erreur lors de la sauvegarde')
+  function updateWeight(pilier: ScoringPilier, value: number) {
+    setSettings((prev) => {
+      const current = prev.scoring_weights ?? { ...DEFAULT_SCORING_WEIGHTS }
+      return {
+        ...prev,
+        scoring_weights: { ...current, [pilier]: value },
       }
+    })
+  }
 
-      setSaveStatus('success')
-      setTimeout(() => setSaveStatus('idle'), 3500)
-    } catch (err) {
-      setSaveStatus('error')
-      setErrorMessage(err instanceof Error ? err.message : 'Erreur inconnue')
-    } finally {
-      setIsSaving(false)
-    }
+  function normalizeWeights() {
+    setSettings((prev) => ({
+      ...prev,
+      scoring_weights: normalizeWeightsClient(prev.scoring_weights ?? { ...DEFAULT_SCORING_WEIGHTS }),
+    }))
+  }
+
+  function resetWeights() {
+    setSettings((prev) => ({
+      ...prev,
+      scoring_weights: { ...DEFAULT_SCORING_WEIGHTS },
+    }))
   }
 
   function toggleSecteur(secteur: string) {
@@ -57,114 +107,108 @@ export function SettingsForm({ initialSettings, secteursDisponibles }: SettingsF
     })
   }
 
-  const selectedSecteurs = settings.target_sectors ?? []
-  const charCount = (settings.offer_description ?? '').length
-  const dailyTarget = settings.daily_call_target
+  function addPostalCode() {
+    const code = postalCodeInput.trim()
+    if (!code) return
+    if (!POSTAL_CODE_REGEX.test(code)) {
+      setPostalCodeError('Code postal invalide (5 chiffres attendus).')
+      return
+    }
+    if (postalCodes.includes(code)) {
+      setPostalCodeError('Code postal déjà ajouté.')
+      return
+    }
+    if (postalCodes.length >= 10) {
+      setPostalCodeError('Maximum 10 codes postaux.')
+      return
+    }
+    setSettings((prev) => ({
+      ...prev,
+      target_postal_codes: [...(prev.target_postal_codes ?? []), code],
+    }))
+    setPostalCodeInput('')
+    setPostalCodeError(null)
+  }
+
+  function removePostalCode(code: string) {
+    setSettings((prev) => ({
+      ...prev,
+      target_postal_codes: (prev.target_postal_codes ?? []).filter((c) => c !== code),
+    }))
+  }
+
+  const router = useRouter()
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    setIsSaving(true)
+    setSaveStatus('idle')
+    setErrorMessage(null)
+
+    // On normalise systématiquement avant envoi pour garantir un payload propre.
+    const normalizedWeights = normalizeWeightsClient(weights)
+
+    try {
+      const response = await fetch('/api/profile/settings', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          offer_description: settings.offer_description,
+          target_sectors: settings.target_sectors,
+          target_city: settings.target_city,
+          target_postal_codes: settings.target_postal_codes,
+          notification_email: settings.notification_email || undefined,
+          daily_call_target: settings.daily_call_target,
+          scoring_weights: normalizedWeights,
+        }),
+      })
+
+      if (!response.ok) {
+        const data = (await response.json().catch(() => ({}))) as { error?: string }
+        throw new Error(data.error ?? 'Erreur lors de la sauvegarde')
+      }
+
+      // Reflète localement la version normalisée renvoyée par l'API.
+      setSettings((prev) => ({ ...prev, scoring_weights: normalizedWeights }))
+      setSaveStatus('success')
+      router.refresh()
+      setTimeout(() => setSaveStatus('idle'), 3500)
+    } catch (err) {
+      setSaveStatus('error')
+      setErrorMessage(err instanceof Error ? err.message : 'Erreur inconnue')
+    } finally {
+      setIsSaving(false)
+    }
+  }
 
   return (
     <form
       onSubmit={handleSubmit}
       noValidate
       aria-label="Paramètres de l'agent"
-      className="space-y-0"
+      className="space-y-6"
     >
-      {/* Section : Description de l'offre */}
-      <div className="rounded-t-2xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900">
-        <div className="border-b border-gray-100 px-6 py-5 dark:border-gray-800">
-          <div className="flex items-start gap-4">
-            <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-green-50 dark:bg-green-950/40">
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                width="18"
-                height="18"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1.75"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                className="text-green-600 dark:text-green-400"
-                aria-hidden="true"
-              >
-                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                <polyline points="14 2 14 8 20 8" />
-                <line x1="16" y1="13" x2="8" y2="13" />
-                <line x1="16" y1="17" x2="8" y2="17" />
-                <polyline points="10 9 9 9 8 9" />
-              </svg>
-            </div>
-            <div className="min-w-0 flex-1">
-              <h2 className="text-sm font-semibold text-gray-900 dark:text-white">
-                Description de votre offre
-              </h2>
-              <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
-                Utilisée par l&apos;IA pour personnaliser les pitchs et accroches de chaque appel.
-              </p>
-            </div>
-          </div>
-        </div>
-        <div className="px-6 py-5">
-          <div className="relative">
-            <textarea
-              id="offer_description"
-              value={settings.offer_description ?? ''}
-              onChange={(e) =>
-                setSettings((prev) => ({ ...prev, offer_description: e.target.value }))
-              }
-              placeholder="Ex : Nous accompagnons les ETI dans la réalisation de leur bilan carbone réglementaire (BEGES Scope 1+2+3) et dans la construction de leur plan de décarbonation..."
-              rows={5}
-              className="w-full resize-none rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm text-gray-900 placeholder-gray-400 transition focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-500/20 dark:border-gray-700 dark:bg-gray-800 dark:text-white dark:placeholder-gray-600"
-            />
-            <span
-              className={`absolute bottom-3 right-3 text-xs tabular-nums ${
-                charCount > 800 ? 'text-orange-500' : 'text-gray-400 dark:text-gray-600'
-              }`}
-            >
-              {charCount}
-            </span>
-          </div>
-        </div>
-      </div>
-
-      {/* Section : Secteurs cibles */}
-      <div className="-mt-px border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900">
-        <div className="border-b border-gray-100 px-6 py-5 dark:border-gray-800">
-          <div className="flex items-start gap-4">
-            <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-blue-50 dark:bg-blue-950/40">
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                width="18"
-                height="18"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1.75"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                className="text-blue-600 dark:text-blue-400"
-                aria-hidden="true"
-              >
-                <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
-                <polyline points="9 22 9 12 15 12 15 22" />
-              </svg>
-            </div>
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-2">
-                <h2 className="text-sm font-semibold text-gray-900 dark:text-white">
-                  Secteurs cibles
-                </h2>
-                {selectedSecteurs.length > 0 && (
-                  <span className="rounded-full bg-blue-100 px-2 py-0.5 text-xs font-semibold text-blue-700 dark:bg-blue-950 dark:text-blue-400">
-                    {selectedSecteurs.length} sélectionné{selectedSecteurs.length > 1 ? 's' : ''}
-                  </span>
-                )}
-              </div>
-              <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
-                L&apos;agent ciblera prioritairement les entreprises de ces secteurs.
-              </p>
-            </div>
-          </div>
-        </div>
+      {/* ── Section : Ciblage commercial — Secteurs ────────────────────────── */}
+      <section
+        aria-labelledby="sectors-title"
+        className="rounded-2xl border border-gray-200 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-900"
+      >
+        <header className="border-b border-gray-100 px-6 py-5 dark:border-gray-800">
+          <h2
+            id="sectors-title"
+            className="text-sm font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400"
+          >
+            Secteurs cibles
+          </h2>
+          <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
+            L&apos;agent priorisera les entreprises de ces secteurs.
+            {selectedSecteurs.length > 0 && (
+              <span className="ml-2 inline-flex items-center rounded-full bg-blue-100 px-2 py-0.5 text-xs font-semibold text-blue-700 dark:bg-blue-950 dark:text-blue-300">
+                {selectedSecteurs.length} sélectionné{selectedSecteurs.length > 1 ? 's' : ''}
+              </span>
+            )}
+          </p>
+        </header>
         <div className="px-6 py-5">
           <fieldset>
             <legend className="sr-only">Secteurs cibles</legend>
@@ -174,9 +218,9 @@ export function SettingsForm({ initialSettings, secteursDisponibles }: SettingsF
                 return (
                   <label
                     key={secteur}
-                    className={`flex cursor-pointer items-center gap-2.5 rounded-xl border px-3.5 py-2.5 text-sm transition-all duration-150 ${
+                    className={`flex cursor-pointer items-center gap-2.5 rounded-lg border px-3.5 py-2.5 text-sm transition-all duration-150 ${
                       isSelected
-                        ? 'border-green-500 bg-green-50 text-green-700 shadow-sm dark:border-green-600 dark:bg-green-950/40 dark:text-green-400'
+                        ? 'border-green-500 bg-green-50 text-green-700 shadow-sm dark:border-green-600 dark:bg-green-950/40 dark:text-green-300'
                         : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300 hover:bg-gray-50 dark:border-gray-700 dark:bg-transparent dark:text-gray-400 dark:hover:border-gray-600 dark:hover:bg-gray-800/50'
                     }`}
                   >
@@ -218,58 +262,32 @@ export function SettingsForm({ initialSettings, secteursDisponibles }: SettingsF
             </div>
           </fieldset>
         </div>
-      </div>
+      </section>
 
-      {/* Section : Zone géographique */}
-      <div className="-mt-px border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900">
-        <div className="border-b border-gray-100 px-6 py-5 dark:border-gray-800">
-          <div className="flex items-start gap-4">
-            <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-purple-50 dark:bg-purple-950/40">
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                width="18"
-                height="18"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1.75"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                className="text-purple-600 dark:text-purple-400"
-                aria-hidden="true"
-              >
-                <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z" />
-                <circle cx="12" cy="9" r="2.5" />
-              </svg>
-            </div>
-            <div className="min-w-0 flex-1">
-              <h2 className="text-sm font-semibold text-gray-900 dark:text-white">
-                Zone géographique
-              </h2>
-              <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
-                Ville, département ou région ciblée pour la prospection.
-              </p>
-            </div>
-          </div>
-        </div>
-        <div className="px-6 py-5">
-          <div className="relative">
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              width="15"
-              height="15"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 dark:text-gray-500"
-              aria-hidden="true"
+      {/* ── Section : Zone géographique ─────────────────────────────────────── */}
+      <section
+        aria-labelledby="geo-title"
+        className="rounded-2xl border border-gray-200 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-900"
+      >
+        <header className="border-b border-gray-100 px-6 py-5 dark:border-gray-800">
+          <h2
+            id="geo-title"
+            className="text-sm font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400"
+          >
+            Zone géographique
+          </h2>
+          <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
+            Ville, département ou région ciblée, et codes postaux complémentaires.
+          </p>
+        </header>
+        <div className="space-y-5 px-6 py-5">
+          <div>
+            <label
+              htmlFor="target_city"
+              className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300"
             >
-              <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z" />
-              <circle cx="12" cy="9" r="2.5" />
-            </svg>
+              Ville / région
+            </label>
             <input
               id="target_city"
               type="text"
@@ -278,81 +296,356 @@ export function SettingsForm({ initialSettings, secteursDisponibles }: SettingsF
                 setSettings((prev) => ({ ...prev, target_city: e.target.value }))
               }
               placeholder="Ex : Lyon, Île-de-France, Rhône-Alpes..."
-              className="w-full rounded-xl border border-gray-200 bg-white py-2.5 pl-11 pr-4 text-sm text-gray-900 placeholder-gray-400 transition focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-500/20 dark:border-gray-700 dark:bg-gray-800 dark:text-white dark:placeholder-gray-600"
+              className="w-full rounded-lg border border-gray-200 bg-white px-4 py-2.5 text-sm text-gray-900 placeholder-gray-400 transition focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-500/20 dark:border-gray-700 dark:bg-gray-800 dark:text-white dark:placeholder-gray-600"
             />
           </div>
-        </div>
-      </div>
 
-      {/* Section : Objectif d'appels */}
-      <div className="-mt-px rounded-b-2xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900">
-        <div className="border-b border-gray-100 px-6 py-5 dark:border-gray-800">
-          <div className="flex items-start gap-4">
-            <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-orange-50 dark:bg-orange-950/40">
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                width="18"
-                height="18"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1.75"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                className="text-orange-600 dark:text-orange-400"
-                aria-hidden="true"
+          <div>
+            <label
+              htmlFor="postal_code_input"
+              className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300"
+            >
+              Codes postaux (max 10)
+            </label>
+            <div className="flex gap-2">
+              <input
+                id="postal_code_input"
+                type="text"
+                inputMode="numeric"
+                pattern="\d{5}"
+                maxLength={5}
+                value={postalCodeInput}
+                onChange={(e) => {
+                  setPostalCodeInput(e.target.value.replace(/\D/g, '').slice(0, 5))
+                  if (postalCodeError) setPostalCodeError(null)
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault()
+                    addPostalCode()
+                  }
+                }}
+                placeholder="69001"
+                className="flex-1 rounded-lg border border-gray-200 bg-white px-4 py-2.5 text-sm tabular-nums text-gray-900 placeholder-gray-400 transition focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-500/20 dark:border-gray-700 dark:bg-gray-800 dark:text-white dark:placeholder-gray-600"
+                aria-describedby={postalCodeError ? 'postal-code-error' : undefined}
+              />
+              <button
+                type="button"
+                onClick={addPostalCode}
+                className="rounded-lg border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm font-medium text-gray-700 transition hover:border-gray-300 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-green-500/20 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
               >
-                <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12a19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 3.5 1h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 8.91a16 16 0 0 0 5.27 5.27l1.17-1.17a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 21.28 15l.64 1.92z" />
-              </svg>
+                Ajouter
+              </button>
             </div>
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-3">
-                <h2 className="text-sm font-semibold text-gray-900 dark:text-white">
-                  Objectif d&apos;appels par jour
-                </h2>
-                <span className="rounded-full bg-green-100 px-3 py-0.5 text-sm font-bold text-green-700 dark:bg-green-950 dark:text-green-400">
-                  {dailyTarget}
-                </span>
-              </div>
-              <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
-                Nombre de prospects dans votre liste quotidienne.
+            {postalCodeError && (
+              <p
+                id="postal-code-error"
+                role="alert"
+                className="mt-2 text-xs text-red-600 dark:text-red-400"
+              >
+                {postalCodeError}
               </p>
+            )}
+            {postalCodes.length > 0 && (
+              <ul className="mt-3 flex flex-wrap gap-2" aria-label="Codes postaux sélectionnés">
+                {postalCodes.map((code) => (
+                  <li
+                    key={code}
+                    className="inline-flex items-center gap-1.5 rounded-full bg-gray-100 px-3 py-1 text-xs font-medium tabular-nums text-gray-700 dark:bg-gray-800 dark:text-gray-300"
+                  >
+                    {code}
+                    <button
+                      type="button"
+                      onClick={() => removePostalCode(code)}
+                      aria-label={`Retirer le code postal ${code}`}
+                      className="rounded-full text-gray-500 transition hover:text-red-600 focus:outline-none focus:ring-2 focus:ring-red-500/20 dark:text-gray-400 dark:hover:text-red-400"
+                    >
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        width="12"
+                        height="12"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2.5"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        aria-hidden="true"
+                      >
+                        <line x1="18" y1="6" x2="6" y2="18" />
+                        <line x1="6" y1="6" x2="18" y2="18" />
+                      </svg>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </div>
+      </section>
+
+      {/* ── Section : Pondération du scoring (NEW) ──────────────────────────── */}
+      <section
+        aria-labelledby="scoring-title"
+        className="rounded-2xl border border-gray-200 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-900"
+      >
+        <header className="border-b border-gray-100 px-6 py-5 dark:border-gray-800">
+          <h2
+            id="scoring-title"
+            className="text-sm font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400"
+          >
+            Pondération du scoring
+          </h2>
+          <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
+            Ajustez l&apos;importance relative de chaque pilier dans le calcul du score.
+          </p>
+        </header>
+
+        <div className="space-y-6 px-6 py-5">
+          {(Object.keys(PILIERS_INFO) as ScoringPilier[]).map((pilier) => {
+            const info = PILIERS_INFO[pilier]
+            const value = weights[pilier]
+            return (
+              <div key={pilier}>
+                <div className="mb-1.5 flex items-baseline justify-between gap-3">
+                  <label
+                    htmlFor={`weight-${pilier}`}
+                    className="text-sm font-medium text-gray-900 dark:text-white"
+                  >
+                    {info.label}
+                  </label>
+                  <span className="text-sm font-semibold tabular-nums text-gray-900 dark:text-white">
+                    {value} %
+                  </span>
+                </div>
+                <input
+                  id={`weight-${pilier}`}
+                  type="range"
+                  min={0}
+                  max={100}
+                  step={1}
+                  value={value}
+                  onChange={(e) => updateWeight(pilier, parseInt(e.target.value, 10))}
+                  className="w-full accent-green-600"
+                  aria-label={`Pondération ${info.label} : ${value} %`}
+                />
+                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">{info.description}</p>
+              </div>
+            )
+          })}
+
+          <div
+            className={`flex flex-col gap-3 rounded-xl border px-4 py-3 sm:flex-row sm:items-center sm:justify-between ${
+              isWeightsBalanced
+                ? 'border-green-200 bg-green-50 dark:border-green-900/50 dark:bg-green-950/30'
+                : 'border-orange-200 bg-orange-50 dark:border-orange-900/50 dark:bg-orange-950/30'
+            }`}
+          >
+            <p
+              role={isWeightsBalanced ? undefined : 'status'}
+              aria-live="polite"
+              className="text-sm text-gray-700 dark:text-gray-300"
+            >
+              <span className="tabular-nums">
+                Taille: {weights.taille} % · BEGES: {weights.beges} % · Contact: {weights.contact} %
+              </span>{' '}
+              ·{' '}
+              <span
+                className={`font-semibold tabular-nums ${
+                  isWeightsBalanced
+                    ? 'text-green-700 dark:text-green-300'
+                    : 'text-orange-700 dark:text-orange-300'
+                }`}
+              >
+                Total: {weightsSum} %
+              </span>
+              {!isWeightsBalanced && (
+                <span className="ml-2 text-xs text-orange-700 dark:text-orange-300">
+                  (normalisé automatiquement à la sauvegarde)
+                </span>
+              )}
+            </p>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={normalizeWeights}
+                disabled={isWeightsBalanced}
+                className="rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 transition hover:border-gray-300 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-green-500/20 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
+              >
+                Normaliser
+              </button>
+              <button
+                type="button"
+                onClick={resetWeights}
+                className="rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 transition hover:border-gray-300 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-green-500/20 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
+              >
+                Réinitialiser aux défauts (30 / 30 / 40)
+              </button>
             </div>
           </div>
         </div>
+      </section>
+
+      {/* ── Section : Notifications ─────────────────────────────────────────── */}
+      <section
+        aria-labelledby="notifications-title"
+        className="rounded-2xl border border-gray-200 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-900"
+      >
+        <header className="border-b border-gray-100 px-6 py-5 dark:border-gray-800">
+          <h2
+            id="notifications-title"
+            className="text-sm font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400"
+          >
+            Notifications
+          </h2>
+          <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
+            Email pour recevoir les listes journalières et alertes.
+          </p>
+        </header>
         <div className="px-6 py-5">
-          {/* Slider stylisé */}
-          <div className="relative mb-2 h-2 w-full rounded-full bg-gray-100 dark:bg-gray-800">
-            <div
-              className="absolute left-0 top-0 h-2 rounded-full bg-green-500 transition-all"
-              style={{ width: `${((dailyTarget - 5) / (20 - 5)) * 100}%` }}
-              aria-hidden="true"
-            />
-          </div>
+          <label
+            htmlFor="notification_email"
+            className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300"
+          >
+            Email de notification
+          </label>
           <input
-            id="daily_call_target"
-            type="range"
-            min={5}
-            max={20}
-            step={1}
-            value={dailyTarget}
+            id="notification_email"
+            type="email"
+            value={settings.notification_email ?? ''}
             onChange={(e) =>
-              setSettings((prev) => ({
-                ...prev,
-                daily_call_target: parseInt(e.target.value, 10),
-              }))
+              setSettings((prev) => ({ ...prev, notification_email: e.target.value }))
             }
-            className="w-full accent-green-600"
-            aria-label={`Nombre d'appels par jour : ${dailyTarget}`}
+            placeholder="prenom.nom@exemple.com"
+            className="w-full rounded-lg border border-gray-200 bg-white px-4 py-2.5 text-sm text-gray-900 placeholder-gray-400 transition focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-500/20 dark:border-gray-700 dark:bg-gray-800 dark:text-white dark:placeholder-gray-600"
           />
-          <div className="mt-1 flex justify-between text-xs text-gray-400 dark:text-gray-600">
-            <span>5 appels</span>
-            <span>20 appels</span>
+        </div>
+      </section>
+
+      {/* ── Section : Offre commerciale ─────────────────────────────────────── */}
+      <section
+        aria-labelledby="offer-title"
+        className="rounded-2xl border border-gray-200 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-900"
+      >
+        <header className="border-b border-gray-100 px-6 py-5 dark:border-gray-800">
+          <h2
+            id="offer-title"
+            className="text-sm font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400"
+          >
+            Offre commerciale
+          </h2>
+          <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
+            Utilisée par l&apos;IA pour personnaliser les pitchs et accroches de chaque appel.
+          </p>
+        </header>
+        <div className="px-6 py-5">
+          <label htmlFor="offer_description" className="sr-only">
+            Description de l&apos;offre
+          </label>
+          <div className="relative">
+            <textarea
+              id="offer_description"
+              value={settings.offer_description ?? ''}
+              onChange={(e) =>
+                setSettings((prev) => ({ ...prev, offer_description: e.target.value }))
+              }
+              placeholder="Ex : Nous accompagnons les ETI dans la réalisation de leur bilan carbone réglementaire (BEGES Scope 1+2+3) et dans la construction de leur plan de décarbonation..."
+              rows={6}
+              maxLength={2000}
+              className="w-full resize-none rounded-lg border border-gray-200 bg-white px-4 py-3 text-sm text-gray-900 placeholder-gray-400 transition focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-500/20 dark:border-gray-700 dark:bg-gray-800 dark:text-white dark:placeholder-gray-600"
+            />
+            <span
+              className={`absolute bottom-3 right-3 text-xs tabular-nums ${
+                charCount > 1800 ? 'text-orange-500' : 'text-gray-400 dark:text-gray-600'
+              }`}
+            >
+              {charCount} / 2000
+            </span>
           </div>
         </div>
-      </div>
+      </section>
 
-      {/* Feedback sauvegarde */}
+      {/* ── Section : Avancé (legacy daily_call_target) ─────────────────────── */}
+      <section
+        aria-labelledby="advanced-title"
+        className="rounded-2xl border border-gray-200 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-900"
+      >
+        <button
+          type="button"
+          onClick={() => setIsAdvancedOpen((v) => !v)}
+          aria-expanded={isAdvancedOpen}
+          aria-controls="advanced-content"
+          className="flex w-full items-center justify-between px-6 py-5 text-left transition hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-green-500/20 dark:hover:bg-gray-800/50"
+        >
+          <div>
+            <h2
+              id="advanced-title"
+              className="text-sm font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400"
+            >
+              Avancé
+            </h2>
+            <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
+              Paramètres hérités, conservés pour rétrocompatibilité.
+            </p>
+          </div>
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="18"
+            height="18"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className={`flex-shrink-0 text-gray-400 transition-transform dark:text-gray-500 ${
+              isAdvancedOpen ? 'rotate-180' : ''
+            }`}
+            aria-hidden="true"
+          >
+            <polyline points="6 9 12 15 18 9" />
+          </svg>
+        </button>
+
+        {isAdvancedOpen && (
+          <div
+            id="advanced-content"
+            className="border-t border-gray-100 px-6 py-5 dark:border-gray-800"
+          >
+            <label
+              htmlFor="daily_call_target"
+              className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300"
+            >
+              Objectif d&apos;appels par jour (legacy)
+              <span className="ml-2 text-sm font-semibold tabular-nums text-gray-900 dark:text-white">
+                {settings.daily_call_target}
+              </span>
+            </label>
+            <input
+              id="daily_call_target"
+              type="range"
+              min={5}
+              max={30}
+              step={1}
+              value={settings.daily_call_target}
+              onChange={(e) =>
+                setSettings((prev) => ({
+                  ...prev,
+                  daily_call_target: parseInt(e.target.value, 10),
+                }))
+              }
+              className="w-full accent-green-600"
+              aria-label={`Objectif d'appels par jour : ${settings.daily_call_target}`}
+            />
+            <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+              Hérité de l&apos;ancienne UX (Top 15). La nouvelle liste est triée par score, sans
+              limite stricte. Conservé pour rétrocompat.
+            </p>
+          </div>
+        )}
+      </section>
+
+      {/* ── Feedback ────────────────────────────────────────────────────────── */}
       {saveStatus === 'error' && errorMessage && (
         <div
           className="flex items-center gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3.5 dark:border-red-800/50 dark:bg-red-950/30"
@@ -407,12 +700,12 @@ export function SettingsForm({ initialSettings, secteursDisponibles }: SettingsF
         </div>
       )}
 
-      {/* Bouton submit */}
+      {/* ── Bouton submit ───────────────────────────────────────────────────── */}
       <button
         type="submit"
         disabled={isSaving}
         aria-label="Sauvegarder les paramètres"
-        className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-green-600 px-6 py-3 text-sm font-semibold text-white shadow-sm transition-all hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60 dark:focus:ring-offset-gray-950"
+        className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-green-600 px-6 py-3 text-sm font-semibold text-white shadow-sm transition-all hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60 dark:focus:ring-offset-gray-950"
       >
         {isSaving ? (
           <>
@@ -451,7 +744,7 @@ export function SettingsForm({ initialSettings, secteursDisponibles }: SettingsF
               <polyline points="17 21 17 13 7 13 7 21" />
               <polyline points="7 3 7 8 15 8" />
             </svg>
-            Sauvegarder les paramètres
+            Enregistrer
           </>
         )}
       </button>

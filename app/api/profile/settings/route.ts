@@ -3,8 +3,15 @@ import { z } from 'zod'
 import { createClient } from '@/lib/supabase/server'
 import type { Json } from '@/lib/supabase/database.types'
 import type { ProfileSettings } from '@/lib/types'
+import { normalizeScoringWeights } from '@/lib/agent/scoring'
 
 // ── Validation Zod stricte ───────────────────────────────────────────────────
+
+const ScoringWeightsSchema = z.object({
+  taille: z.number().min(0).max(100),
+  beges: z.number().min(0).max(100),
+  contact: z.number().min(0).max(100),
+})
 
 const SettingsSchema = z.object({
   offer_description: z.string().max(2000).optional(),
@@ -13,6 +20,7 @@ const SettingsSchema = z.object({
   target_postal_codes: z.array(z.string().regex(/^\d{5}$/)).max(10).optional(),
   daily_call_target: z.number().int().min(1).max(30).optional(),
   notification_email: z.string().email().max(200).optional(),
+  scoring_weights: ScoringWeightsSchema.optional(),
 })
 
 // ── PATCH /api/profile/settings ───────────────────────────────────────────────
@@ -83,6 +91,7 @@ export async function PATCH(request: Request) {
       offer_description: currentSettings.offer_description ?? '',
       notification_email: currentSettings.notification_email,
       target_postal_codes: currentSettings.target_postal_codes,
+      scoring_weights: currentSettings.scoring_weights,
       // Merge avec payload — chaque champ validé par Zod est appliqué si présent
       ...(payload.offer_description !== undefined && {
         offer_description: payload.offer_description,
@@ -102,6 +111,10 @@ export async function PATCH(request: Request) {
       }),
       ...(payload.target_postal_codes !== undefined && {
         target_postal_codes: payload.target_postal_codes,
+      }),
+      // Pondération scoring — normalisée à 100 avant persistance (cf. migration 013)
+      ...(payload.scoring_weights !== undefined && {
+        scoring_weights: normalizeScoringWeights(payload.scoring_weights),
       }),
     }
 
