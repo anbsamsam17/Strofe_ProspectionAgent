@@ -11,9 +11,6 @@ import {
 } from '@/components/pipeline/pipeline-client'
 import { PeriodToggle } from '@/components/pipeline/period-toggle'
 import { parseRange, type PipelineRange } from '@/lib/pipeline/range'
-import { SectionErrorFallback } from '@/components/pipeline/section-error-fallback'
-import { ServerErrorBoundary } from '@/components/pipeline/server-error-boundary'
-import { ClientErrorBoundary } from '@/components/pipeline/client-error-boundary'
 import type { Prospect, ProspectStatus } from '@/lib/types'
 
 // Force le rendu dynamique — KPI + Kanban dépendent des données + searchParams.
@@ -187,47 +184,31 @@ export default async function PipelinePage({ searchParams }: PipelinePageProps) 
         </div>
       </header>
 
-      {/* KPI cards (Server Component, lazy via Suspense + ServerErrorBoundary).
-          KpiCards a déjà un try/catch interne, mais on ajoute une 2e barrière
-          au cas où une erreur synchrone (init Supabase client, parseRange…)
-          throw avant que le try/catch interne ne prenne la main. */}
+      {/* Pattern Next.js 15 standard : Suspense pour le pending, try/catch
+          interne dans chaque Server Component pour les errors. Pas de wrapper
+          custom — les wrappers précédents (ServerErrorBoundary async,
+          ClientErrorBoundary avec prop fonction) introduisaient des
+          violations RSC (fonctions passées au wire serializer) qui faisaient
+          crash le rendu avant même que la défense ne joue. KpiCards et
+          AgentStats ont déjà chacun leur fallback interne (KpiCardsError /
+          AgentStatsError). Si pipeline-client.tsx (Client Component) throw,
+          c'est l'error.tsx du segment qui prend la main — comportement
+          standard Next.js. */}
       <Suspense fallback={<KpiCardsSkeleton />}>
-        <ServerErrorBoundary
-          context="KpiCards"
-          fallback={<SectionErrorFallback section="KPIs" />}
-        >
-          {KpiCards({ range })}
-        </ServerErrorBoundary>
+        <KpiCards range={range} />
       </Suspense>
 
-      {/* Analytics — funnel conversion + stats agent côte à côte sur desktop.
-          ConversionFunnel est isolé dans son propre boundary défensif pour
-          ne pas faire crasher la page si buildFunnel / la geometry SVG throw
-          sur un Record corrompu.
-          AgentStats : 2 barrières (try/catch interne + ServerErrorBoundary). */}
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
         <SafeConversionFunnel countsByStatus={countsByStatus} />
         <Suspense fallback={<AgentStatsSkeleton />}>
-          <ServerErrorBoundary
-            context="AgentStats"
-            fallback={<SectionErrorFallback section="Activité agent" />}
-          >
-            {AgentStats({ range })}
-          </ServerErrorBoundary>
+          <AgentStats range={range} />
         </Suspense>
       </div>
 
-      {/* Kanban — ClientErrorBoundary pour capturer un éventuel throw au
-          SSR initial ou côté CSR (drag handler, useState init…). */}
-      {/* fix digest 450636695 : on ne passe PAS de fonction depuis ce SC vers
-          le Client (sérialisation RSC interdite). Le fallback est hardcodé
-          dans ClientErrorBoundary, on passe juste un label `section`. */}
-      <ClientErrorBoundary context="PipelineClient" section="Kanban">
-        <PipelineClient
-          columns={PIPELINE_COLUMNS}
-          prospectsByStatus={prospectsByStatus}
-        />
-      </ClientErrorBoundary>
+      <PipelineClient
+        columns={PIPELINE_COLUMNS}
+        prospectsByStatus={prospectsByStatus}
+      />
     </div>
   )
 }
@@ -318,21 +299,11 @@ function PipelinePageFallback({
       </section>
 
       <Suspense fallback={<KpiCardsSkeleton />}>
-        <ServerErrorBoundary
-          context="KpiCards (fallback page)"
-          fallback={<SectionErrorFallback section="KPIs" />}
-        >
-          {KpiCards({ range })}
-        </ServerErrorBoundary>
+        <KpiCards range={range} />
       </Suspense>
 
       <Suspense fallback={<AgentStatsSkeleton />}>
-        <ServerErrorBoundary
-          context="AgentStats (fallback page)"
-          fallback={<SectionErrorFallback section="Activité agent" />}
-        >
-          {AgentStats({ range })}
-        </ServerErrorBoundary>
+        <AgentStats range={range} />
       </Suspense>
     </div>
   )
