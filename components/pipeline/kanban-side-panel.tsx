@@ -30,6 +30,11 @@ import type {
 } from '@/lib/types'
 import { buildBegesUrl } from '@/lib/utils/beges-url'
 import { ProspectNotes } from '@/components/prospects/prospect-notes'
+import {
+  STATUS_LABELS,
+  STATUS_STYLES_SOLID,
+  STATUS_DROPDOWN_OPTIONS,
+} from '@/lib/constants/prospect-status'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -42,67 +47,10 @@ interface KanbanSidePanelProps {
 
 // ── Constantes ────────────────────────────────────────────────────────────────
 
-// Labels alignés sur les colonnes du Kanban (spec utilisateur).
-const STATUS_LABELS: Record<ProspectStatus, { label: string; badge: string; dot: string }> = {
-  sourced: {
-    label: 'Pas de contact identifié',
-    badge: 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300',
-    dot: 'bg-gray-400',
-  },
-  qualified: {
-    label: 'Qualifié',
-    badge: 'bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-400',
-    dot: 'bg-blue-500',
-  },
-  contacted: {
-    label: 'Contacté',
-    badge: 'bg-yellow-100 text-yellow-700 dark:bg-yellow-950 dark:text-yellow-400',
-    dot: 'bg-yellow-500',
-  },
-  interested: {
-    label: 'Intéressé',
-    badge: 'bg-green-100 text-green-700 dark:bg-green-950 dark:text-green-400',
-    dot: 'bg-green-500',
-  },
-  // `rdv` (legacy) reste géré ici pour ne pas casser les prospects existants.
-  rdv: {
-    label: 'RDV',
-    badge: 'bg-purple-100 text-purple-700 dark:bg-purple-950 dark:text-purple-400',
-    dot: 'bg-purple-500',
-  },
-  offer_sent: {
-    label: 'Offre envoyée',
-    badge: 'bg-indigo-100 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-400',
-    dot: 'bg-indigo-500',
-  },
-  converted: {
-    label: 'Affaire conclue',
-    badge: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-400',
-    dot: 'bg-emerald-500',
-  },
-  rejected: {
-    label: 'Sans suite',
-    badge: 'bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-400',
-    dot: 'bg-red-500',
-  },
-  on_hold: {
-    label: 'En stand-by',
-    badge: 'bg-orange-100 text-orange-700 dark:bg-orange-950 dark:text-orange-400',
-    dot: 'bg-orange-500',
-  },
-}
-
-// Statuts proposés dans le dropdown (ordre = ordre des colonnes Kanban).
-// TODO(coord-A): inclure `offer_sent` une fois ajouté à `ProspectStatus`.
-const STATUS_OPTIONS: ProspectStatus[] = [
-  'sourced',
-  'qualified',
-  'contacted',
-  'interested',
-  'converted',
-  'rejected',
-  'on_hold',
-]
+// STATUS_LABELS + STATUS_STYLES_SOLID + STATUS_DROPDOWN_OPTIONS importés de
+// @/lib/constants/prospect-status (source unique de vérité).
+// Alias STATUS_OPTIONS conservé pour stabilité locale.
+const STATUS_OPTIONS = STATUS_DROPDOWN_OPTIONS
 
 const PRIORITY_LABELS: Record<Priority, { label: string; badge: string }> = {
   haute: {
@@ -291,7 +239,8 @@ function StatusInlineDropdown({
     }
   }
 
-  const current = STATUS_LABELS[currentStatut]
+  const currentLabel = STATUS_LABELS[currentStatut]
+  const currentStyle = STATUS_STYLES_SOLID[currentStatut]
 
   return (
     <div ref={containerRef} className="relative">
@@ -301,12 +250,12 @@ function StatusInlineDropdown({
         disabled={disabled || pending !== null}
         aria-haspopup="listbox"
         aria-expanded={open}
-        aria-label={`Changer le statut (actuel : ${current.label})`}
+        aria-label={`Changer le statut (actuel : ${currentLabel})`}
         className="inline-flex w-full items-center justify-between gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-900 transition-colors hover:border-gray-300 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-700 dark:bg-gray-900 dark:text-white dark:hover:border-gray-600"
       >
         <span className="flex items-center gap-2">
-          <span className={`h-2 w-2 rounded-full ${current.dot}`} aria-hidden="true" />
-          {current.label}
+          <span className={`h-2 w-2 rounded-full ${currentStyle.dot}`} aria-hidden="true" />
+          {currentLabel}
         </span>
         <svg
           xmlns="http://www.w3.org/2000/svg"
@@ -332,7 +281,8 @@ function StatusInlineDropdown({
           className="absolute left-0 right-0 top-full z-10 mt-1 max-h-60 overflow-auto rounded-lg border border-gray-200 bg-white py-1 shadow-lg dark:border-gray-700 dark:bg-gray-900"
         >
           {STATUS_OPTIONS.map((opt) => {
-            const info = STATUS_LABELS[opt]
+            const optLabel = STATUS_LABELS[opt]
+            const optStyle = STATUS_STYLES_SOLID[opt]
             const isCurrent = opt === currentStatut
             const isPending = pending === opt
             return (
@@ -350,8 +300,8 @@ function StatusInlineDropdown({
                   }`}
                 >
                   <span className="flex items-center gap-2">
-                    <span className={`h-2 w-2 rounded-full ${info.dot}`} aria-hidden="true" />
-                    {info.label}
+                    <span className={`h-2 w-2 rounded-full ${optStyle.dot}`} aria-hidden="true" />
+                    {optLabel}
                   </span>
                   {isCurrent && (
                     <svg
@@ -719,7 +669,8 @@ export function KanbanSidePanel({
   }, [open, onClose])
 
   const status = prospect.statut
-  const statusInfo = STATUS_LABELS[status]
+  const statusLabel = STATUS_LABELS[status]
+  const statusStyle = STATUS_STYLES_SOLID[status]
   const priorite = derivePriority(prospect)
 
   return (
@@ -757,13 +708,13 @@ export function KanbanSidePanel({
             </h2>
             <div className="mt-1.5 flex items-center gap-2">
               <span
-                className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium ${statusInfo.badge}`}
+                className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium ${statusStyle.badge}`}
               >
                 <span
-                  className={`h-1.5 w-1.5 rounded-full ${statusInfo.dot}`}
+                  className={`h-1.5 w-1.5 rounded-full ${statusStyle.dot}`}
                   aria-hidden="true"
                 />
-                {statusInfo.label}
+                {statusLabel}
               </span>
             </div>
           </div>
