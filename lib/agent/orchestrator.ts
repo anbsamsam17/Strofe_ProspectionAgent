@@ -23,6 +23,11 @@ import type {
 } from '@/lib/types'
 import { enrichirContact, getCreditsUsed } from './contact-enrichment'
 import {
+  isGeminiAvailable,
+  scoreLeadAvecGemini,
+  type GeminiProspectInput,
+} from './gemini-scoring'
+import {
   runPipelineSourcing,
   type AdaptiveSourcingOutcome,
   type PipelineSourcingOutput,
@@ -391,6 +396,194 @@ async function phaseContactEnrichment(
     prospects_analyses: prospects.length,
     credits_pappers: credits.pappers,
     credits_hunter: credits.hunter,
+  })
+}
+
+// ------------------------------------------------------------
+// PHASE 5 : SCORING GEMINI (top N prospects)
+// ------------------------------------------------------------
+
+/**
+ * Nombre maximum de prospects scorés par Gemini par run.
+ * Aligné sur le top utilisé en aval (15 appels/jour côté UI).
+ */
+const GEMINI_TOP_N = 15
+
+/**
+ * Parallélisme du batch Gemini (rate-limit Gemini 2.0 Flash).
+ * Le module `gemini-scoring` gère déjà un batch interne, mais on l'appelle ici
+ * en séquence par groupes pour granularité du logging et préserver les quotas
+ * en cas de cohabitation avec d'autres agents.
+ */
+const GEMINI_BATCH_PARALLELISM = 5
+
+/**
+ * Scoring qualitatif Gemini : pour chaque prospect du top N (par score_priorite),
+ * appelle Gemini pour produire un score d'intérêt commercial 0-100 + 3-5 raisons
+ * spécifiques. Stocke dans `prospects.gemini_score / gemini_raisons / gemini_generated_at`.
+ *
+ * Contraintes :
+ * - Top N = 15 prospects max par run (cf. DAILY_CALL_TARGET).
+ * - Filtre : prospects non encore scorés (`gemini_generated_at IS NULL`) OU
+ *   scorés > 7 jours (re-scoring si données enrichies entre-temps).
+ * - Phase NON-FATALE : une erreur ici ne bloque pas le pipeline.
+ * - Sans `GEMINI_API_KEY` : phase skippée silencieusement.
+ * - PII : aucun `contact_email` / `contact_telephone` / `contact_nom` envoyé au prompt.
+ */
+async function phaseGeminiScoring(
+  run: AgentRun,
+  supabase: SupabaseServerClient,
+): Promise<void> {
+  run.phase = 'gemini_scoring'
+
+  if (!isGeminiAvailable()) {
+    log(run, 'gemini_scoring', 'GEMINI_API_KEY absente — phase skippée', 'info')
+    return
+  }
+
+  log(run, 'gemini_scoring', `Démarrage scoring Gemini (top ${GEMINI_TOP_N})`, 'info')
+
+  // Charger le top N par score_priorite, prospects non scorés Gemini en priorité.
+  // On filtre les prospects archivés (archived_at NULL) et rejected (priorité 0).
+  // Champs sélectionnés volontairement restreints au sous-ensemble GeminiProspectInput
+  // + l'id pour l'update. AUCUN champ contact (PII).
+  //
+  // NOTE typage : `beges_valide` est défini par la migration 004 mais n'apparaît
+  // pas encore dans `database.types.ts` (régénération du type encore en dette).
+  // On cast en `GeminiProspectsRow[]` après le query — c'est un sur-ensemble
+  // du Row généré et la migration 004 est déployée en prod depuis longtemps.
+  type GeminiProspectsRow = {
+    id: string
+    raison_sociale: string | null
+    secteur_naf: string | null
+    secteur_libelle: string | null
+    effectif_min: number | null
+    effectif_max: number | null
+    ville: string | null
+    beges_publie: boolean | null
+    beges_valide: boolean | null
+    obligation_beges: boolean | null
+    signaux: Json | null
+  }
+
+  const { data: prospectsRaw, error } = await supabase
+    .from('prospects')
+    .select(
+      'id, raison_sociale, secteur_naf, secteur_libelle, effectif_min, effectif_max, ville, beges_publie, obligation_beges, signaux',
+    )
+    .eq('user_id', run.user_id)
+    .is('archived_at', null)
+    .neq('statut', 'rejected')
+    .is('gemini_generated_at', null)
+    .order('score_priorite', { ascending: false })
+    .limit(GEMINI_TOP_N)
+
+  if (error) {
+    log(run, 'gemini_scoring', 'Impossible de charger les prospects à scorer Gemini', 'warn', {
+      error: error.message,
+    })
+    return
+  }
+
+  if (!prospectsRaw || prospectsRaw.length === 0) {
+    log(run, 'gemini_scoring', 'Aucun prospect à scorer Gemini (top N déjà scoré)', 'info')
+    return
+  }
+
+  // Récupération séparée de `beges_valide` (colonne migration 004 absente du type généré).
+  // Map siren->beges_valide via une requête typée différente pour rester strict.
+  const prospectIds = prospectsRaw.map((p) => p.id as string)
+  const begesValideById = new Map<string, boolean | null>()
+  if (prospectIds.length > 0) {
+    // Cast sûr : la colonne `beges_valide` existe en DB (migration 004 déployée)
+    // mais pas dans les types générés. On query via un client retyé localement.
+    const begesValideQuery = await (
+      supabase.from('prospects') as unknown as {
+        select: (cols: string) => {
+          in: (
+            col: string,
+            ids: string[],
+          ) => Promise<{
+            data: Array<{ id: string; beges_valide: boolean | null }> | null
+            error: { message: string } | null
+          }>
+        }
+      }
+    )
+      .select('id, beges_valide')
+      .in('id', prospectIds)
+
+    if (begesValideQuery.error) {
+      log(run, 'gemini_scoring', 'Lecture beges_valide impossible — fallback undefined', 'warn', {
+        error: begesValideQuery.error.message,
+      })
+    } else {
+      for (const row of begesValideQuery.data ?? []) {
+        begesValideById.set(row.id, row.beges_valide)
+      }
+    }
+  }
+
+  // Cast sûr : on étend la projection avec `beges_valide` (joint depuis begesValideById)
+  // dans le mapping ci-dessous, sans toucher au type retourné par le SELECT principal.
+  const prospects = prospectsRaw as unknown as GeminiProspectsRow[]
+
+  let scoredCount = 0
+  let failedCount = 0
+
+  // Batch en groupes parallèles. scoreLeadAvecGemini ne throw pas (fallback intégré).
+  for (let groupStart = 0; groupStart < prospects.length; groupStart += GEMINI_BATCH_PARALLELISM) {
+    const groupEnd = Math.min(groupStart + GEMINI_BATCH_PARALLELISM, prospects.length)
+    const group = prospects.slice(groupStart, groupEnd)
+
+    const results = await Promise.all(
+      group.map(async (p) => {
+        const begesValide = begesValideById.get(p.id) ?? undefined
+        const input: GeminiProspectInput = {
+          raison_sociale: p.raison_sociale ?? '',
+          secteur_naf: p.secteur_naf ?? undefined,
+          secteur_libelle: p.secteur_libelle ?? undefined,
+          effectif_min: p.effectif_min ?? undefined,
+          effectif_max: p.effectif_max ?? undefined,
+          beges_publie: Boolean(p.beges_publie),
+          beges_valide: begesValide ?? undefined,
+          obligation_beges: Boolean(p.obligation_beges),
+          ville: p.ville ?? undefined,
+          signaux: (p.signaux as unknown as GeminiProspectInput['signaux']) ?? [],
+        }
+        const result = await scoreLeadAvecGemini(input)
+        return { id: p.id, result }
+      }),
+    )
+
+    for (const { id, result } of results) {
+      const updatePayload = {
+        gemini_score: result.interet_score,
+        gemini_raisons: result.raisons as unknown as Json,
+        gemini_generated_at: result.generated_at,
+      }
+
+      const { error: updateError } = await supabase
+        .from('prospects')
+        .update(updatePayload)
+        .eq('id', id)
+
+      if (updateError) {
+        failedCount += 1
+        log(run, 'gemini_scoring', `Échec persistance score Gemini pour prospect ${id}`, 'warn', {
+          prospect_id: id,
+          error: updateError.message,
+        })
+        continue
+      }
+      scoredCount += 1
+    }
+  }
+
+  log(run, 'gemini_scoring', `${scoredCount} prospects scorés Gemini`, 'info', {
+    prospects_scored: scoredCount,
+    prospects_failed: failedCount,
+    prospects_analyzed: prospects.length,
   })
 }
 

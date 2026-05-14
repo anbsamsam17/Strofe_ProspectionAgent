@@ -287,6 +287,16 @@ export type SourcerEntreprisesResult = {
  * Type local représentant un record ADEME BEGES renvoyé par l'API Data Fair.
  * Les champs correspondent à l'API : https://data.ademe.fr/data-fair/api/v1/datasets/bilan-ges/lines
  * Ce type est plus riche que l'interface AdemeBeges de types.ts (qui reste la surface publique).
+ *
+ * IMPORTANT (2026-05-14) — types runtime API :
+ *   - `siren_principal` est renvoyé par l'API comme un **integer** (ex. 542065479)
+ *     et non comme une string. La déclaration `string` ici est ce qu'on veut côté
+ *     consommateur après normalisation. Le parsing brut le reçoit en `number`
+ *     puis `normalizeAdemeRecord()` coerce en string à 9 chiffres (zero-pad si
+ *     le SIREN commence par 0 — rare mais possible).
+ *   - `id` est un **UUID** (ex. "9397a0e8-b1cd-11ed-8fce-005056b7acd1"). C'est
+ *     l'identifiant qu'on utilise pour construire l'URL canonique du bilan
+ *     `https://bilans-ges.ademe.fr/bilans/<id>`.
  */
 export interface AdemeBegesDataFairRecord {
   siren_principal: string
@@ -298,6 +308,23 @@ export interface AdemeBegesDataFairRecord {
   fonction?: string
   id: string
   structure_obligee?: string
+}
+
+/**
+ * Forme brute du record renvoyée par l'API ADEME Data Fair, AVANT normalisation.
+ * `siren_principal` arrive en `number` côté wire — d'où l'union string | number.
+ * Utilisé uniquement par `normalizeAdemeRecord()` pour parser la réponse.
+ */
+interface AdemeBegesRawRecord {
+  siren_principal?: string | number
+  raison_sociale?: unknown
+  annee_de_reporting?: unknown
+  date_de_publication?: unknown
+  courriel?: unknown
+  responsable_du_suivi?: unknown
+  fonction?: unknown
+  id?: unknown
+  structure_obligee?: unknown
 }
 
 /**
@@ -935,6 +962,32 @@ interface RechercheEntreprisesResult {
 }
 
 /**
+ * Normalise un code NAF vers le format `XX.XXY` attendu par l'API Recherche
+ * Entreprises. Tolère les inputs sans point (`0121Z`), avec casse mixte
+ * (`01.21z`), ou contenant des espaces parasites.
+ *
+ * Retourne `null` si l'input n'est pas un code NAF reconnu (ex. libellé
+ * humain qui aurait fuité jusqu'ici — sera ignoré dans le fallback).
+ *
+ * Note : ce helper est local à `sourcing.ts` pour éviter une dépendance
+ * circulaire avec `naf-sector-mapping.ts`. La logique est identique à
+ * `normalizeNafCode` exposé là-bas (à garder en miroir).
+ */
+function _normalizeNafForFallback(input: string): string | null {
+  if (!input) return null
+  const cleaned = input.trim().toUpperCase()
+  if (/^\d{2}\.\d{2}[A-Z]$/.test(cleaned)) return cleaned
+  if (/^\d{4}[A-Z]$/.test(cleaned)) {
+    return `${cleaned.slice(0, 2)}.${cleaned.slice(2)}`
+  }
+  const stripped = cleaned.replace(/[^A-Z0-9]/g, '')
+  if (/^\d{4}[A-Z]$/.test(stripped)) {
+    return `${stripped.slice(0, 2)}.${stripped.slice(2)}`
+  }
+  return null
+}
+
+/**
  * Sourcing fallback via l'API Recherche Entreprises (open data, pas de clé).
  * Convertit les résultats au format SireneEtablissement pour compatibilité.
  *
@@ -942,6 +995,13 @@ interface RechercheEntreprisesResult {
  * avec un guard de MAX_PAGES_PER_NAF pour éviter les boucles infinies.
  * Déduplication en amont : les SIREN présents dans options.excludeSirens sont
  * skippés immédiatement sans attendre la phase de déduplication de l'orchestrateur.
+ *
+ * Normalisation NAF (fix 2026-05-14) :
+ *   - L'API recherche-entreprises attend le format AVEC point (`49.41A`).
+ *   - Si l'appelant fournit `0121Z` ou `01.21z`, on reformate vers `01.21Z`.
+ *   - Filtrage post-fetch : chaque résultat dont `activite_principale` ne
+ *     correspond pas au NAF demandé est rejeté (défense en profondeur si
+ *     l'API gouv fuite un résultat hors-cible).
  */
 export async function sourcerEntreprisesFallback(
   options: SourcingOptions = {},
@@ -954,12 +1014,25 @@ export async function sourcerEntreprisesFallback(
     departements = [], // [] = France entière (pas de filtre)
   } = options
 
+  // Normalise et déduplique les NAF d'entrée. Une entrée mal formée (libellé
+  // humain qui aurait fuité, code tronqué) est silencieusement ignorée — le
+  // mapping côté `resolveSourcingFilters` a déjà eu sa chance de logger.
+  const normalizedNafCodes: string[] = []
+  const seenNaf = new Set<string>()
+  for (const raw of nafCodes) {
+    const normalized = _normalizeNafForFallback(raw)
+    if (normalized && !seenNaf.has(normalized)) {
+      seenNaf.add(normalized)
+      normalizedNafCodes.push(normalized)
+    }
+  }
+
   const allEtablissements: SireneEtablissement[] = []
   const perPage = 25 // max par page de cette API
   const MAX_PAGES_PER_NAF = 10 // guard anti-boucle infinie
 
   // L'API recherche-entreprises utilise le format NAF AVEC point (49.41A, pas 4941A).
-  for (const naf of nafCodes) {
+  for (const naf of normalizedNafCodes) {
     if (allEtablissements.length >= maxResults) break
 
     let page = 1
@@ -1017,6 +1090,18 @@ export async function sourcerEntreprisesFallback(
         // Déduplication en amont : skiper les SIREN déjà connus en base
         if (excludeSirens?.has(r.siren)) continue
 
+        // Garde post-fetch : si l'API a renvoyé un résultat hors-cible (NAF
+        // ne matche pas la liste demandée), on l'ignore. Comparaison via le
+        // helper local normalisé pour tolérer les variantes de format.
+        const resultNaf = r.siege.activite_principale || r.activite_principale
+        const resultNafNormalized = _normalizeNafForFallback(resultNaf ?? '')
+        if (resultNafNormalized !== _normalizeNafForFallback(naf)) {
+          // L'API a fuité un NAF différent (rare mais observé sur certains
+          // codes parents). Pas de log par item — trop verbeux ; un log
+          // agrégé est déjà émis page par page côté `sourcing-runner`.
+          continue
+        }
+
         // Convertir au format SireneEtablissement pour compatibilité avec enrichirProspect
         const etab: SireneEtablissement = {
           siret: r.siege.siret,
@@ -1059,17 +1144,126 @@ export async function sourcerEntreprisesFallback(
 // ADEME BEGES — API Data Fair (remplace CKAN mort)
 // ------------------------------------------------------------
 
+// ------------------------------------------------------------
+// NORMALISATION RECORD ADEME — défense en profondeur (type-guard runtime)
+// ------------------------------------------------------------
+//
+// L'API Data Fair renvoie `siren_principal` en **integer** (ex. 542065479) mais
+// le record peut aussi venir en string selon l'évolution du backend (fixtures,
+// versions futures). Sans normalisation, `record.siren_principal === siren`
+// (string strict) renvoyait toujours `false` en prod → on tombait sur le
+// premier résultat full-text d'un AUTRE SIREN → bug "BEGES non concerné"
+// rapporté par l'utilisateur.
+//
+// Cette fonction :
+//   1. Coerce `siren_principal` en string à 9 chiffres (zero-pad si nécessaire).
+//   2. Valide la présence des champs critiques (`id`, `annee_de_reporting`).
+//   3. Rejette les records mal formés (retourne null — caller skip).
+//
+// On NE FAIT PAS de Zod ici : pas de dépendance Zod dans `lib/agent/` (cohérent
+// avec le reste du module) et la surface du record est petite + critique.
+// ------------------------------------------------------------
+
+/**
+ * Coerce `siren_principal` (string ou number côté wire) en string à 9 chiffres.
+ * Retourne `null` si le format n'est pas exploitable.
+ */
+function coerceSirenPrincipal(raw: unknown): string | null {
+  if (typeof raw === 'string') {
+    const digits = raw.replace(/\D/g, '')
+    if (digits.length !== 9) return null
+    return digits
+  }
+  if (typeof raw === 'number' && Number.isInteger(raw) && raw >= 0) {
+    // Un SIREN peut commencer par 0 (rare mais valide INSEE) — zero-pad sur 9 digits.
+    const padded = String(raw).padStart(9, '0')
+    if (padded.length !== 9) return null
+    return padded
+  }
+  return null
+}
+
+/**
+ * Valide qu'un record brut ADEME a la structure attendue et retourne sa version
+ * normalisée. Retourne `null` si le record est invalide (id manquant, siren
+ * non parseable, année non numérique).
+ *
+ * Exporté pour les tests Vitest.
+ */
+export function normalizeAdemeRecord(
+  raw: AdemeBegesRawRecord,
+): AdemeBegesDataFairRecord | null {
+  const siren = coerceSirenPrincipal(raw.siren_principal)
+  if (siren === null) return null
+
+  if (typeof raw.id !== 'string' || raw.id.trim().length === 0) return null
+  const id = raw.id.trim()
+
+  const annee = typeof raw.annee_de_reporting === 'number'
+    ? raw.annee_de_reporting
+    : Number.parseInt(String(raw.annee_de_reporting ?? ''), 10)
+  if (!Number.isFinite(annee) || annee < 2000 || annee > 2100) return null
+
+  const datePublication = typeof raw.date_de_publication === 'string'
+    ? raw.date_de_publication
+    : ''
+  const raisonSociale = typeof raw.raison_sociale === 'string'
+    ? raw.raison_sociale
+    : ''
+
+  return {
+    siren_principal: siren,
+    raison_sociale: raisonSociale,
+    annee_de_reporting: annee,
+    date_de_publication: datePublication,
+    courriel: typeof raw.courriel === 'string' ? raw.courriel : undefined,
+    responsable_du_suivi: typeof raw.responsable_du_suivi === 'string' ? raw.responsable_du_suivi : undefined,
+    fonction: typeof raw.fonction === 'string' ? raw.fonction : undefined,
+    id,
+    structure_obligee: typeof raw.structure_obligee === 'string' ? raw.structure_obligee : undefined,
+  }
+}
+
+/**
+ * Construit l'URL canonique d'une fiche BEGES sur bilans-ges.ademe.fr.
+ *
+ * Format documenté : `https://bilans-ges.ademe.fr/bilans/<UUID>` où `<UUID>` est
+ * l'identifiant `id` du record Data Fair (UUID v1, ex. "9397a0e8-b1cd-11ed-..."
+ * — NOT l'identifiant interne Data Fair `_id` qui est instable).
+ *
+ * Exporté pour les tests Vitest.
+ */
+export function buildAdemeBilanUrl(recordId: string): string {
+  return `https://bilans-ges.ademe.fr/bilans/${recordId}`
+}
+
 /**
  * Vérifie si une entreprise a publié un BEGES dans la base ADEME.
  * Utilise l'API Data Fair (endpoint /bilan-ges/lines) — l'ancien endpoint CKAN est mort.
  * Retourne le record le PLUS RÉCENT (tri par annee_de_reporting desc).
  * Retourne null si aucun résultat ou en cas d'erreur.
+ *
+ * Recherche par champ exact (`qs=siren_principal:<siren>`) plutôt que full-text
+ * (`q=<siren>`). Motivation (2026-05-14) :
+ *   - Le champ `siret` de l'API contient parfois du HTML avec plusieurs SIREN
+ *     listés (ex. déclarations multi-sites de groupes industriels). Une recherche
+ *     full-text `q=<siren>` matchait sur cette pollution et retournait le bilan
+ *     d'une autre entreprise → l'utilisateur voyait un lien BEGES non-concerné.
+ *   - `qs=siren_principal:<siren>` filtre strictement sur le SIREN déclarant
+ *     (champ structuré indexé) — aucun faux positif full-text.
  */
 export async function verifierBegesAdeme(siren: string): Promise<AdemeBegesEnrichi | null> {
-  // L'API Data Fair accepte q= pour la recherche full-text par SIREN,
-  // size=5 pour récupérer plusieurs années et choisir la plus récente.
+  // Validation amont : un SIREN doit être 9 chiffres. Sinon on ne lance même pas
+  // la requête (économie d'API et de bruit dans les logs).
+  if (!/^\d{9}$/.test(siren)) {
+    return null
+  }
+
+  // `qs=` (query Lucene structurée) > `q=` (full-text) pour cibler le champ
+  // siren_principal exactement. `size=5` pour ramener plusieurs années et
+  // choisir la plus récente côté code.
   const url = new URL(ADEME_BEGES_URL)
-  url.searchParams.set('q', siren)
+  url.searchParams.set('qs', `siren_principal:${siren}`)
   url.searchParams.set('size', '5')
 
   let response: Response
@@ -1100,7 +1294,7 @@ export async function verifierBegesAdeme(siren: string): Promise<AdemeBegesEnric
     return null
   }
 
-  let data: { results?: AdemeBegesDataFairRecord[]; total?: number }
+  let data: { results?: AdemeBegesRawRecord[]; total?: number }
   try {
     data = await response.json()
   } catch {
@@ -1112,21 +1306,43 @@ export async function verifierBegesAdeme(siren: string): Promise<AdemeBegesEnric
     return null
   }
 
-  // Filtrer sur siren_principal exact pour éviter les faux positifs (full-text peut matcher
-  // sur raison_sociale), puis trier par annee_de_reporting DESC pour prendre le plus récent.
-  const matches = results
+  // Normalisation + filtrage strict sur siren_principal (coerce int → string).
+  // Plus de fallback "premier résultat" : si aucun match exact, on retourne null
+  // (évite de stocker une URL BEGES qui pointe vers une autre entreprise — cf.
+  // bug 2026-05-14 rapporté par l'utilisateur).
+  const normalized = results
+    .map((r) => normalizeAdemeRecord(r))
+    .filter((r): r is AdemeBegesDataFairRecord => r !== null)
+
+  const matches = normalized
     .filter((r) => r.siren_principal === siren)
     .sort((a, b) => b.annee_de_reporting - a.annee_de_reporting)
 
-  // Si aucun match exact, tenter sans filtre SIREN (certains bilans ont des sous-entités)
-  const record = matches.length > 0 ? matches[0] : results.sort((a, b) => b.annee_de_reporting - a.annee_de_reporting)[0]
+  if (matches.length === 0) {
+    // Aucun bilan ne correspond exactement au SIREN demandé. Log discret pour
+    // alerter sur un éventuel changement de format API (records retournés mais
+    // tous filtrés). En production cette branche doit être rare avec qs=.
+    console.log(
+      JSON.stringify({
+        level: 'info',
+        module: 'sourcing',
+        phase: 'ademe',
+        msg: `ADEME: ${results.length} record(s) retourné(s) mais aucun match siren_principal=${siren}`,
+        siren,
+        records_count: results.length,
+      }),
+    )
+    return null
+  }
+
+  const record = matches[0]
 
   return {
     siren: record.siren_principal,
     raison_sociale: record.raison_sociale,
     annee_reporting: record.annee_de_reporting,
     date_publication: record.date_de_publication,
-    url_bilan: `https://bilans-ges.ademe.fr/bilans/${record.id}`,
+    url_bilan: buildAdemeBilanUrl(record.id),
     responsable_du_suivi: record.responsable_du_suivi || undefined,
     fonction: record.fonction || undefined,
     courriel: record.courriel || undefined,

@@ -1,19 +1,16 @@
 'use client'
 
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { createPortal } from 'react-dom'
 import { useAgentRunStatus } from '@/lib/hooks/use-agent-run-status'
+import { NAF_GROUPS_SUGGESTED, type NafGroup } from '@/lib/constants/naf-codes'
+import { NafCodeMultiSelect } from '@/components/settings/naf-code-multi-select'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 interface SourcingModalProps {
   isOpen: boolean
   onClose: () => void
-}
-
-interface SectorOption {
-  label: string
-  codes: string[]
 }
 
 interface FormData {
@@ -47,17 +44,9 @@ type ViewMode = 'form' | 'running' | 'results'
 
 // ── Constantes ────────────────────────────────────────────────────────────────
 
-const SECTOR_OPTIONS: SectorOption[] = [
-  { label: 'Viticulture', codes: ['01.21Z', '01.22Z'] },
-  { label: 'Aéronautique', codes: ['30.30Z'] },
-  { label: 'Logistique / Transport', codes: ['52.10B', '52.29A', '49.41A', '49.41B', '52.21Z'] },
-  { label: 'Agro-alimentaire', codes: ['10.11Z', '10.13A', '10.32Z', '10.51A', '10.71A', '46.17B'] },
-  { label: 'Chimie', codes: ['20.11Z', '20.14Z', '20.15Z'] },
-  { label: 'Sidérurgie / Métaux', codes: ['24.10Z', '24.20Z', '25.11Z', '25.29Z'] },
-  { label: 'Énergie', codes: ['35.11Z', '35.14Z'] },
-  { label: 'BTP', codes: ['41.20A', '41.20B', '42.11Z', '42.13A', '43.21A', '43.22A'] },
-  { label: 'Hôtellerie / Restauration', codes: ['55.10Z', '56.10A'] },
-]
+// Source unique des groupes pré-définis « prospection B2B BEGES » — centralisée
+// dans `lib/constants/naf-codes.ts` pour rester alignée avec la page Settings.
+const SECTOR_OPTIONS: readonly NafGroup[] = NAF_GROUPS_SUGGESTED
 
 const LOADING_MESSAGES: readonly string[] = [
   'Recherche en cours...',

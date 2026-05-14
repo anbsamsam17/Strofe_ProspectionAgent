@@ -7,24 +7,6 @@ import { SettingsForm } from '@/components/settings/settings-form'
 // actuelle en base (pas de version cached servie après une mise à jour récente)
 export const dynamic = 'force-dynamic'
 
-const SECTEURS_DISPONIBLES = [
-  'Industrie manufacturière',
-  'Transport et logistique',
-  'Construction et BTP',
-  'Commerce de gros',
-  'Commerce de détail',
-  'Énergie et utilities',
-  'Agriculture',
-  'Services aux entreprises',
-  'Santé',
-  'Hôtellerie et restauration',
-  'Immobilier',
-  'Finance et assurance',
-  'Technologies',
-  'Éducation',
-  'Administration publique',
-]
-
 export default async function SettingsPage() {
   const supabase = await createClient()
 
@@ -125,10 +107,7 @@ export default async function SettingsPage() {
       </section>
 
       {/* ── Formulaire paramètres agent ──────────────────────── */}
-      <SettingsForm
-        initialSettings={settings}
-        secteursDisponibles={SECTEURS_DISPONIBLES}
-      />
+      <SettingsForm initialSettings={settings} />
     </div>
   )
 }

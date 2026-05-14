@@ -40,6 +40,10 @@ import {
   mapRegionToCodePostal,
   mapRegionToDepartements,
 } from './sourcing-mapping'
+import {
+  matchesAnyNaf,
+  resolveNafFromInput,
+} from './naf-sector-mapping'
 import { calculerScore, getScoreDetails } from './scoring'
 
 // ------------------------------------------------------------
@@ -245,28 +249,52 @@ export interface ResolvedSourcingFilters {
  * Résout les filtres effectifs d'un sourcing en appliquant la priorité :
  *   params.targetSectors > settings.target_sectors > NAF_PRIORITAIRES_DEFAULT.
  *
+ * Accepte aussi bien des codes NAF (`01.21Z`, `0121Z`) que des libellés UI
+ * (`Industrie manufacturière`) via `resolveNafFromInput` — fix 2026-05-14
+ * du bug de catégorisation NAF (UI Settings stocke des libellés humains).
+ *
  * Calcule également les tranches, range CP, départements et signature.
  */
 export function resolveSourcingFilters(
   params: SourcingParams,
   settings: ProfileSettings | null,
 ): ResolvedSourcingFilters {
-  const nafRegex = /^\d{2}\.\d{2}[A-Z]$/
   let nafCodes: string[]
   let nafSource: ResolvedSourcingFilters['nafSource']
 
+  const resolveFromInputs = (
+    items: readonly string[],
+    sourceTag: 'params_request' | 'settings_user',
+  ): { codes: string[]; source: ResolvedSourcingFilters['nafSource'] } => {
+    const { codes, unknownLabels, unmappedLabels } = resolveNafFromInput(items)
+    if (unknownLabels.length > 0 || unmappedLabels.length > 0) {
+      // Log non-fatal — l'utilisateur saura que sa sélection contient
+      // des libellés ignorés. PII safe : on log uniquement les labels (texte
+      // UI public, pas de donnée prospect).
+      console.log(
+        JSON.stringify({
+          level: 'warn',
+          module: 'sourcing-runner',
+          msg: 'Certains libellés/codes secteurs n\'ont pas été résolus',
+          source: sourceTag,
+          unknown_labels: unknownLabels,
+          unmapped_labels: unmappedLabels,
+          resolved_codes_count: codes.length,
+        }),
+      )
+    }
+    if (codes.length > 0) return { codes, source: sourceTag }
+    return { codes: [...NAF_PRIORITAIRES_DEFAULT], source: 'naf_prioritaires_default' }
+  }
+
   if (params.targetSectors && params.targetSectors.length > 0) {
-    const valid = params.targetSectors
-      .map((s) => s.trim().toUpperCase())
-      .filter((s) => nafRegex.test(s))
-    nafCodes = valid.length > 0 ? valid : [...NAF_PRIORITAIRES_DEFAULT]
-    nafSource = valid.length > 0 ? 'params_request' : 'naf_prioritaires_default'
+    const resolved = resolveFromInputs(params.targetSectors, 'params_request')
+    nafCodes = resolved.codes
+    nafSource = resolved.source
   } else if (settings?.target_sectors && settings.target_sectors.length > 0) {
-    const valid = settings.target_sectors
-      .map((s) => s.trim().toUpperCase())
-      .filter((s) => nafRegex.test(s))
-    nafCodes = valid.length > 0 ? valid : [...NAF_PRIORITAIRES_DEFAULT]
-    nafSource = valid.length > 0 ? 'settings_user' : 'naf_prioritaires_default'
+    const resolved = resolveFromInputs(settings.target_sectors, 'settings_user')
+    nafCodes = resolved.codes
+    nafSource = resolved.source
   } else {
     nafCodes = [...NAF_PRIORITAIRES_DEFAULT]
     nafSource = 'naf_prioritaires_default'
@@ -620,18 +648,42 @@ export async function runAdaptiveSourcing(
     pagesLoaded += pagePagesLoaded
     curseurFinal = pageCurseurSuivant
 
-    collectedEtablissements.push(...pageEtabs)
-    pageEtabs.forEach((e) => sirenSet.add(e.siren))
+    // Garde post-fetch : si la query Lucene ou l'API fallback a fuité un NAF
+    // hors-cible (bug API ou normalisation), on l'exclut ici avant insert DB.
+    // `matchesAnyNaf` tolère les formats avec/sans point. Si `filters.nafCodes`
+    // est vide, `matchesAnyNaf` retourne `true` — pas de régression legacy.
+    const beforeNafFilter = pageEtabs.length
+    const filteredByNaf = pageEtabs.filter((e) =>
+      matchesAnyNaf(e.activitePrincipaleEtablissement, filters.nafCodes),
+    )
+    const droppedByNaf = beforeNafFilter - filteredByNaf.length
+    if (droppedByNaf > 0) {
+      pushLog(
+        'sourcing_page',
+        `${droppedByNaf} établissement(s) écartés (NAF hors-cible) page ${pagesLoaded}`,
+        'warn',
+        {
+          page: pagesLoaded,
+          dropped: droppedByNaf,
+          kept: filteredByNaf.length,
+          used_fallback: usedFallback,
+        },
+      )
+    }
+
+    collectedEtablissements.push(...filteredByNaf)
+    filteredByNaf.forEach((e) => sirenSet.add(e.siren))
 
     pushLog(
       'sourcing_page',
-      `Page ${pagesLoaded} : ${pageEtabs.length} étabs (cumul ${collectedEtablissements.length})`,
+      `Page ${pagesLoaded} : ${filteredByNaf.length} étabs (cumul ${collectedEtablissements.length})`,
       'info',
       {
         page: pagesLoaded,
         curseur: curseurCourant,
         curseurSuivant: pageCurseurSuivant,
-        returned: pageEtabs.length,
+        returned: filteredByNaf.length,
+        returned_before_naf_filter: beforeNafFilter,
         candidates_so_far: collectedEtablissements.length,
         target: targetCandidates,
         used_fallback: usedFallback,

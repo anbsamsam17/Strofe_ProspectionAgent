@@ -87,6 +87,12 @@ export type Database = {
           archived_at: string | null
           notes: string | null
           priorite: string
+          /** Migration 014 — score Gemini 0-100, null si non scoré. */
+          gemini_score: number | null
+          /** Migration 014 — JSONB array de 3-5 raisons commerciales. */
+          gemini_raisons: Json | null
+          /** Migration 014 — horodatage ISO de génération Gemini. */
+          gemini_generated_at: string | null
           created_at: string
           updated_at: string
         }
@@ -123,6 +129,10 @@ export type Database = {
           enriched_at?: string | null
           archived_at?: string | null
           notes?: string | null
+          /** Migration 014 — initialement NULL, peuplé par Agent N3. */
+          gemini_score?: number | null
+          gemini_raisons?: Json | null
+          gemini_generated_at?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -156,6 +166,10 @@ export type Database = {
           enriched_at?: string | null
           archived_at?: string | null
           notes?: string | null
+          /** Migration 014 — mise à jour par Agent N3 (re-scoring Gemini). */
+          gemini_score?: number | null
+          gemini_raisons?: Json | null
+          gemini_generated_at?: string | null
           updated_at?: string
         }
         Relationships: [
