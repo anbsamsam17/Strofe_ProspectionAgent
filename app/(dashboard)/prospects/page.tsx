@@ -7,6 +7,10 @@ import { ProspectsFilters } from '@/components/prospects/prospects-filters'
 import { ProspectActionsMenu } from '@/components/prospects/prospect-actions-menu'
 import { buildBegesUrl } from '@/lib/utils/beges-url'
 import { RunStatusBanner } from '@/components/dashboard/run-status-banner'
+import {
+  STATUS_LABELS_COMPACT,
+  STATUS_STYLES_SOFT,
+} from '@/lib/constants/prospect-status'
 
 // ── Types contact filter ──────────────────────────────────────────────────────
 
@@ -35,71 +39,17 @@ export const dynamic = 'force-dynamic'
 
 const PAGE_SIZE = 20
 
-/**
- * Étendu temporairement pour anticiper l'ajout du statut `offer_sent` côté
- * Agent A (migration `ProspectStatus`). Tant que le type partagé ne contient
- * pas la valeur, on l'isole ici pour ne pas casser le typage et garder la
- * page lisible dès que la migration est mergée.
- */
-// TODO(Agent A): retirer cette extension dès que `offer_sent` sera ajouté à ProspectStatus.
-type ProspectStatusExt = ProspectStatus | 'offer_sent'
-
-const STATUS_LABELS: Record<ProspectStatusExt, string> = {
-  sourced: 'Pas de contact identifié',
-  qualified: 'Qualifié',
-  contacted: 'Contacté',
-  interested: 'Intéressé',
-  // Legacy : `rdv` mappé visuellement vers Intéressé pour fusionner deux statuts
-  // historiquement séparés dans le pipeline commercial.
-  rdv: 'Intéressé',
-  offer_sent: 'Offre envoyée',
-  converted: 'Affaire conclue',
-  rejected: 'Sans suite',
-  on_hold: 'En stand-by',
-}
-
-const STATUS_STYLES: Record<ProspectStatusExt, { badge: string; dot: string }> = {
-  sourced: {
-    badge: 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400',
-    dot: 'bg-gray-400',
-  },
-  qualified: {
-    badge: 'bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-400',
-    dot: 'bg-blue-500',
-  },
-  contacted: {
-    badge: 'bg-yellow-50 text-yellow-700 dark:bg-yellow-950 dark:text-yellow-400',
-    dot: 'bg-yellow-500',
-  },
-  interested: {
-    badge: 'bg-green-50 text-green-700 dark:bg-green-950 dark:text-green-400',
-    dot: 'bg-green-500',
-  },
-  rdv: {
-    badge: 'bg-green-50 text-green-700 dark:bg-green-950 dark:text-green-400',
-    dot: 'bg-green-500',
-  },
-  offer_sent: {
-    badge: 'bg-indigo-50 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-400',
-    dot: 'bg-indigo-500',
-  },
-  converted: {
-    badge: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-400',
-    dot: 'bg-emerald-500',
-  },
-  rejected: {
-    badge: 'bg-red-50 text-red-700 dark:bg-red-950 dark:text-red-400',
-    dot: 'bg-red-500',
-  },
-  on_hold: {
-    badge: 'bg-orange-50 text-orange-700 dark:bg-orange-950 dark:text-orange-400',
-    dot: 'bg-orange-500',
-  },
-}
+// STATUS_LABELS_COMPACT + STATUS_STYLES_SOFT importés de @/lib/constants/prospect-status
+// (source unique de vérité — voir lib/constants/prospect-status.ts).
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-type SortableColumn = 'raison_sociale' | 'score_priorite' | 'statut' | 'updated_at'
+type SortableColumn =
+  | 'raison_sociale'
+  | 'score_priorite'
+  | 'statut'
+  | 'updated_at'
+  | 'created_at'
 
 function getSortOrder(
   column: SortableColumn,
@@ -536,6 +486,23 @@ export default async function ProspectsPage({
                     />
                   </Link>
                 </th>
+                <th
+                  scope="col"
+                  className={`${th} hidden xl:table-cell`}
+                  aria-sort={ariaSortFor('created_at', params.sort, params.order)}
+                >
+                  <Link
+                    href={buildSortHref('created_at')}
+                    className="group inline-flex items-center hover:text-gray-900 dark:hover:text-white"
+                  >
+                    Ajouté le
+                    <SortIcon
+                      column="created_at"
+                      currentSort={params.sort}
+                      currentOrder={params.order}
+                    />
+                  </Link>
+                </th>
                 <th scope="col" className={th}>
                   <span className="sr-only">Actions</span>
                 </th>
@@ -544,9 +511,9 @@ export default async function ProspectsPage({
             <tbody>
               {prospects && prospects.length > 0 ? (
                 (prospects as unknown as Prospect[]).map((prospect, idx) => {
-                  const statut = prospect.statut as ProspectStatusExt
-                  const statusStyle = STATUS_STYLES[statut] ?? STATUS_STYLES.sourced
-                  const statusLabel = STATUS_LABELS[statut] ?? prospect.statut
+                  const statut = prospect.statut as ProspectStatus
+                  const statusStyle = STATUS_STYLES_SOFT[statut] ?? STATUS_STYLES_SOFT.sourced
+                  const statusLabel = STATUS_LABELS_COMPACT[statut] ?? prospect.statut
                   const isEven = idx % 2 === 0
                   const rank = from + idx + 1
 
@@ -633,7 +600,12 @@ export default async function ProspectsPage({
                         {dateFmt.format(new Date(prospect.updated_at))}
                       </td>
 
-                      {/* 9. Actions */}
+                      {/* 9. Ajouté le (date de création du prospect en base) */}
+                      <td className="hidden px-4 py-3.5 text-sm tabular-nums text-gray-500 dark:text-gray-500 xl:table-cell">
+                        {dateFmt.format(new Date(prospect.created_at))}
+                      </td>
+
+                      {/* 10. Actions */}
                       <td className="px-4 py-3.5 text-right">
                         <div className="flex items-center justify-end gap-2">
                           <ProspectActionsMenu
@@ -649,7 +621,7 @@ export default async function ProspectsPage({
                 })
               ) : (
                 <tr>
-                  <td colSpan={9} className="px-4 py-16 text-center">
+                  <td colSpan={10} className="px-4 py-16 text-center">
                     <div className="flex flex-col items-center gap-3">
                       <div className="flex h-12 w-12 items-center justify-center rounded-full bg-gray-100 dark:bg-gray-800">
                         <svg
