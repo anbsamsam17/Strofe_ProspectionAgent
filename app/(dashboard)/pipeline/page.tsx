@@ -10,6 +10,9 @@ import {
   type KanbanStatus,
 } from '@/components/pipeline/pipeline-client'
 import { PeriodToggle, parseRange, type PipelineRange } from '@/components/pipeline/period-toggle'
+import { SectionErrorFallback } from '@/components/pipeline/section-error-fallback'
+import { ServerErrorBoundary } from '@/components/pipeline/server-error-boundary'
+import { ClientErrorBoundary } from '@/components/pipeline/client-error-boundary'
 import type { Prospect, ProspectStatus } from '@/lib/types'
 
 // Force le rendu dynamique — KPI + Kanban dépendent des données + searchParams.
@@ -183,27 +186,49 @@ export default async function PipelinePage({ searchParams }: PipelinePageProps) 
         </div>
       </header>
 
-      {/* KPI cards (Server Component, lazy via Suspense) */}
+      {/* KPI cards (Server Component, lazy via Suspense + ServerErrorBoundary).
+          KpiCards a déjà un try/catch interne, mais on ajoute une 2e barrière
+          au cas où une erreur synchrone (init Supabase client, parseRange…)
+          throw avant que le try/catch interne ne prenne la main. */}
       <Suspense fallback={<KpiCardsSkeleton />}>
-        <KpiCards range={range} />
+        <ServerErrorBoundary
+          context="KpiCards"
+          fallback={<SectionErrorFallback section="KPIs" />}
+        >
+          {KpiCards({ range })}
+        </ServerErrorBoundary>
       </Suspense>
 
       {/* Analytics — funnel conversion + stats agent côte à côte sur desktop.
           ConversionFunnel est isolé dans son propre boundary défensif pour
           ne pas faire crasher la page si buildFunnel / la geometry SVG throw
-          sur un Record corrompu. */}
+          sur un Record corrompu.
+          AgentStats : 2 barrières (try/catch interne + ServerErrorBoundary). */}
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
         <SafeConversionFunnel countsByStatus={countsByStatus} />
         <Suspense fallback={<AgentStatsSkeleton />}>
-          <AgentStats range={range} />
+          <ServerErrorBoundary
+            context="AgentStats"
+            fallback={<SectionErrorFallback section="Activité agent" />}
+          >
+            {AgentStats({ range })}
+          </ServerErrorBoundary>
         </Suspense>
       </div>
 
-      {/* Kanban */}
-      <PipelineClient
-        columns={PIPELINE_COLUMNS}
-        prospectsByStatus={prospectsByStatus}
-      />
+      {/* Kanban — ClientErrorBoundary pour capturer un éventuel throw au
+          SSR initial ou côté CSR (drag handler, useState init…). */}
+      <ClientErrorBoundary
+        context="PipelineClient"
+        fallback={(err) => (
+          <SectionErrorFallback section="Kanban" message={err.message} />
+        )}
+      >
+        <PipelineClient
+          columns={PIPELINE_COLUMNS}
+          prospectsByStatus={prospectsByStatus}
+        />
+      </ClientErrorBoundary>
     </div>
   )
 }
@@ -294,11 +319,21 @@ function PipelinePageFallback({
       </section>
 
       <Suspense fallback={<KpiCardsSkeleton />}>
-        <KpiCards range={range} />
+        <ServerErrorBoundary
+          context="KpiCards (fallback page)"
+          fallback={<SectionErrorFallback section="KPIs" />}
+        >
+          {KpiCards({ range })}
+        </ServerErrorBoundary>
       </Suspense>
 
       <Suspense fallback={<AgentStatsSkeleton />}>
-        <AgentStats range={range} />
+        <ServerErrorBoundary
+          context="AgentStats (fallback page)"
+          fallback={<SectionErrorFallback section="Activité agent" />}
+        >
+          {AgentStats({ range })}
+        </ServerErrorBoundary>
       </Suspense>
     </div>
   )
