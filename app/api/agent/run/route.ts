@@ -139,26 +139,34 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Lancer les runs de sourcing en parallèle — chaque user reçoit son propre
-    // client admin pour éviter la contention sur le pool de connexions.
-    // Le cron nocturne alimente uniquement le pipeline `prospects` (sourcing +
-    // enrichissement ADEME/contacts + scoring). Pas de daily list générée.
+    // Lancer le pipeline NOCTURNE COMPLET en parallèle pour chaque user.
+    // runAgentNocturne enchaîne : sourcing INSEE + enrichissement ADEME (BEGES)
+    // + scoring composite + contact enrichment (Pappers/Hunter) + Gemini scoring
+    // (raisons commerciales). Sans cet appel, le cron ne déclenche QUE le sourcing
+    // (runSourcing) — donc Gemini ne tourne jamais en automatique.
+    //
+    // ⚠️ Durée : ~3-5 min par user vs ~30s pour runSourcing seul. maxDuration
+    // côté Vercel est à 300s — OK pour Hobby/Pro plan.
     const adminClients = userIds.map(() => createAdminClient())
 
     const results = await Promise.allSettled(
       userIds.map((userId, index) =>
-        runSourcing(userId, adminClients[index]),
+        runAgentNocturne(userId, adminClients[index]),
       ),
     )
 
     const runs = results.map((result, index) => {
       if (result.status === 'fulfilled') {
-        const sourcing = result.value
+        const run = result.value
         return {
           userId: userIds[index],
-          runId: sourcing.runId,
-          status: 'completed',
-          stats: buildSourcingStats(sourcing),
+          runId: run.id,
+          status: run.status,
+          stats: {
+            prospectsSourced: run.prospects_sourced,
+            prospectsQualified: run.prospects_qualified,
+            phase: run.phase,
+          },
         }
       }
       // Ne jamais logger le userId brut en cas d'erreur (PII)

@@ -36,6 +36,7 @@ vi.mock('@/lib/agent/sourcing', async () => {
 
 // Imports APRÈS vi.mock — runner réel + références mockées
 import {
+  resolveSourcingFilters,
   runAdaptiveSourcing,
   runPipelineSourcing,
   type AdaptiveSourcingOutcome,
@@ -249,10 +250,17 @@ function makePushLog() {
   return { pushLog, calls }
 }
 
-/** Filtres résolus minimalistes pour `runAdaptiveSourcing` direct. */
+/**
+ * Filtres résolus minimalistes pour `runAdaptiveSourcing` direct.
+ *
+ * NB : `nafCodes` couvre les 5 codes de `SAMPLE_NAFS` (cf. fixtures/sirene-cursor.ts)
+ * pour ne pas se faire filtrer par le garde post-fetch `matchesAnyNaf` introduit
+ * en mai 2026 (fix bug catégorisation NAF). Les tests qui veulent isoler le
+ * filtrage NAF surchargent explicitement `nafCodes` via `overrides`.
+ */
 function makeFilters(overrides: Partial<ResolvedSourcingFilters> = {}): ResolvedSourcingFilters {
   return {
-    nafCodes: ['01.21Z'],
+    nafCodes: ['01.21Z', '10.11Z', '23.11Z', '30.30Z', '49.41A'],
     tranches: ['21', '22'],
     codePostalRange: ['33000', '33999'],
     departements: ['33'],
@@ -1364,5 +1372,255 @@ describe('runPipelineSourcing — cap enrichissement + soft timeout (Cat. H)', (
     } finally {
       vi.useRealTimers()
     }
+  })
+})
+
+// ============================================================
+// CATÉGORIE I — Catégorisation NAF (bug fix 2026-05-14)
+//
+// Contexte : `profiles.settings.target_sectors` contient des LIBELLÉS
+// (cf. `app/(dashboard)/settings/page.tsx` SECTEURS_DISPONIBLES).
+// L'ancienne logique de `resolveSourcingFilters` filtrait via regex
+// `^\d{2}\.\d{2}[A-Z]$` qui rejetait silencieusement TOUS les libellés,
+// → l'agent retombait sur NAF_PRIORITAIRES_DEFAULT et ignorait la sélection.
+//
+// Garde-fou côté post-fetch : un établissement dont `activitePrincipale`
+// ne match aucun NAF demandé est exclu (défense en profondeur).
+// ============================================================
+
+describe('resolveSourcingFilters — résolution NAF (Cat. I)', () => {
+  it('I1: params.targetSectors avec codes NAF canoniques → params_request', () => {
+    const filters = resolveSourcingFilters(
+      { targetSectors: ['01.21Z', '49.41A'] },
+      null,
+    )
+    expect(filters.nafCodes).toEqual(['01.21Z', '49.41A'])
+    expect(filters.nafSource).toBe('params_request')
+  })
+
+  it('I2: params.targetSectors sans point (0121Z) → normalisé en 01.21Z', () => {
+    const filters = resolveSourcingFilters(
+      { targetSectors: ['0121Z', '4941a'] },
+      null,
+    )
+    expect(filters.nafCodes).toEqual(['01.21Z', '49.41A'])
+    expect(filters.nafSource).toBe('params_request')
+  })
+
+  it('I3: params.targetSectors avec libellé UI (Transport et logistique) → expanded', () => {
+    const filters = resolveSourcingFilters(
+      { targetSectors: ['Transport et logistique'] },
+      null,
+    )
+    // 'Transport et logistique' → 49.41A, 49.41B, 52.10B, 52.21Z, 52.29A
+    expect(filters.nafCodes).toEqual(
+      expect.arrayContaining(['49.41A', '49.41B', '52.10B', '52.21Z', '52.29A']),
+    )
+    expect(filters.nafCodes.length).toBe(5)
+    expect(filters.nafSource).toBe('params_request')
+  })
+
+  it('I4: settings.target_sectors avec libellés UI (régression du bug)', () => {
+    // Cas du bug réel : l'utilisateur sélectionne "Industrie manufacturière"
+    // dans Settings, l'orchestrator passe ce libellé en `targetSectors`,
+    // l'ancien filtre regex le rejetait → fallback NAF_PRIORITAIRES_DEFAULT.
+    const filters = resolveSourcingFilters(
+      {}, // pas de params.targetSectors
+      { daily_call_target: 15, target_sectors: ['Industrie manufacturière'] },
+    )
+    // 'Industrie manufacturière' contient 17 codes (agro, chimie, verre,
+    // sidérurgie, structures métalliques, moteurs, aéro)
+    expect(filters.nafCodes).toContain('10.11Z')
+    expect(filters.nafCodes).toContain('20.11Z')
+    expect(filters.nafCodes).toContain('30.30Z')
+    expect(filters.nafSource).toBe('settings_user')
+  })
+
+  it('I5: settings.target_sectors avec mix codes + libellés', () => {
+    const filters = resolveSourcingFilters(
+      {},
+      {
+        daily_call_target: 15,
+        target_sectors: ['01.21Z', 'Hôtellerie et restauration'],
+      },
+    )
+    // '01.21Z' (viticulture) + 'Hôtellerie et restauration' (55.10Z, 56.10A)
+    expect(filters.nafCodes).toEqual(
+      expect.arrayContaining(['01.21Z', '55.10Z', '56.10A']),
+    )
+    expect(filters.nafSource).toBe('settings_user')
+  })
+
+  it('I6: settings.target_sectors entièrement non-mappés → défauts + warn', () => {
+    // 'Atlantide' (inconnu) + 'Technologies' (mappé mais 0 codes) → 0 codes
+    // résolus → fallback NAF_PRIORITAIRES_DEFAULT (42 codes).
+    const spy = vi.spyOn(console, 'log').mockImplementation(() => {})
+    const filters = resolveSourcingFilters(
+      {},
+      {
+        daily_call_target: 15,
+        target_sectors: ['Atlantide', 'Technologies'],
+      },
+    )
+    expect(filters.nafCodes.length).toBeGreaterThan(20) // taille NAF_PRIORITAIRES_DEFAULT
+    expect(filters.nafSource).toBe('naf_prioritaires_default')
+
+    // Un warn est émis pour signaler les libellés ignorés
+    const warnLog = spy.mock.calls.find(([arg]) => {
+      if (typeof arg !== 'string') return false
+      try {
+        const parsed = JSON.parse(arg) as { level?: string; msg?: string }
+        return parsed.level === 'warn' && typeof parsed.msg === 'string' &&
+          parsed.msg.includes('libellés/codes')
+      } catch {
+        return false
+      }
+    })
+    expect(warnLog).toBeDefined()
+    spy.mockRestore()
+  })
+
+  it('I7: priorité params > settings > défauts', () => {
+    const filtersParams = resolveSourcingFilters(
+      { targetSectors: ['01.21Z'] },
+      { daily_call_target: 15, target_sectors: ['Transport et logistique'] },
+    )
+    expect(filtersParams.nafCodes).toEqual(['01.21Z'])
+    expect(filtersParams.nafSource).toBe('params_request')
+
+    const filtersSettings = resolveSourcingFilters(
+      {},
+      { daily_call_target: 15, target_sectors: ['01.21Z'] },
+    )
+    expect(filtersSettings.nafCodes).toEqual(['01.21Z'])
+    expect(filtersSettings.nafSource).toBe('settings_user')
+
+    const filtersDefault = resolveSourcingFilters({}, null)
+    expect(filtersDefault.nafSource).toBe('naf_prioritaires_default')
+  })
+
+  it('I8: params.targetSectors vide → fallback settings, puis défauts', () => {
+    const filters = resolveSourcingFilters(
+      { targetSectors: [] },
+      { daily_call_target: 15, target_sectors: ['Agriculture'] },
+    )
+    // 'Agriculture' → 01.21Z, 01.22Z (viticulture)
+    expect(filters.nafCodes).toEqual(['01.21Z', '01.22Z'])
+    expect(filters.nafSource).toBe('settings_user')
+  })
+
+  it('I9: signature stable après normalisation (codes équivalents → même hash)', () => {
+    const a = resolveSourcingFilters({ targetSectors: ['01.21Z'] }, null)
+    const b = resolveSourcingFilters({ targetSectors: ['0121Z'] }, null)
+    const c = resolveSourcingFilters({ targetSectors: ['01.21z'] }, null)
+    expect(a.signature).toBe(b.signature)
+    expect(b.signature).toBe(c.signature)
+  })
+})
+
+describe('runAdaptiveSourcing — garde post-fetch NAF (Cat. I bis)', () => {
+  it('I-bis-1: rejette les étabs dont le NAF ne match pas filters.nafCodes', async () => {
+    // Le builder buildSourcerPage utilise sireneSampleEtablissement qui cycle
+    // sur SAMPLE_NAFS (5 codes). Si on filtre sur 1 seul code, on s'attend à
+    // garder ~1/5 des étabs (cycle modulo 5).
+    mockedSourcerEntreprises.mockResolvedValueOnce(
+      buildSourcerPage({ count: 50, curseur: '*', curseurSuivant: 'cExhausted', exhausted: true }),
+    )
+
+    const { pushLog, calls } = makePushLog()
+    const outcome = await runAdaptiveSourcing({
+      userId: 'user-i-bis-1',
+      runId: 'run-i-bis-1',
+      filters: makeFilters({ nafCodes: ['01.21Z'] }), // 1 seul code
+      startCurseur: '*',
+      sirenSet: new Set(),
+      targetCandidates: 1000,
+      pushLog,
+    })
+
+    // SAMPLE_NAFS = 5 codes, '01.21Z' est l'un d'eux, donc ~10 étabs sur 50.
+    expect(outcome.etablissements.length).toBeGreaterThan(0)
+    expect(outcome.etablissements.length).toBeLessThan(50)
+    for (const e of outcome.etablissements) {
+      expect(e.activitePrincipaleEtablissement).toBe('01.21Z')
+    }
+
+    // Un log warn doit signaler les drops
+    const dropLog = calls.find((c) => c.message.includes('NAF hors-cible'))
+    expect(dropLog).toBeDefined()
+    expect(dropLog?.level).toBe('warn')
+  })
+
+  it('I-bis-2: filtre tolérant (avec/sans point) — 0121Z dans allowed match 01.21Z', async () => {
+    mockedSourcerEntreprises.mockResolvedValueOnce(
+      buildSourcerPage({ count: 50, curseur: '*', curseurSuivant: '*', exhausted: true }),
+    )
+
+    const { pushLog } = makePushLog()
+    const outcome = await runAdaptiveSourcing({
+      userId: 'user-i-bis-2',
+      runId: 'run-i-bis-2',
+      // allowed = sans point ; fixtures = avec point ; tolérance OK
+      filters: makeFilters({ nafCodes: ['0121Z'] }),
+      startCurseur: '*',
+      sirenSet: new Set(),
+      targetCandidates: 1000,
+      pushLog,
+    })
+
+    expect(outcome.etablissements.length).toBeGreaterThan(0)
+    for (const e of outcome.etablissements) {
+      expect(e.activitePrincipaleEtablissement).toBe('01.21Z')
+    }
+  })
+
+  it('I-bis-3: nafCodes vide → aucun filtre post-fetch (legacy)', async () => {
+    mockedSourcerEntreprises.mockResolvedValueOnce(
+      buildSourcerPage({ count: 50, curseur: '*', curseurSuivant: '*', exhausted: true }),
+    )
+
+    const { pushLog } = makePushLog()
+    const outcome = await runAdaptiveSourcing({
+      userId: 'user-i-bis-3',
+      runId: 'run-i-bis-3',
+      filters: makeFilters({ nafCodes: [] }), // pas de filtre
+      startCurseur: '*',
+      sirenSet: new Set(),
+      targetCandidates: 1000,
+      pushLog,
+    })
+
+    // Aucun drop : tous les étabs sont conservés.
+    expect(outcome.etablissements.length).toBe(50)
+  })
+
+  it('I-bis-4: fallback Recherche Entreprises filtré par NAF (D1 amélioré)', async () => {
+    // Cf. D1 mais on isole un seul NAF pour vérifier que le fallback est aussi
+    // filtré post-fetch.
+    mockedSourcerEntreprises.mockRejectedValueOnce(new SireneApiError('Sirene 503', 503))
+    mockedSourcerFallback.mockResolvedValueOnce([
+      sireneSampleEtablissement('500000000'), // NAF cycle index 0 → 30.30Z
+      sireneSampleEtablissement('500000001'), // index 1 → 10.11Z
+      sireneSampleEtablissement('500000002'), // index 2 → 49.41A
+      sireneSampleEtablissement('500000003'), // index 3 → 01.21Z
+      sireneSampleEtablissement('500000004'), // index 4 → 23.11Z
+    ])
+
+    const { pushLog } = makePushLog()
+    const outcome = await runAdaptiveSourcing({
+      userId: 'user-i-bis-4',
+      runId: 'run-i-bis-4',
+      filters: makeFilters({ nafCodes: ['01.21Z'] }),
+      startCurseur: '*',
+      sirenSet: new Set(),
+      targetCandidates: 50,
+      pushLog,
+    })
+
+    expect(outcome.usedFallback).toBe(true)
+    // Sur les 5 etabs du fallback, seul SIREN '500000003' (modulo 5 → index 3
+    // → SAMPLE_NAFS[3] = '01.21Z') doit survivre au filtre.
+    expect(outcome.etablissements).toHaveLength(1)
+    expect(outcome.etablissements[0].activitePrincipaleEtablissement).toBe('01.21Z')
   })
 })

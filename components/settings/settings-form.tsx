@@ -3,10 +3,10 @@
 import { useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { DEFAULT_SCORING_WEIGHTS, type ProfileSettings, type ScoringWeights } from '@/lib/types'
+import { NafCodeMultiSelect } from './naf-code-multi-select'
 
 interface SettingsFormProps {
   initialSettings: ProfileSettings
-  secteursDisponibles: string[]
 }
 
 type ScoringPilier = keyof ScoringWeights
@@ -50,7 +50,7 @@ function normalizeWeightsClient(w: ScoringWeights): ScoringWeights {
   return { taille: tailleN, beges: begesN, contact: contactN }
 }
 
-export function SettingsForm({ initialSettings, secteursDisponibles }: SettingsFormProps) {
+export function SettingsForm({ initialSettings }: SettingsFormProps) {
   const [settings, setSettings] = useState<ProfileSettings>({
     ...initialSettings,
     scoring_weights: initialSettings.scoring_weights ?? { ...DEFAULT_SCORING_WEIGHTS },
@@ -97,14 +97,8 @@ export function SettingsForm({ initialSettings, secteursDisponibles }: SettingsF
     }))
   }
 
-  function toggleSecteur(secteur: string) {
-    setSettings((prev) => {
-      const current = prev.target_sectors ?? []
-      const next = current.includes(secteur)
-        ? current.filter((s) => s !== secteur)
-        : [...current, secteur]
-      return { ...prev, target_sectors: next }
-    })
+  function setSecteurs(codes: string[]) {
+    setSettings((prev) => ({ ...prev, target_sectors: codes }))
   }
 
   function addPostalCode() {
@@ -201,66 +195,21 @@ export function SettingsForm({ initialSettings, secteursDisponibles }: SettingsF
             Secteurs cibles
           </h2>
           <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
-            L&apos;agent priorisera les entreprises de ces secteurs.
+            L&apos;agent priorisera les entreprises dont le code NAF est coché.
+            Recherche par code (ex. 01.21) ou par libellé (ex. viticulture).
             {selectedSecteurs.length > 0 && (
               <span className="ml-2 inline-flex items-center rounded-full bg-blue-100 px-2 py-0.5 text-xs font-semibold text-blue-700 dark:bg-blue-950 dark:text-blue-300">
-                {selectedSecteurs.length} sélectionné{selectedSecteurs.length > 1 ? 's' : ''}
+                {selectedSecteurs.length} code{selectedSecteurs.length > 1 ? 's' : ''} sélectionné{selectedSecteurs.length > 1 ? 's' : ''}
               </span>
             )}
           </p>
         </header>
         <div className="px-6 py-5">
-          <fieldset>
-            <legend className="sr-only">Secteurs cibles</legend>
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-              {secteursDisponibles.map((secteur) => {
-                const isSelected = selectedSecteurs.includes(secteur)
-                return (
-                  <label
-                    key={secteur}
-                    className={`flex cursor-pointer items-center gap-2.5 rounded-lg border px-3.5 py-2.5 text-sm transition-all duration-150 ${
-                      isSelected
-                        ? 'border-green-500 bg-green-50 text-green-700 shadow-sm dark:border-green-600 dark:bg-green-950/40 dark:text-green-300'
-                        : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300 hover:bg-gray-50 dark:border-gray-700 dark:bg-transparent dark:text-gray-400 dark:hover:border-gray-600 dark:hover:bg-gray-800/50'
-                    }`}
-                  >
-                    <span
-                      className={`flex h-4 w-4 flex-shrink-0 items-center justify-center rounded border-2 transition-all ${
-                        isSelected
-                          ? 'border-green-500 bg-green-500'
-                          : 'border-gray-300 dark:border-gray-600'
-                      }`}
-                      aria-hidden="true"
-                    >
-                      {isSelected && (
-                        <svg
-                          xmlns="http://www.w3.org/2000/svg"
-                          width="10"
-                          height="10"
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          stroke="white"
-                          strokeWidth="3"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                        >
-                          <polyline points="20 6 9 17 4 12" />
-                        </svg>
-                      )}
-                    </span>
-                    <input
-                      type="checkbox"
-                      checked={isSelected}
-                      onChange={() => toggleSecteur(secteur)}
-                      className="sr-only"
-                      aria-label={secteur}
-                    />
-                    <span className="leading-tight">{secteur}</span>
-                  </label>
-                )
-              })}
-            </div>
-          </fieldset>
+          <NafCodeMultiSelect
+            selectedCodes={selectedSecteurs}
+            onChange={setSecteurs}
+            labelledBy="sectors-title"
+          />
         </div>
       </section>
 

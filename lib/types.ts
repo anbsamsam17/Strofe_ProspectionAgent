@@ -130,7 +130,20 @@ export interface Prospect {
   contact_linkedin_entreprise?: string
   beges_publie: boolean
   beges_derniere_publication?: string
-  /** URL directe vers le BEGES sur bilans-ges.ademe.fr */
+  /**
+   * URL directe vers la fiche BEGES sur bilans-ges.ademe.fr.
+   *
+   * Format canonique : `https://bilans-ges.ademe.fr/bilans/<UUID>` où `<UUID>` est
+   * l'identifiant `id` du record renvoyé par l'API ADEME Data Fair
+   * (`https://data.ademe.fr/data-fair/api/v1/datasets/bilan-ges/lines`).
+   *
+   * Rempli par `verifierBegesAdeme()` lors de la phase d'enrichissement ADEME
+   * (cf. `lib/agent/sourcing.ts` — recherche `qs=siren_principal:<siren>` pour
+   * éviter les faux positifs full-text qui pointaient sur un autre BEGES).
+   *
+   * Si non rempli ou non exploitable, `buildBegesUrl()` (`lib/utils/beges-url.ts`)
+   * tombe sur un fallback recherche `bilans-ges.ademe.fr/bilans?q=<siren>`.
+   */
   beges_url?: string
   /** true si le BEGES a moins de 4 ans (obligation renouvellement quadriennal) */
   beges_valide?: boolean
@@ -154,6 +167,21 @@ export interface Prospect {
   archived_at?: string
   /** Notes libres CRM saisies par l'utilisateur. */
   notes?: string
+  // ── Scoring complémentaire Gemini (migration 014 — Agent N3) ─────────────
+  /**
+   * Score d'intérêt commercial qualitatif calculé par Gemini (0-100).
+   * Complémentaire de `score_priorite` (composite quantifié taille/BEGES/contact).
+   * `undefined` (Row=null) si le prospect n'a pas encore été scoré par Gemini.
+   */
+  gemini_score?: number
+  /**
+   * Raisons commerciales spécifiques générées par Gemini (3-5 items, texte libre).
+   * Exploitables tels quels par le pitch — chaque entrée est une accroche
+   * actionnable, pas un score interne.
+   */
+  gemini_raisons?: string[]
+  /** Horodatage ISO 8601 de la dernière génération Gemini pour ce prospect. */
+  gemini_generated_at?: string
   created_at: string
   updated_at: string
 }

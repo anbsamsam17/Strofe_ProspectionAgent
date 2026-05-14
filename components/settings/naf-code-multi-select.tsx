@@ -1,0 +1,460 @@
+'use client'
+
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
+import {
+  NAF_CODES_SEARCH,
+  NAF_GROUPS_SUGGESTED,
+  SUGGESTED_NAF_CODES,
+  normalizeSearchString,
+  type NafCodeSearchEntry,
+} from '@/lib/constants/naf-codes'
+
+// ── Constantes ────────────────────────────────────────────────────────────────
+
+/**
+ * Plafond d'items affichés simultanément dans la liste virtualisée naïve.
+ * En dessous de cette borne, la perf React est largement suffisante pour
+ * ~700 entrées triées + filtrées sans recourir à une lib externe.
+ */
+const MAX_VISIBLE_ITEMS = 50
+
+// ── Types ─────────────────────────────────────────────────────────────────────
+
+export interface NafCodeMultiSelectProps {
+  /** Codes NAF actuellement sélectionnés (format `XX.XXX`). */
+  selectedCodes: string[]
+  /** Callback appelé avec la liste mise à jour. */
+  onChange: (codes: string[]) => void
+  /** Désactive entièrement le composant (run en cours, etc.). */
+  disabled?: boolean
+  /** Affiche ou non la section "Suggérés (prospection B2B BEGES)". */
+  showSuggestedGroups?: boolean
+  /** Id du label décrivant le champ (a11y). */
+  labelledBy?: string
+}
+
+// ── Composant ─────────────────────────────────────────────────────────────────
+
+/**
+ * Multi-select de codes NAF avec :
+ *   - groupes pré-définis "Suggérés (prospection B2B BEGES)" cochables en un clic.
+ *   - barre de recherche normalisée (casse + accents ignorés).
+ *   - liste virtualisée naïve (filter + slice MAX_VISIBLE_ITEMS).
+ *   - chips compactes pour les codes sélectionnés (avec retrait individuel).
+ *   - navigation clavier ↑↓ Enter Esc.
+ *
+ * Aucune dépendance externe (Tailwind brut + headless behavior).
+ */
+export function NafCodeMultiSelect({
+  selectedCodes,
+  onChange,
+  disabled = false,
+  showSuggestedGroups = true,
+  labelledBy,
+}: NafCodeMultiSelectProps) {
+  const [search, setSearch] = useState('')
+  const [activeIndex, setActiveIndex] = useState<number>(-1)
+  const listboxId = useId()
+  const listboxRef = useRef<HTMLUListElement>(null)
+
+  const selectedSet = useMemo(() => new Set(selectedCodes), [selectedCodes])
+
+  // ── Filtre + limite ────────────────────────────────────────────────────────
+  const filtered = useMemo<readonly NafCodeSearchEntry[]>(() => {
+    const trimmed = search.trim()
+    if (!trimmed) return NAF_CODES_SEARCH.slice(0, MAX_VISIBLE_ITEMS)
+
+    const needle = normalizeSearchString(trimmed)
+    const out: NafCodeSearchEntry[] = []
+    for (const entry of NAF_CODES_SEARCH) {
+      if (entry._haystack.includes(needle)) {
+        out.push(entry)
+        if (out.length >= MAX_VISIBLE_ITEMS) break
+      }
+    }
+    return out
+  }, [search])
+
+  const totalMatching = useMemo(() => {
+    const trimmed = search.trim()
+    if (!trimmed) return NAF_CODES_SEARCH.length
+    const needle = normalizeSearchString(trimmed)
+    let n = 0
+    for (const entry of NAF_CODES_SEARCH) {
+      if (entry._haystack.includes(needle)) n++
+    }
+    return n
+  }, [search])
+
+  // Reset de l'index actif quand le filtre change pour éviter d'être
+  // hors-bornes après une recherche qui rétrécit la liste.
+  useEffect(() => {
+    setActiveIndex(filtered.length > 0 ? 0 : -1)
+  }, [filtered.length])
+
+  // ── Helpers de mutation ────────────────────────────────────────────────────
+  const toggleCode = useCallback(
+    (code: string) => {
+      if (disabled) return
+      if (selectedSet.has(code)) {
+        onChange(selectedCodes.filter((c) => c !== code))
+      } else {
+        onChange([...selectedCodes, code])
+      }
+    },
+    [disabled, selectedSet, selectedCodes, onChange],
+  )
+
+  const removeCode = useCallback(
+    (code: string) => {
+      if (disabled) return
+      onChange(selectedCodes.filter((c) => c !== code))
+    },
+    [disabled, selectedCodes, onChange],
+  )
+
+  const selectAllSuggested = useCallback(() => {
+    if (disabled) return
+    const next = new Set(selectedCodes)
+    for (const c of SUGGESTED_NAF_CODES) next.add(c)
+    onChange(Array.from(next))
+  }, [disabled, selectedCodes, onChange])
+
+  const deselectAllSuggested = useCallback(() => {
+    if (disabled) return
+    onChange(selectedCodes.filter((c) => !SUGGESTED_NAF_CODES.has(c)))
+  }, [disabled, selectedCodes, onChange])
+
+  const toggleGroup = useCallback(
+    (groupCodes: readonly string[]) => {
+      if (disabled) return
+      const allSelected = groupCodes.every((c) => selectedSet.has(c))
+      if (allSelected) {
+        const groupSet = new Set(groupCodes)
+        onChange(selectedCodes.filter((c) => !groupSet.has(c)))
+      } else {
+        const next = new Set(selectedCodes)
+        for (const c of groupCodes) next.add(c)
+        onChange(Array.from(next))
+      }
+    },
+    [disabled, selectedSet, selectedCodes, onChange],
+  )
+
+  // ── Clavier ────────────────────────────────────────────────────────────────
+  const onSearchKeyDown = useCallback(
+    (e: React.KeyboardEvent<HTMLInputElement>) => {
+      if (disabled || filtered.length === 0) return
+      if (e.key === 'ArrowDown') {
+        e.preventDefault()
+        setActiveIndex((i) => (i + 1) % filtered.length)
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault()
+        setActiveIndex((i) => (i <= 0 ? filtered.length - 1 : i - 1))
+      } else if (e.key === 'Enter') {
+        e.preventDefault()
+        const target = filtered[activeIndex]
+        if (target) toggleCode(target.code)
+      } else if (e.key === 'Escape') {
+        if (search.length > 0) {
+          e.preventDefault()
+          setSearch('')
+        }
+      }
+    },
+    [disabled, filtered, activeIndex, search, toggleCode],
+  )
+
+  // Scroll synchronisé pour garder l'élément actif visible.
+  useEffect(() => {
+    if (activeIndex < 0 || !listboxRef.current) return
+    const node = listboxRef.current.querySelector<HTMLLIElement>(
+      `[data-index="${activeIndex}"]`,
+    )
+    node?.scrollIntoView({ block: 'nearest' })
+  }, [activeIndex])
+
+  const selectedCount = selectedCodes.length
+  const hasOverflow = filtered.length < totalMatching
+
+  // ── Rendu ──────────────────────────────────────────────────────────────────
+  return (
+    <div className="space-y-4" aria-labelledby={labelledBy}>
+      {/* ── Groupes suggérés ────────────────────────────────────────── */}
+      {showSuggestedGroups && (
+        <div className="rounded-2xl border border-gray-100 bg-gray-50/60 px-4 py-4 dark:border-gray-800 dark:bg-gray-800/30">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <p className="text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
+              Suggérés (prospection B2B BEGES)
+            </p>
+            <div className="flex gap-1.5">
+              <button
+                type="button"
+                onClick={selectAllSuggested}
+                disabled={disabled}
+                className="rounded-lg border border-gray-200 bg-white px-2.5 py-1 text-xs font-medium text-gray-700 transition-colors duration-150 hover:border-green-300 hover:bg-green-50 hover:text-green-700 focus:outline-none focus:ring-2 focus:ring-green-500/30 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-green-950/40 dark:hover:text-green-300"
+              >
+                Tout sélectionner
+              </button>
+              <button
+                type="button"
+                onClick={deselectAllSuggested}
+                disabled={disabled}
+                className="rounded-lg border border-gray-200 bg-white px-2.5 py-1 text-xs font-medium text-gray-700 transition-colors duration-150 hover:border-gray-300 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-green-500/30 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
+              >
+                Désélectionner tout
+              </button>
+            </div>
+          </div>
+          <ul className="flex flex-wrap gap-1.5">
+            {NAF_GROUPS_SUGGESTED.map((group) => {
+              const allSelected = group.codes.every((c) => selectedSet.has(c))
+              const someSelected =
+                !allSelected && group.codes.some((c) => selectedSet.has(c))
+              return (
+                <li key={group.label}>
+                  <button
+                    type="button"
+                    onClick={() => toggleGroup(group.codes)}
+                    disabled={disabled}
+                    aria-pressed={allSelected}
+                    className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-green-500/30 disabled:cursor-not-allowed disabled:opacity-50 ${
+                      allSelected
+                        ? 'border-green-200 bg-green-100 text-green-700 ring-1 ring-green-200 hover:bg-green-200/60 dark:border-green-800 dark:bg-green-950/60 dark:text-green-300 dark:ring-green-900'
+                        : someSelected
+                          ? 'border-green-200 bg-white text-green-700 hover:bg-green-50 dark:border-green-800/60 dark:bg-gray-900 dark:text-green-300'
+                          : 'border-gray-200 bg-white text-gray-700 hover:border-gray-300 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 dark:hover:bg-gray-800'
+                    }`}
+                  >
+                    {allSelected && (
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        width="11"
+                        height="11"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="3"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        aria-hidden="true"
+                      >
+                        <polyline points="20 6 9 17 4 12" />
+                      </svg>
+                    )}
+                    {group.label}
+                    <span className="tabular-nums text-[10px] opacity-70">
+                      ({group.codes.length})
+                    </span>
+                  </button>
+                </li>
+              )
+            })}
+          </ul>
+        </div>
+      )}
+
+      {/* ── Barre de recherche ─────────────────────────────────────── */}
+      <div>
+        <label htmlFor={`${listboxId}-search`} className="sr-only">
+          Rechercher un code ou un libellé NAF
+        </label>
+        <div className="relative">
+          <span
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-gray-400 dark:text-gray-500"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <circle cx="11" cy="11" r="8" />
+              <line x1="21" y1="21" x2="16.65" y2="16.65" />
+            </svg>
+          </span>
+          <input
+            id={`${listboxId}-search`}
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            onKeyDown={onSearchKeyDown}
+            disabled={disabled}
+            placeholder="Rechercher par code (ex. 01.21) ou libellé (ex. viticulture)..."
+            role="combobox"
+            aria-expanded="true"
+            aria-controls={listboxId}
+            aria-autocomplete="list"
+            aria-activedescendant={
+              activeIndex >= 0 ? `${listboxId}-opt-${activeIndex}` : undefined
+            }
+            className="w-full rounded-lg border border-gray-200 bg-white py-2.5 pl-10 pr-3 text-sm text-gray-900 placeholder-gray-400 transition-colors duration-150 focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-500/20 disabled:cursor-not-allowed disabled:opacity-60 dark:border-gray-700 dark:bg-gray-800 dark:text-white dark:placeholder-gray-500"
+          />
+          {search.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setSearch('')}
+              aria-label="Effacer la recherche"
+              className="absolute inset-y-0 right-2 flex items-center rounded-md p-1 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600 focus:outline-none focus:ring-2 focus:ring-green-500/30 dark:hover:bg-gray-700 dark:hover:text-gray-200"
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+              >
+                <line x1="18" y1="6" x2="6" y2="18" />
+                <line x1="6" y1="6" x2="18" y2="18" />
+              </svg>
+            </button>
+          )}
+        </div>
+        <p className="mt-1.5 text-xs text-gray-500 dark:text-gray-400">
+          {totalMatching === 0
+            ? 'Aucun code ne correspond à votre recherche.'
+            : hasOverflow
+              ? `${filtered.length} affichés sur ${totalMatching.toLocaleString('fr-FR')} — affinez la recherche pour voir les autres.`
+              : `${totalMatching.toLocaleString('fr-FR')} code${totalMatching > 1 ? 's' : ''} disponible${totalMatching > 1 ? 's' : ''}.`}
+        </p>
+      </div>
+
+      {/* ── Listbox ─────────────────────────────────────────────────── */}
+      <ul
+        ref={listboxRef}
+        id={listboxId}
+        role="listbox"
+        aria-multiselectable="true"
+        aria-label="Codes NAF disponibles"
+        className="max-h-72 overflow-y-auto rounded-lg border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-900"
+      >
+        {filtered.length === 0 && (
+          <li className="px-4 py-6 text-center text-sm text-gray-500 dark:text-gray-400">
+            Aucun résultat.
+          </li>
+        )}
+        {filtered.map((entry, index) => {
+          const isSelected = selectedSet.has(entry.code)
+          const isActive = index === activeIndex
+          return (
+            <li
+              key={entry.code}
+              id={`${listboxId}-opt-${index}`}
+              data-index={index}
+              role="option"
+              aria-selected={isSelected}
+              onClick={() => toggleCode(entry.code)}
+              onMouseEnter={() => setActiveIndex(index)}
+              className={`flex cursor-pointer items-start gap-3 border-b border-gray-100 px-3 py-2 text-sm transition-colors duration-150 last:border-b-0 dark:border-gray-800 ${
+                isActive
+                  ? 'bg-green-50 dark:bg-green-950/40'
+                  : isSelected
+                    ? 'bg-green-50/60 dark:bg-green-950/20'
+                    : 'hover:bg-gray-50 dark:hover:bg-gray-800/60'
+              }`}
+            >
+              <span
+                className={`mt-0.5 flex h-4 w-4 flex-shrink-0 items-center justify-center rounded border-2 transition-colors duration-150 ${
+                  isSelected
+                    ? 'border-green-600 bg-green-600'
+                    : 'border-gray-300 bg-white dark:border-gray-600 dark:bg-gray-800'
+                }`}
+                aria-hidden="true"
+              >
+                {isSelected && (
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    width="10"
+                    height="10"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="white"
+                    strokeWidth="3"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <polyline points="20 6 9 17 4 12" />
+                  </svg>
+                )}
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="font-medium leading-snug text-gray-900 dark:text-white">
+                  <span className="font-mono tabular-nums text-gray-700 dark:text-gray-300">
+                    {entry.code}
+                  </span>
+                  <span className="mx-1.5 text-gray-300 dark:text-gray-600">—</span>
+                  {entry.libelle}
+                </p>
+                <p className="mt-0.5 text-xs text-gray-400 dark:text-gray-500">
+                  {entry.section} · {entry.section_libelle}
+                </p>
+              </div>
+            </li>
+          )
+        })}
+      </ul>
+
+      {/* ── Chips sélectionnés ──────────────────────────────────────── */}
+      {selectedCount > 0 && (
+        <div>
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <p className="text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
+              Sélectionnés ({selectedCount})
+            </p>
+            <button
+              type="button"
+              onClick={() => onChange([])}
+              disabled={disabled}
+              className="text-xs font-medium text-gray-500 underline-offset-2 transition-colors hover:text-red-600 hover:underline focus:outline-none focus:ring-2 focus:ring-red-500/30 disabled:cursor-not-allowed disabled:opacity-50 dark:text-gray-400 dark:hover:text-red-400"
+            >
+              Vider la sélection
+            </button>
+          </div>
+          <ul className="flex flex-wrap gap-1.5" aria-label="Codes NAF sélectionnés">
+            {selectedCodes.map((code) => (
+              <li key={code}>
+                <span className="inline-flex items-center gap-1 rounded-full bg-green-100 px-2.5 py-1 text-xs font-medium text-green-700 ring-1 ring-green-200 dark:bg-green-950/60 dark:text-green-300 dark:ring-green-900">
+                  <span className="font-mono tabular-nums">{code}</span>
+                  <button
+                    type="button"
+                    onClick={() => removeCode(code)}
+                    disabled={disabled}
+                    aria-label={`Retirer le code ${code}`}
+                    className="rounded-full p-0.5 text-green-600 transition-colors hover:bg-green-200 hover:text-green-900 focus:outline-none focus:ring-2 focus:ring-green-500/40 disabled:cursor-not-allowed disabled:opacity-50 dark:text-green-400 dark:hover:bg-green-900/50 dark:hover:text-green-200"
+                  >
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      width="10"
+                      height="10"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="3"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      aria-hidden="true"
+                    >
+                      <line x1="18" y1="6" x2="6" y2="18" />
+                      <line x1="6" y1="6" x2="18" y2="18" />
+                    </svg>
+                  </button>
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
+  )
+}
