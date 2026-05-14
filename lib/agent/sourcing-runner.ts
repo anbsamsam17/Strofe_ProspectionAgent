@@ -17,7 +17,14 @@
 import { captureWithContext } from '@/lib/observability/sentry-helpers'
 import type { Database, Json } from '@/lib/supabase/database.types'
 import type { SupabaseAdminClient } from '@/lib/supabase/server'
-import type { AgentLog, AgentRun, ProfileSettings, Prospect, SireneEtablissement } from '@/lib/types'
+import type {
+  AgentLog,
+  AgentRun,
+  ProfileSettings,
+  Prospect,
+  ScoringWeights,
+  SireneEtablissement,
+} from '@/lib/types'
 import {
   enrichirProspect,
   getRePhoneCircuitState,
@@ -713,6 +720,7 @@ async function enrichAndScore(
   userId: string,
   etablissements: SireneEtablissement[],
   pushLog: (phase: string, message: string, level: 'info' | 'warn' | 'error', data?: Record<string, unknown>) => void,
+  scoringWeights?: ScoringWeights,
 ): Promise<EnrichScoreOutcome> {
   // Reset du circuit breaker téléphone au début de chaque phase d'enrichissement.
   // Cohérent avec la philosophie "1 run = 1 budget réseau" : on retente RE même
@@ -820,9 +828,11 @@ async function enrichAndScore(
     re_phone_consecutive_failures: circuitState.consecutiveFailures,
   })
 
+  // Pondération scoring : settings.scoring_weights si présent, sinon défauts 30/30/40.
+  // `calculerScore` normalise systématiquement les weights — pas besoin de pré-traiter.
   const scored: Array<Partial<Prospect>> = enrichis.map((p) => {
-    const score = calculerScore(p, false)
-    const details = getScoreDetails(p, false)
+    const score = calculerScore(p, false, scoringWeights)
+    const details = getScoreDetails(p, false, scoringWeights)
     return {
       ...p,
       score_priorite: score,
@@ -1063,7 +1073,12 @@ export async function runPipelineSourcing(
     } else {
       // 5b. Enrich ADEME + scoring
       hbState.phase = 'enrichissement'
-      const enrichResult = await enrichAndScore(userId, outcome.etablissements, pushLog)
+      const enrichResult = await enrichAndScore(
+        userId,
+        outcome.etablissements,
+        pushLog,
+        settings?.scoring_weights,
+      )
       scored = enrichResult.scored
       qualifiedCount = enrichResult.qualifiedCount
       hbState.counters.qualified = qualifiedCount

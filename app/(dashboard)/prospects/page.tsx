@@ -1,10 +1,10 @@
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
+
 import { createClient } from '@/lib/supabase/server'
 import type { Prospect, ProspectStatus } from '@/lib/types'
 import { ProspectsFilters } from '@/components/prospects/prospects-filters'
 import { ProspectActionsMenu } from '@/components/prospects/prospect-actions-menu'
-import { TopPriorities } from '@/components/prospects/top-priorities'
 import { buildBegesUrl } from '@/lib/utils/beges-url'
 import { RunStatusBanner } from '@/components/dashboard/run-status-banner'
 
@@ -28,29 +28,37 @@ const CONTACT_FIELD_BY_TYPE: Record<ContactFilterType, string> = {
 }
 
 // Force le rendu dynamique — la table prospects change à chaque run agent
-// et après chaque feedback d'appel (statut mis à jour)
+// et après chaque feedback d'appel (statut mis à jour).
 export const dynamic = 'force-dynamic'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
 const PAGE_SIZE = 20
-// Aligné sur `daily_call_target` standard (15 appels/jour) — voir CLAUDE.md.
-const TOP_PRIORITIES_LIMIT = 15
-// Cible du lien "Voir tout le top 50" depuis le hero Top 15.
-const TOP_ALL_LIMIT = 50
 
-const STATUS_LABELS: Record<ProspectStatus, string> = {
-  sourced: 'Sourcé',
+/**
+ * Étendu temporairement pour anticiper l'ajout du statut `offer_sent` côté
+ * Agent A (migration `ProspectStatus`). Tant que le type partagé ne contient
+ * pas la valeur, on l'isole ici pour ne pas casser le typage et garder la
+ * page lisible dès que la migration est mergée.
+ */
+// TODO(Agent A): retirer cette extension dès que `offer_sent` sera ajouté à ProspectStatus.
+type ProspectStatusExt = ProspectStatus | 'offer_sent'
+
+const STATUS_LABELS: Record<ProspectStatusExt, string> = {
+  sourced: 'Pas de contact identifié',
   qualified: 'Qualifié',
   contacted: 'Contacté',
   interested: 'Intéressé',
-  rdv: 'RDV',
-  converted: 'Converti',
-  rejected: 'Rejeté',
-  on_hold: 'En pause',
+  // Legacy : `rdv` mappé visuellement vers Intéressé pour fusionner deux statuts
+  // historiquement séparés dans le pipeline commercial.
+  rdv: 'Intéressé',
+  offer_sent: 'Offre envoyée',
+  converted: 'Affaire conclue',
+  rejected: 'Sans suite',
+  on_hold: 'En stand-by',
 }
 
-const STATUS_STYLES: Record<ProspectStatus, { badge: string; dot: string }> = {
+const STATUS_STYLES: Record<ProspectStatusExt, { badge: string; dot: string }> = {
   sourced: {
     badge: 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400',
     dot: 'bg-gray-400',
@@ -68,8 +76,12 @@ const STATUS_STYLES: Record<ProspectStatus, { badge: string; dot: string }> = {
     dot: 'bg-green-500',
   },
   rdv: {
-    badge: 'bg-purple-50 text-purple-700 dark:bg-purple-950 dark:text-purple-400',
-    dot: 'bg-purple-500',
+    badge: 'bg-green-50 text-green-700 dark:bg-green-950 dark:text-green-400',
+    dot: 'bg-green-500',
+  },
+  offer_sent: {
+    badge: 'bg-indigo-50 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-400',
+    dot: 'bg-indigo-500',
   },
   converted: {
     badge: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-400',
@@ -92,12 +104,21 @@ type SortableColumn = 'raison_sociale' | 'score_priorite' | 'statut' | 'updated_
 function getSortOrder(
   column: SortableColumn,
   currentSort: string | undefined,
-  currentOrder: string | undefined
+  currentOrder: string | undefined,
 ): { sort: SortableColumn; order: 'asc' | 'desc' } {
   if (currentSort === column) {
     return { sort: column, order: currentOrder === 'asc' ? 'desc' : 'asc' }
   }
   return { sort: column, order: 'desc' }
+}
+
+function ariaSortFor(
+  column: SortableColumn,
+  currentSort: string | undefined,
+  currentOrder: string | undefined,
+): 'ascending' | 'descending' | 'none' {
+  if (currentSort !== column) return 'none'
+  return currentOrder === 'asc' ? 'ascending' : 'descending'
 }
 
 function SortIcon({
@@ -165,6 +186,89 @@ function SortIcon({
   )
 }
 
+function ScoreCell({ score }: { score: number }) {
+  const tone =
+    score >= 75 ? 'bg-green-500' : score >= 50 ? 'bg-yellow-500' : 'bg-gray-400'
+  return (
+    <div className="flex items-center gap-2">
+      <span className="w-7 text-right text-sm font-bold tabular-nums text-gray-900 dark:text-white">
+        {score}
+      </span>
+      <div
+        className="h-1.5 w-16 overflow-hidden rounded-full bg-gray-200 dark:bg-gray-700"
+        aria-hidden="true"
+      >
+        <div
+          className={`h-1.5 rounded-full transition-all ${tone}`}
+          style={{ width: `${Math.min(100, Math.max(0, score))}%` }}
+        />
+      </div>
+    </div>
+  )
+}
+
+function BegesBadge({ prospect }: { prospect: Prospect }) {
+  const begesPublie = prospect.beges_publie
+  const begesValide = prospect.beges_valide
+  const begesUrl = buildBegesUrl(prospect)
+  const begesDate = prospect.beges_derniere_publication
+
+  let badgeClass: string
+  let badgeLabel: string
+
+  if (begesPublie && begesValide) {
+    badgeClass =
+      'bg-green-50 text-green-700 border-green-200 dark:bg-green-950/50 dark:text-green-400 dark:border-green-800'
+    badgeLabel = 'Publié'
+  } else if (begesPublie && !begesValide) {
+    badgeClass =
+      'bg-orange-50 text-orange-700 border-orange-200 dark:bg-orange-950/50 dark:text-orange-400 dark:border-orange-800'
+    badgeLabel = 'Expiré'
+  } else {
+    badgeClass =
+      'bg-red-50 text-red-700 border-red-200 dark:bg-red-950/50 dark:text-red-400 dark:border-red-800'
+    badgeLabel = 'Absent'
+  }
+
+  const title = begesDate
+    ? `Dernière publication : ${new Intl.DateTimeFormat('fr-FR', {
+        dateStyle: 'short',
+      }).format(new Date(begesDate))}`
+    : undefined
+
+  const badge = (
+    <span
+      className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-medium ${badgeClass}`}
+      title={title}
+    >
+      {badgeLabel}
+      {begesDate && (
+        <span className="opacity-70">
+          {' '}
+          {new Intl.DateTimeFormat('fr-FR', { year: 'numeric' }).format(
+            new Date(begesDate),
+          )}
+        </span>
+      )}
+    </span>
+  )
+
+  if (begesUrl) {
+    return (
+      <a
+        href={begesUrl}
+        target="_blank"
+        rel="noopener noreferrer"
+        aria-label={`Voir le BEGES de ${prospect.raison_sociale} (ouvre dans un nouvel onglet)`}
+        className="inline-flex transition-opacity hover:opacity-80"
+      >
+        {badge}
+      </a>
+    )
+  }
+  return badge
+}
+
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 interface SearchParams {
@@ -178,9 +282,6 @@ interface SearchParams {
   archived?: string
   contact_type?: string
 }
-
-// Statuts terminaux exclus du Top 15 par défaut (déjà traités côté commercial).
-const TERMINAL_STATUTS_TOP: ProspectStatus[] = ['converted', 'rejected']
 
 export default async function ProspectsPage({
   searchParams,
@@ -197,8 +298,9 @@ export default async function ProspectsPage({
 
   const params = await searchParams
   const page = Math.max(1, parseInt(params.page ?? '1', 10))
+  // Tri par défaut : score décroissant — c'est l'axe principal de l'app.
   const sortCol = (params.sort as SortableColumn) ?? 'score_priorite'
-  const sortOrder = params.order === 'asc' ? true : false // ascending = true
+  const sortOrderAsc = params.order === 'asc'
   const statutFilter = params.statut ? params.statut.split(',') : []
   const secteurFilter = params.secteur ?? ''
   const scoreMin = params.score_min ? parseInt(params.score_min, 10) : 0
@@ -208,12 +310,12 @@ export default async function ProspectsPage({
   const from = (page - 1) * PAGE_SIZE
   const to = from + PAGE_SIZE - 1
 
-  // Construction de la requête avec filtres
+  // RLS Supabase filtre déjà par auth.uid() côté policies — pas de .eq('user_id', ...)
+  // ajouté côté app (cf. .claude/rules/security.md).
   let query = supabase
     .from('prospects')
     .select('*', { count: 'exact' })
-    .eq('user_id', user.id)
-    .order(sortCol, { ascending: sortOrder })
+    .order(sortCol, { ascending: sortOrderAsc })
     .range(from, to)
 
   // Mode "archivés" : on affiche uniquement les prospects archivés.
@@ -241,20 +343,6 @@ export default async function ProspectsPage({
     query = query.or(orClause)
   }
 
-  // Top 15 priorités — vue défaut, calculée indépendamment des filtres tabulaires
-  // pour rester stable même quand l'utilisateur explore. On l'affiche uniquement
-  // dans le mode "non archivés" (ça n'aurait pas de sens sur la pile d'archives).
-  const topPrioritiesPromise = showArchived
-    ? Promise.resolve({ data: [] as Prospect[] })
-    : supabase
-        .from('prospects')
-        .select('*')
-        .eq('user_id', user.id)
-        .is('archived_at', null)
-        .not('statut', 'in', `(${TERMINAL_STATUTS_TOP.join(',')})`)
-        .order('score_priorite', { ascending: false })
-        .limit(TOP_PRIORITIES_LIMIT)
-
   // Compteur "nouveaux dernier run" — récupère le started_at du dernier run agent
   // pour le user courant, puis compte les prospects créés depuis. RLS filtre
   // implicitement (session SSR). Si pas de run, on omet le segment côté UI.
@@ -265,12 +353,10 @@ export default async function ProspectsPage({
     .limit(1)
     .maybeSingle()
 
-  const [{ data: prospects, count }, topRes, lastRunRes] = await Promise.all([
+  const [{ data: prospects, count }, lastRunRes] = await Promise.all([
     query,
-    topPrioritiesPromise,
     lastRunPromise,
   ])
-  const topPriorities = (topRes.data ?? []) as unknown as Prospect[]
 
   const lastRunStartedAt =
     (lastRunRes.data as { started_at: string } | null)?.started_at ?? null
@@ -285,7 +371,15 @@ export default async function ProspectsPage({
     newSinceLastRun = newCount ?? 0
   }
 
-  const totalPages = Math.ceil((count ?? 0) / PAGE_SIZE)
+  const totalCount = count ?? 0
+  const totalPages = Math.ceil(totalCount / PAGE_SIZE)
+
+  const hasActiveFilters =
+    statutFilter.length > 0 ||
+    Boolean(secteurFilter) ||
+    scoreMin > 0 ||
+    showArchived ||
+    contactTypes.length > 0
 
   function buildHref(newParams: Record<string, string>) {
     const merged: Record<string, string> = {
@@ -311,6 +405,8 @@ export default async function ProspectsPage({
   const th =
     'px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400'
 
+  const dateFmt = new Intl.DateTimeFormat('fr-FR', { dateStyle: 'short' })
+
   return (
     <div className="mx-auto max-w-7xl space-y-5">
       {/* Bandeau live run agent — visible quand un sourcing est en cours,
@@ -324,7 +420,9 @@ export default async function ProspectsPage({
             Prospects
           </h1>
           <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-            <span className="font-semibold text-gray-700 dark:text-gray-300">{count ?? 0}</span>{' '}
+            <span className="font-semibold text-gray-700 dark:text-gray-300">
+              {totalCount}
+            </span>{' '}
             au total
             {newSinceLastRun > 0 && (
               <>
@@ -339,21 +437,8 @@ export default async function ProspectsPage({
         </div>
       </div>
 
-      {/* Top 15 priorités — hero, axe principal de l'app.
-          Le lien "Voir tout le top 50" ramène le tableau en haut de page,
-          trié par score décroissant — l'utilisateur paginera 20+20+10 pour
-          parcourir le top 50 (PAGE_SIZE=20). `TOP_ALL_LIMIT` reste un label
-          sémantique côté CTA, pas un paramètre d'URL. */}
-      {!showArchived && (
-        <TopPriorities
-          prospects={topPriorities}
-          topAllHref="/prospects?sort=score_priorite&order=desc&page=1"
-        />
-      )}
-
-      {/* Filtres — sticky en haut du scroll pour rester accessibles en exploration.
-          Wrapper -mx-... pour étendre le fond jusqu'aux bords du <main> et masquer
-          le contenu qui passe derrière le sticky (sinon halo visuel). */}
+      {/* Filtres sticky en haut du scroll. Le wrapper étend le fond aux bords
+          du <main> pour masquer le contenu qui passe derrière (sinon halo). */}
       <div className="sticky top-0 z-10 -mx-4 border-b border-gray-200/80 bg-gray-50/95 px-4 py-3 backdrop-blur supports-[backdrop-filter]:bg-gray-50/80 dark:border-gray-800/80 dark:bg-gray-950/95 dark:supports-[backdrop-filter]:bg-gray-950/80 sm:-mx-6 sm:px-6">
         <ProspectsFilters
           currentStatuts={statutFilter}
@@ -364,58 +449,91 @@ export default async function ProspectsPage({
         />
       </div>
 
-      {/* Tableau */}
+      {/* Tableau unifié — tous les prospects triés par score décroissant (défaut). */}
       <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-900">
         <div className="overflow-x-auto">
           <table className="w-full text-sm" aria-label="Liste des prospects">
             <thead>
               <tr className="border-b border-gray-200 bg-gray-50/80 dark:border-gray-800 dark:bg-gray-800/40">
                 <th scope="col" className={th}>
-                  <Link
-                    href={buildSortHref('raison_sociale')}
-                    className="group inline-flex items-center hover:text-gray-900 dark:hover:text-white"
-                  >
-                    Entreprise
-                    <SortIcon column="raison_sociale" currentSort={params.sort} currentOrder={params.order} />
-                  </Link>
+                  <span className="sr-only">Rang</span>
+                  <span aria-hidden="true">#</span>
                 </th>
-                <th scope="col" className={`${th} hidden md:table-cell`}>
-                  Secteur
-                </th>
-                <th scope="col" className={`${th} hidden sm:table-cell`}>
-                  Ville
-                </th>
-                <th scope="col" className={`${th} hidden lg:table-cell`}>
-                  Effectif
-                </th>
-                <th scope="col" className={th}>
+                <th
+                  scope="col"
+                  className={th}
+                  aria-sort={ariaSortFor('score_priorite', params.sort, params.order)}
+                >
                   <Link
                     href={buildSortHref('score_priorite')}
                     className="group inline-flex items-center hover:text-gray-900 dark:hover:text-white"
                   >
                     Score
-                    <SortIcon column="score_priorite" currentSort={params.sort} currentOrder={params.order} />
+                    <SortIcon
+                      column="score_priorite"
+                      currentSort={params.sort}
+                      currentOrder={params.order}
+                    />
+                  </Link>
+                </th>
+                <th
+                  scope="col"
+                  className={th}
+                  aria-sort={ariaSortFor('raison_sociale', params.sort, params.order)}
+                >
+                  <Link
+                    href={buildSortHref('raison_sociale')}
+                    className="group inline-flex items-center hover:text-gray-900 dark:hover:text-white"
+                  >
+                    Entreprise
+                    <SortIcon
+                      column="raison_sociale"
+                      currentSort={params.sort}
+                      currentOrder={params.order}
+                    />
                   </Link>
                 </th>
                 <th scope="col" className={`${th} hidden lg:table-cell`}>
-                  BEGES
+                  Taille
                 </th>
-                <th scope="col" className={th}>
+                <th scope="col" className={`${th} hidden sm:table-cell`}>
+                  Géographie
+                </th>
+                <th scope="col" className={`${th} hidden lg:table-cell`}>
+                  État BEGES
+                </th>
+                <th
+                  scope="col"
+                  className={th}
+                  aria-sort={ariaSortFor('statut', params.sort, params.order)}
+                >
                   <Link
                     href={buildSortHref('statut')}
                     className="group inline-flex items-center hover:text-gray-900 dark:hover:text-white"
                   >
                     Statut
-                    <SortIcon column="statut" currentSort={params.sort} currentOrder={params.order} />
+                    <SortIcon
+                      column="statut"
+                      currentSort={params.sort}
+                      currentOrder={params.order}
+                    />
                   </Link>
                 </th>
-                <th scope="col" className={`${th} hidden xl:table-cell`}>
+                <th
+                  scope="col"
+                  className={`${th} hidden xl:table-cell`}
+                  aria-sort={ariaSortFor('updated_at', params.sort, params.order)}
+                >
                   <Link
                     href={buildSortHref('updated_at')}
                     className="group inline-flex items-center hover:text-gray-900 dark:hover:text-white"
                   >
                     Dernière action
-                    <SortIcon column="updated_at" currentSort={params.sort} currentOrder={params.order} />
+                    <SortIcon
+                      column="updated_at"
+                      currentSort={params.sort}
+                      currentOrder={params.order}
+                    />
                   </Link>
                 </th>
                 <th scope="col" className={th}>
@@ -426,17 +544,30 @@ export default async function ProspectsPage({
             <tbody>
               {prospects && prospects.length > 0 ? (
                 (prospects as unknown as Prospect[]).map((prospect, idx) => {
-                  const statusStyle =
-                    STATUS_STYLES[prospect.statut as ProspectStatus] ?? STATUS_STYLES.sourced
+                  const statut = prospect.statut as ProspectStatusExt
+                  const statusStyle = STATUS_STYLES[statut] ?? STATUS_STYLES.sourced
+                  const statusLabel = STATUS_LABELS[statut] ?? prospect.statut
                   const isEven = idx % 2 === 0
+                  const rank = from + idx + 1
+
                   return (
                     <tr
                       key={prospect.id}
-                      className={`group border-b border-gray-100 transition-colors last:border-0 hover:bg-green-50/40 dark:border-gray-800/60 dark:hover:bg-green-950/10 ${
+                      className={`group border-b border-gray-100 transition-colors duration-150 last:border-0 hover:bg-green-50/40 dark:border-gray-800/60 dark:hover:bg-green-950/10 ${
                         isEven ? '' : 'bg-gray-50/40 dark:bg-gray-800/10'
                       }`}
                     >
-                      {/* Entreprise */}
+                      {/* 1. Rang */}
+                      <td className="px-4 py-3.5 text-xs font-medium tabular-nums text-gray-400 dark:text-gray-600">
+                        {rank}
+                      </td>
+
+                      {/* 2. Score */}
+                      <td className="px-4 py-3.5">
+                        <ScoreCell score={prospect.score_priorite} />
+                      </td>
+
+                      {/* 3. Entreprise */}
                       <td className="px-4 py-3.5">
                         <Link href={`/prospects/${prospect.id}`} className="block">
                           <p className="font-semibold text-gray-900 transition-colors group-hover:text-green-700 dark:text-white dark:group-hover:text-green-400">
@@ -450,110 +581,41 @@ export default async function ProspectsPage({
                         </Link>
                       </td>
 
-                      {/* Secteur */}
-                      <td className="hidden px-4 py-3.5 md:table-cell">
-                        {prospect.secteur_libelle ? (
-                          <span className="inline-block max-w-[180px] truncate rounded-md bg-gray-100 px-2 py-0.5 text-xs text-gray-600 dark:bg-gray-800 dark:text-gray-400">
-                            {prospect.secteur_libelle}
+                      {/* 4. Taille */}
+                      <td className="hidden px-4 py-3.5 text-sm text-gray-600 dark:text-gray-400 lg:table-cell">
+                        {prospect.effectif_min && prospect.effectif_max ? (
+                          <span className="tabular-nums">
+                            {prospect.effectif_min}–{prospect.effectif_max}
+                          </span>
+                        ) : prospect.effectif_min ? (
+                          <span className="tabular-nums">+{prospect.effectif_min}</span>
+                        ) : (
+                          <span className="text-gray-400 dark:text-gray-600">—</span>
+                        )}
+                      </td>
+
+                      {/* 5. Géographie */}
+                      <td className="hidden px-4 py-3.5 text-sm text-gray-600 dark:text-gray-400 sm:table-cell">
+                        {prospect.ville ? (
+                          <span>
+                            {prospect.ville}
+                            {prospect.code_postal && (
+                              <span className="ml-1 text-xs text-gray-400 dark:text-gray-600">
+                                ({prospect.code_postal})
+                              </span>
+                            )}
                           </span>
                         ) : (
                           <span className="text-gray-400 dark:text-gray-600">—</span>
                         )}
                       </td>
 
-                      {/* Ville */}
-                      <td className="hidden px-4 py-3.5 text-sm text-gray-600 dark:text-gray-400 sm:table-cell">
-                        {prospect.ville ?? (
-                          <span className="text-gray-400 dark:text-gray-600">—</span>
-                        )}
-                      </td>
-
-                      {/* Effectif */}
-                      <td className="hidden px-4 py-3.5 text-sm text-gray-600 dark:text-gray-400 lg:table-cell">
-                        {prospect.effectif_min && prospect.effectif_max
-                          ? `${prospect.effectif_min}–${prospect.effectif_max}`
-                          : prospect.effectif_min
-                            ? `+${prospect.effectif_min}`
-                            : <span className="text-gray-400 dark:text-gray-600">—</span>}
-                      </td>
-
-                      {/* Score */}
-                      <td className="px-4 py-3.5">
-                        <div className="flex items-center gap-2">
-                          <span className="w-6 text-right text-sm font-bold tabular-nums text-gray-900 dark:text-white">
-                            {prospect.score_priorite}
-                          </span>
-                          <div className="h-1.5 w-16 overflow-hidden rounded-full bg-gray-200 dark:bg-gray-700">
-                            <div
-                              className={`h-1.5 rounded-full transition-all ${
-                                prospect.score_priorite >= 75
-                                  ? 'bg-green-500'
-                                  : prospect.score_priorite >= 50
-                                    ? 'bg-yellow-500'
-                                    : 'bg-gray-400'
-                              }`}
-                              style={{ width: `${Math.min(100, prospect.score_priorite)}%` }}
-                              aria-hidden="true"
-                            />
-                          </div>
-                        </div>
-                      </td>
-
-                      {/* BEGES */}
+                      {/* 6. État BEGES */}
                       <td className="hidden px-4 py-3.5 lg:table-cell">
-                        {(() => {
-                          const begesPublie = prospect.beges_publie
-                          const begesValide = prospect.beges_valide
-                          const begesUrl = buildBegesUrl(prospect)
-                          const begesDate = prospect.beges_derniere_publication
-
-                          let badgeClass: string
-                          let badgeLabel: string
-
-                          if (begesPublie && begesValide) {
-                            badgeClass = 'bg-green-50 text-green-700 border-green-200 dark:bg-green-950/50 dark:text-green-400 dark:border-green-800'
-                            badgeLabel = 'Publié'
-                          } else if (begesPublie && !begesValide) {
-                            badgeClass = 'bg-orange-50 text-orange-700 border-orange-200 dark:bg-orange-950/50 dark:text-orange-400 dark:border-orange-800'
-                            badgeLabel = 'Expiré'
-                          } else {
-                            badgeClass = 'bg-red-50 text-red-700 border-red-200 dark:bg-red-950/50 dark:text-red-400 dark:border-red-800'
-                            badgeLabel = 'Absent'
-                          }
-
-                          const badge = (
-                            <span
-                              className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-medium ${badgeClass}`}
-                              title={begesDate ? `Dernière publication : ${new Intl.DateTimeFormat('fr-FR', { dateStyle: 'short' }).format(new Date(begesDate))}` : undefined}
-                            >
-                              {badgeLabel}
-                              {begesDate && (
-                                <span className="opacity-70">
-                                  {' '}
-                                  {new Intl.DateTimeFormat('fr-FR', { year: 'numeric' }).format(new Date(begesDate))}
-                                </span>
-                              )}
-                            </span>
-                          )
-
-                          if (begesUrl) {
-                            return (
-                              <a
-                                href={begesUrl}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                aria-label={`Voir le BEGES de ${prospect.raison_sociale} (ouvre dans un nouvel onglet)`}
-                                className="inline-flex hover:opacity-80 transition-opacity"
-                              >
-                                {badge}
-                              </a>
-                            )
-                          }
-                          return badge
-                        })()}
+                        <BegesBadge prospect={prospect} />
                       </td>
 
-                      {/* Statut */}
+                      {/* 7. Statut */}
                       <td className="px-4 py-3.5">
                         <span
                           className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium ${statusStyle.badge}`}
@@ -562,18 +624,16 @@ export default async function ProspectsPage({
                             className={`h-1.5 w-1.5 flex-shrink-0 rounded-full ${statusStyle.dot}`}
                             aria-hidden="true"
                           />
-                          {STATUS_LABELS[prospect.statut as ProspectStatus] ?? prospect.statut}
+                          {statusLabel}
                         </span>
                       </td>
 
-                      {/* Dernière action */}
-                      <td className="hidden px-4 py-3.5 text-sm text-gray-500 dark:text-gray-500 xl:table-cell">
-                        {new Intl.DateTimeFormat('fr-FR', {
-                          dateStyle: 'short',
-                        }).format(new Date(prospect.updated_at))}
+                      {/* 8. Dernière action */}
+                      <td className="hidden px-4 py-3.5 text-sm tabular-nums text-gray-500 dark:text-gray-500 xl:table-cell">
+                        {dateFmt.format(new Date(prospect.updated_at))}
                       </td>
 
-                      {/* Actions */}
+                      {/* 9. Actions */}
                       <td className="px-4 py-3.5 text-right">
                         <div className="flex items-center justify-end gap-2">
                           <ProspectActionsMenu
@@ -613,8 +673,33 @@ export default async function ProspectsPage({
                         Aucun prospect trouvé
                       </p>
                       <p className="text-xs text-gray-400 dark:text-gray-600">
-                        Essayez de modifier ou réinitialiser vos filtres.
+                        {hasActiveFilters
+                          ? 'Essayez de modifier ou réinitialiser vos filtres.'
+                          : 'La prochaine campagne nocturne remplira cette liste.'}
                       </p>
+                      {hasActiveFilters && (
+                        <Link
+                          href="/prospects"
+                          className="mt-2 inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 transition-colors hover:border-gray-300 hover:bg-gray-50 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-300 dark:hover:bg-gray-800"
+                        >
+                          <svg
+                            xmlns="http://www.w3.org/2000/svg"
+                            width="13"
+                            height="13"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2.5"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            aria-hidden="true"
+                          >
+                            <line x1="18" y1="6" x2="6" y2="18" />
+                            <line x1="6" y1="6" x2="18" y2="18" />
+                          </svg>
+                          Réinitialiser les filtres
+                        </Link>
+                      )}
                     </div>
                   </td>
                 </tr>
@@ -628,11 +713,17 @@ export default async function ProspectsPage({
           <div className="flex items-center justify-between border-t border-gray-200 px-5 py-3.5 dark:border-gray-800">
             <p className="text-xs text-gray-500 dark:text-gray-400">
               Page{' '}
-              <span className="font-semibold text-gray-700 dark:text-gray-300">{page}</span>{' '}
+              <span className="font-semibold tabular-nums text-gray-700 dark:text-gray-300">
+                {page}
+              </span>{' '}
               sur{' '}
-              <span className="font-semibold text-gray-700 dark:text-gray-300">{totalPages}</span>
-              {' '}—{' '}
-              <span className="font-semibold text-gray-700 dark:text-gray-300">{count}</span>{' '}
+              <span className="font-semibold tabular-nums text-gray-700 dark:text-gray-300">
+                {totalPages}
+              </span>{' '}
+              —{' '}
+              <span className="font-semibold tabular-nums text-gray-700 dark:text-gray-300">
+                {totalCount}
+              </span>{' '}
               résultats
             </p>
             <div className="flex items-center gap-1.5">
@@ -678,7 +769,7 @@ export default async function ProspectsPage({
                 </span>
               )}
 
-              <span className="rounded-lg bg-green-600 px-3 py-1.5 text-xs font-semibold text-white">
+              <span className="rounded-lg bg-green-600 px-3 py-1.5 text-xs font-semibold tabular-nums text-white">
                 {page}
               </span>
 

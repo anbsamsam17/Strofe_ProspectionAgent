@@ -14,15 +14,23 @@ interface ProspectsFiltersProps {
   currentContactTypes?: ContactFilterType[]
 }
 
-const ALL_STATUTS: { value: ProspectStatus; label: string; dot: string }[] = [
-  { value: 'sourced', label: 'Sourcé', dot: 'bg-gray-400' },
+// TODO(Agent A): `offer_sent` à ajouter à `ProspectStatus` (`lib/types.ts`).
+// En attendant la migration, on l'expose ici en union locale pour rester
+// compatible avec les futurs prospects sans casser le typage de `lib/types.ts`.
+type StatusFilterValue = ProspectStatus | 'offer_sent'
+
+// Labels alignés sur la colonne Statut du tableau (`app/(dashboard)/prospects/page.tsx`).
+// `rdv` est legacy — fusionné visuellement avec « Intéressé ». On garde la valeur
+// dans le pipeline tant que des lignes existantes en base ne sont pas migrées.
+const ALL_STATUTS: { value: StatusFilterValue; label: string; dot: string }[] = [
+  { value: 'sourced', label: 'Pas de contact identifié', dot: 'bg-gray-400' },
   { value: 'qualified', label: 'Qualifié', dot: 'bg-blue-500' },
   { value: 'contacted', label: 'Contacté', dot: 'bg-yellow-500' },
   { value: 'interested', label: 'Intéressé', dot: 'bg-green-500' },
-  { value: 'rdv', label: 'RDV', dot: 'bg-purple-500' },
-  { value: 'converted', label: 'Converti', dot: 'bg-emerald-500' },
-  { value: 'rejected', label: 'Rejeté', dot: 'bg-red-500' },
-  { value: 'on_hold', label: 'En pause', dot: 'bg-orange-500' },
+  { value: 'offer_sent', label: 'Offre envoyée', dot: 'bg-indigo-500' },
+  { value: 'converted', label: 'Affaire conclue', dot: 'bg-emerald-500' },
+  { value: 'rejected', label: 'Sans suite', dot: 'bg-red-500' },
+  { value: 'on_hold', label: 'En stand-by', dot: 'bg-orange-500' },
 ]
 
 const ALL_CONTACT_TYPES: { value: ContactFilterType; label: string }[] = [

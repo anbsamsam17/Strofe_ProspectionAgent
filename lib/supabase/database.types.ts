@@ -86,6 +86,7 @@ export type Database = {
           enriched_at: string | null
           archived_at: string | null
           notes: string | null
+          priorite: string
           created_at: string
           updated_at: string
         }
@@ -116,6 +117,8 @@ export type Database = {
           score_details?: Json
           signaux?: Json
           statut?: string
+          /** Migration 009 — defaut DB 'moyenne'. */
+          priorite?: string
           source?: string
           enriched_at?: string | null
           archived_at?: string | null
@@ -148,6 +151,8 @@ export type Database = {
           score_details?: Json
           signaux?: Json
           statut?: string
+          /** Migration 009. */
+          priorite?: string
           enriched_at?: string | null
           archived_at?: string | null
           notes?: string | null
@@ -265,6 +270,115 @@ export type Database = {
           },
           {
             foreignKeyName: "daily_list_items_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
+      prospect_contacts: {
+        Row: {
+          id: string
+          user_id: string
+          prospect_id: string
+          nom: string | null
+          prenom: string | null
+          poste: string | null
+          telephone: string | null
+          email: string | null
+          linkedin: string | null
+          source: string | null
+          is_primary: boolean
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          prospect_id: string
+          nom?: string | null
+          prenom?: string | null
+          poste?: string | null
+          telephone?: string | null
+          email?: string | null
+          linkedin?: string | null
+          source?: string | null
+          is_primary?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          nom?: string | null
+          prenom?: string | null
+          poste?: string | null
+          telephone?: string | null
+          email?: string | null
+          linkedin?: string | null
+          source?: string | null
+          is_primary?: boolean
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "prospect_contacts_prospect_id_fkey"
+            columns: ["prospect_id"]
+            isOneToOne: false
+            referencedRelation: "prospects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "prospect_contacts_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
+      prospect_exchanges: {
+        Row: {
+          id: string
+          user_id: string
+          prospect_id: string
+          occurred_at: string
+          type: string
+          result: string | null
+          notes: string | null
+          callback_date: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          prospect_id: string
+          occurred_at?: string
+          type: string
+          result?: string | null
+          notes?: string | null
+          callback_date?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          occurred_at?: string
+          type?: string
+          result?: string | null
+          notes?: string | null
+          callback_date?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "prospect_exchanges_prospect_id_fkey"
+            columns: ["prospect_id"]
+            isOneToOne: false
+            referencedRelation: "prospects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "prospect_exchanges_user_id_fkey"
             columns: ["user_id"]
             isOneToOne: false
             referencedRelation: "users"

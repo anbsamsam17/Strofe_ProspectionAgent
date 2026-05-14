@@ -5,38 +5,36 @@
 // d'un prospect cliqué dans le Kanban /pipeline.
 //
 // Contenu :
-//   - Header : raison sociale + statut + bouton fermer + lien fiche complète
+//   - Header : raison sociale + statut + bouton fermer
+//   - Dropdowns Statut + Priorité (édition rapide)
 //   - Score : barre + valeur + décomposition compact
 //   - Identité : SIREN (mono-fonte, copie au clic), secteur, ville, effectif
 //   - Contact : nom, poste, téléphone (tel:), email (mailto:), LinkedIn
 //   - BEGES : badge publié/expiré/absent + date + lien deep ADEME
 //   - Notes : <ProspectNotes> (auto-save 800ms debounce)
-//   - Footer : boutons Précédent / Suivant statut (PATCH /api/prospects/[id])
+//   - Footer : CTA "Voir le détail complet →"
 //
 // Ouverture/fermeture :
 //   - Slide-in via translate-x (Tailwind utility, durée 300ms)
 //   - Overlay bg-black/40 cliquable
 //   - Touche Escape ferme
-//   - Focus trap minimal (autoFocus bouton fermer)
 // ============================================================
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
-import type { Prospect, ProspectStatus, ScoreDetails } from '@/lib/types'
+import type {
+  Priority,
+  Prospect,
+  ProspectStatus,
+  ScoreDetails,
+} from '@/lib/types'
 import { buildBegesUrl } from '@/lib/utils/beges-url'
 import { ProspectNotes } from '@/components/prospects/prospect-notes'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-interface PipelineColumn {
-  status: ProspectStatus
-  label: string
-  color: string
-}
-
 interface KanbanSidePanelProps {
   prospect: Prospect
-  columns: PipelineColumn[]
   open: boolean
   onClose: () => void
   onStatusChange: (id: string, newStatus: ProspectStatus) => void
@@ -44,29 +42,10 @@ interface KanbanSidePanelProps {
 
 // ── Constantes ────────────────────────────────────────────────────────────────
 
-// Chaîne canonique : sourced → qualified → contacted → rdv → converted.
-// "interested" rebascule en avant vers contacted (signal d'intérêt → on rappelle),
-// en arrière vers qualified (on requalifie le besoin).
-const NEXT_STATUS: Partial<Record<ProspectStatus, ProspectStatus>> = {
-  sourced: 'qualified',
-  qualified: 'contacted',
-  interested: 'contacted',
-  contacted: 'rdv',
-  rdv: 'converted',
-}
-
-const PREV_STATUS: Partial<Record<ProspectStatus, ProspectStatus>> = {
-  qualified: 'sourced',
-  interested: 'qualified',
-  contacted: 'qualified',
-  rdv: 'contacted',
-  converted: 'rdv',
-}
-
-// Labels et couleurs des statuts dans la pill du header.
+// Labels alignés sur les colonnes du Kanban (spec utilisateur).
 const STATUS_LABELS: Record<ProspectStatus, { label: string; badge: string; dot: string }> = {
   sourced: {
-    label: 'Sourcé',
+    label: 'Pas de contact identifié',
     badge: 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300',
     dot: 'bg-gray-400',
   },
@@ -75,58 +54,93 @@ const STATUS_LABELS: Record<ProspectStatus, { label: string; badge: string; dot:
     badge: 'bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-400',
     dot: 'bg-blue-500',
   },
-  interested: {
-    label: 'Intéressé',
-    badge: 'bg-green-100 text-green-700 dark:bg-green-950 dark:text-green-400',
-    dot: 'bg-green-500',
-  },
   contacted: {
     label: 'Contacté',
     badge: 'bg-yellow-100 text-yellow-700 dark:bg-yellow-950 dark:text-yellow-400',
     dot: 'bg-yellow-500',
   },
+  interested: {
+    label: 'Intéressé',
+    badge: 'bg-green-100 text-green-700 dark:bg-green-950 dark:text-green-400',
+    dot: 'bg-green-500',
+  },
+  // `rdv` (legacy) reste géré ici pour ne pas casser les prospects existants.
   rdv: {
     label: 'RDV',
     badge: 'bg-purple-100 text-purple-700 dark:bg-purple-950 dark:text-purple-400',
     dot: 'bg-purple-500',
   },
+  offer_sent: {
+    label: 'Offre envoyée',
+    badge: 'bg-indigo-100 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-400',
+    dot: 'bg-indigo-500',
+  },
   converted: {
-    label: 'Converti',
-    badge: 'bg-green-100 text-green-700 dark:bg-green-950 dark:text-green-400',
-    dot: 'bg-green-500',
+    label: 'Affaire conclue',
+    badge: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-400',
+    dot: 'bg-emerald-500',
   },
   rejected: {
-    label: 'Rejeté',
+    label: 'Sans suite',
     badge: 'bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-400',
     dot: 'bg-red-500',
   },
   on_hold: {
-    label: 'En pause',
+    label: 'En stand-by',
     badge: 'bg-orange-100 text-orange-700 dark:bg-orange-950 dark:text-orange-400',
     dot: 'bg-orange-500',
   },
 }
 
-// BEGES : 4 ans de validité (cadre réglementaire ABC). Au-delà → "expiré".
-// Note : prospect.beges_valide est déjà calculé côté scoring, on l'utilise direct.
+// Statuts proposés dans le dropdown (ordre = ordre des colonnes Kanban).
+// TODO(coord-A): inclure `offer_sent` une fois ajouté à `ProspectStatus`.
+const STATUS_OPTIONS: ProspectStatus[] = [
+  'sourced',
+  'qualified',
+  'contacted',
+  'interested',
+  'converted',
+  'rejected',
+  'on_hold',
+]
+
+const PRIORITY_LABELS: Record<Priority, { label: string; badge: string }> = {
+  haute: {
+    label: 'Haute',
+    badge: 'bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-400',
+  },
+  moyenne: {
+    label: 'Moyenne',
+    badge: 'bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-400',
+  },
+  basse: {
+    label: 'Basse',
+    badge: 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-400',
+  },
+}
+
+const PRIORITY_OPTIONS: Priority[] = ['haute', 'moyenne', 'basse']
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function formatScoreDetailLabel(key: keyof ScoreDetails): string {
-  const labels: Record<keyof ScoreDetails, string> = {
-    obligation_beges: 'Obligation BEGES',
-    secteur_prioritaire: 'Secteur prioritaire',
-    beges_non_publie: 'BEGES non publié',
-    beges_expire: 'BEGES expiré',
-    signaux_intention: 'Signaux d’intention',
-    taille_entreprise: 'Taille',
-    contact_trouve: 'Contact trouvé',
-    secteur_beges_mature: 'Secteur mature',
-    bonus_infraction_legale: 'Bonus infraction L. 229-25',
-    penalite_deja_contacte: 'Déjà contacté',
-    penalite_rejete: 'Rejeté',
-  }
-  return labels[key]
+// 3 piliers scoring + pénalités (refonte 2026-05-14). Les anciens champs
+// (obligation_beges, secteur_prioritaire, …) restent dans ScoreDetails marqués
+// `@deprecated optional` côté lib/types.ts pour rétrocompat — on ne les affiche
+// plus. `weights` est un objet de pondérations, exclu aussi.
+type ScoreDetailKey = 'taille' | 'beges' | 'contact' | 'deja_contacte_penalty' | 'rejete_penalty'
+
+const SCORE_DETAIL_LABELS: Record<ScoreDetailKey, string> = {
+  taille: 'Taille',
+  beges: 'BEGES',
+  contact: 'Contact',
+  deja_contacte_penalty: 'Déjà contacté',
+  rejete_penalty: 'Rejeté',
+}
+
+const SCORE_DETAIL_KEYS = new Set<string>(Object.keys(SCORE_DETAIL_LABELS))
+
+function formatScoreDetailLabel(key: ScoreDetailKey): string {
+  return SCORE_DETAIL_LABELS[key]
 }
 
 function formatDate(iso: string | undefined): string | null {
@@ -134,6 +148,16 @@ function formatDate(iso: string | undefined): string | null {
   const date = new Date(iso)
   if (Number.isNaN(date.getTime())) return null
   return new Intl.DateTimeFormat('fr-FR', { day: '2-digit', month: 'short', year: 'numeric' }).format(date)
+}
+
+// Prospect.priorite n'existe pas encore (Agent A). On dérive une priorité par
+// défaut depuis `score_priorite` pour piloter l'UI tant que la colonne DB n'est
+// pas créée. Seuils alignés sur ceux des badges score : ≥75 haute, ≥50 normale.
+// TODO(coord-A): lire prospect.priorite quand la colonne sera disponible.
+function derivePriority(prospect: Prospect): Priority {
+  if (prospect.score_priorite >= 75) return 'haute'
+  if (prospect.score_priorite >= 50) return 'moyenne'
+  return 'basse'
 }
 
 // ── Sous-composants ───────────────────────────────────────────────────────────
@@ -207,12 +231,202 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   )
 }
 
+// Dropdown maison — Tailwind brut, pas de Radix. Ferme au clic extérieur + Escape.
+// TODO(coord-D): remplacer par <StatusDropdown> partagé une fois mergé.
+function StatusInlineDropdown({
+  prospectId,
+  currentStatut,
+  onChange,
+  disabled,
+}: {
+  prospectId: string
+  currentStatut: ProspectStatus
+  onChange: (id: string, newStatus: ProspectStatus) => void
+  disabled?: boolean
+}) {
+  const [open, setOpen] = useState(false)
+  const [pending, setPending] = useState<ProspectStatus | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const containerRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!open) return
+    function onClickAway(e: MouseEvent) {
+      if (!containerRef.current?.contains(e.target as Node)) setOpen(false)
+    }
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') setOpen(false)
+    }
+    document.addEventListener('mousedown', onClickAway)
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('mousedown', onClickAway)
+      document.removeEventListener('keydown', onKey)
+    }
+  }, [open])
+
+  async function select(newStatus: ProspectStatus) {
+    if (newStatus === currentStatut) {
+      setOpen(false)
+      return
+    }
+    setPending(newStatus)
+    setError(null)
+    try {
+      const res = await fetch(`/api/prospects/${prospectId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ statut: newStatus }),
+      })
+      if (!res.ok) {
+        const data = (await res.json().catch(() => ({}))) as { error?: string }
+        throw new Error(data.error ?? 'Erreur lors du changement de statut')
+      }
+      onChange(prospectId, newStatus)
+      setOpen(false)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Erreur inconnue')
+    } finally {
+      setPending(null)
+    }
+  }
+
+  const current = STATUS_LABELS[currentStatut]
+
+  return (
+    <div ref={containerRef} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        disabled={disabled || pending !== null}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        aria-label={`Changer le statut (actuel : ${current.label})`}
+        className="inline-flex w-full items-center justify-between gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-900 transition-colors hover:border-gray-300 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-700 dark:bg-gray-900 dark:text-white dark:hover:border-gray-600"
+      >
+        <span className="flex items-center gap-2">
+          <span className={`h-2 w-2 rounded-full ${current.dot}`} aria-hidden="true" />
+          {current.label}
+        </span>
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          width="14"
+          height="14"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          aria-hidden="true"
+          className={`transition-transform ${open ? 'rotate-180' : ''}`}
+        >
+          <polyline points="6 9 12 15 18 9" />
+        </svg>
+      </button>
+
+      {open && (
+        <ul
+          role="listbox"
+          aria-label="Statuts disponibles"
+          className="absolute left-0 right-0 top-full z-10 mt-1 max-h-60 overflow-auto rounded-lg border border-gray-200 bg-white py-1 shadow-lg dark:border-gray-700 dark:bg-gray-900"
+        >
+          {STATUS_OPTIONS.map((opt) => {
+            const info = STATUS_LABELS[opt]
+            const isCurrent = opt === currentStatut
+            const isPending = pending === opt
+            return (
+              <li key={opt}>
+                <button
+                  type="button"
+                  role="option"
+                  aria-selected={isCurrent}
+                  disabled={isPending}
+                  onClick={() => select(opt)}
+                  className={`flex w-full items-center justify-between gap-2 px-3 py-1.5 text-left text-sm transition-colors hover:bg-gray-50 disabled:opacity-50 dark:hover:bg-gray-800 ${
+                    isCurrent
+                      ? 'font-semibold text-green-700 dark:text-green-400'
+                      : 'text-gray-700 dark:text-gray-200'
+                  }`}
+                >
+                  <span className="flex items-center gap-2">
+                    <span className={`h-2 w-2 rounded-full ${info.dot}`} aria-hidden="true" />
+                    {info.label}
+                  </span>
+                  {isCurrent && (
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      width="13"
+                      height="13"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2.5"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      aria-hidden="true"
+                    >
+                      <polyline points="20 6 9 17 4 12" />
+                    </svg>
+                  )}
+                </button>
+              </li>
+            )
+          })}
+        </ul>
+      )}
+
+      {error && (
+        <p
+          role="alert"
+          className="mt-2 rounded-md bg-red-50 px-2 py-1 text-xs text-red-700 dark:bg-red-950/50 dark:text-red-400"
+        >
+          {error}
+        </p>
+      )}
+    </div>
+  )
+}
+
+// Priorité : dropdown local — la colonne `priorite` n'existe pas encore en DB
+// pour la table `prospects` (seul DailyListItem la porte). On le présente en
+// read-only avec un indicateur "dérivé du score" pour le moment.
+// TODO(coord-A+D): brancher sur PATCH /api/prospects/[id] { priorite } + colonne DB.
+function PriorityInlineDropdown({ priorite }: { priorite: Priority }) {
+  const current = PRIORITY_LABELS[priorite]
+  return (
+    <div className="space-y-1">
+      <div className="flex w-full items-center justify-between gap-2 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm font-medium text-gray-900 dark:border-gray-700 dark:bg-gray-900/50 dark:text-white">
+        <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs ${current.badge}`}>
+          {current.label}
+        </span>
+        <span className="text-[10px] uppercase tracking-wide text-gray-400 dark:text-gray-600">
+          dérivée du score
+        </span>
+      </div>
+      {/* Options visuelles non interactives — placeholder UX en attendant la colonne DB. */}
+      <div className="hidden">
+        {PRIORITY_OPTIONS.map((opt) => (
+          <span key={opt}>{opt}</span>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 function ScoreSection({ prospect }: { prospect: Prospect }) {
   const score = prospect.score_priorite
   const details = prospect.score_details
-  const nonZeroDetails = details
-    ? (Object.entries(details) as [keyof ScoreDetails, number][])
-        .filter(([, v]) => v !== 0)
+  // On filtre sur les 3 piliers + 2 pénalités courants (cf. SCORE_DETAIL_KEYS).
+  // Les champs legacy de ScoreDetails (@deprecated) et `weights` (objet) sont ignorés.
+  const nonZeroDetails: [ScoreDetailKey, number][] = details
+    ? (Object.entries(details) as [string, unknown][])
+        .filter(
+          (entry): entry is [ScoreDetailKey, number] =>
+            SCORE_DETAIL_KEYS.has(entry[0]) &&
+            typeof entry[1] === 'number' &&
+            entry[1] !== 0,
+        )
         .sort((a, b) => Math.abs(b[1]) - Math.abs(a[1]))
         .slice(0, 5)
     : []
@@ -428,20 +642,17 @@ function BegesSection({ prospect }: { prospect: Prospect }) {
   if (!prospect.beges_publie) {
     badge = {
       label: 'Absent',
-      classes:
-        'bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-400',
+      classes: 'bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-400',
     }
   } else if (prospect.beges_valide === false) {
     badge = {
       label: 'Expiré',
-      classes:
-        'bg-orange-100 text-orange-700 dark:bg-orange-950 dark:text-orange-400',
+      classes: 'bg-orange-100 text-orange-700 dark:bg-orange-950 dark:text-orange-400',
     }
   } else {
     badge = {
       label: 'Publié',
-      classes:
-        'bg-green-100 text-green-700 dark:bg-green-950 dark:text-green-400',
+      classes: 'bg-green-100 text-green-700 dark:bg-green-950 dark:text-green-400',
     }
   }
 
@@ -493,14 +704,10 @@ function BegesSection({ prospect }: { prospect: Prospect }) {
 
 export function KanbanSidePanel({
   prospect,
-  columns,
   open,
   onClose,
   onStatusChange,
 }: KanbanSidePanelProps) {
-  const [pendingStatus, setPendingStatus] = useState<ProspectStatus | null>(null)
-  const [error, setError] = useState<string | null>(null)
-
   // Touche Escape pour fermer.
   useEffect(() => {
     if (!open) return
@@ -511,46 +718,9 @@ export function KanbanSidePanel({
     return () => document.removeEventListener('keydown', onKey)
   }, [open, onClose])
 
-  // Reset l'erreur quand on change de prospect.
-  useEffect(() => {
-    setError(null)
-    setPendingStatus(null)
-  }, [prospect.id])
-
-  async function transitionTo(newStatus: ProspectStatus) {
-    setPendingStatus(newStatus)
-    setError(null)
-    try {
-      const res = await fetch(`/api/prospects/${prospect.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ statut: newStatus }),
-      })
-      if (!res.ok) {
-        const data = (await res.json().catch(() => ({}))) as { error?: string }
-        throw new Error(data.error ?? 'Erreur lors du changement de statut')
-      }
-      onStatusChange(prospect.id, newStatus)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Erreur inconnue')
-    } finally {
-      setPendingStatus(null)
-    }
-  }
-
   const status = prospect.statut
   const statusInfo = STATUS_LABELS[status]
-  const nextStatus = NEXT_STATUS[status]
-  const prevStatus = PREV_STATUS[status]
-  const prevLabel = prevStatus ? STATUS_LABELS[prevStatus]?.label : null
-  const nextLabel = nextStatus ? STATUS_LABELS[nextStatus]?.label : null
-  const isPending = pendingStatus !== null
-
-  // Justifie que columns soit reçu : on l'utilise pour valider l'existence de la
-  // colonne cible (sécurise les transitions vers un statut hors visible). En
-  // pratique, prev/next sont des statuts canoniques ; columns sert au futur si
-  // on veut afficher dynamiquement la liste des cibles possibles.
-  void columns
+  const priorite = derivePriority(prospect)
 
   return (
     <div
@@ -595,29 +765,6 @@ export function KanbanSidePanel({
                 />
                 {statusInfo.label}
               </span>
-              <Link
-                href={`/prospects/${prospect.id}`}
-                className="inline-flex items-center gap-1 text-xs font-medium text-blue-600 hover:underline dark:text-blue-400"
-                aria-label={`Voir la fiche complète de ${prospect.raison_sociale}`}
-              >
-                Plus de détails
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  width="11"
-                  height="11"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  aria-hidden="true"
-                >
-                  <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
-                  <polyline points="15 3 21 3 21 9" />
-                  <line x1="10" y1="14" x2="21" y2="3" />
-                </svg>
-              </Link>
             </div>
           </div>
           <button
@@ -646,6 +793,28 @@ export function KanbanSidePanel({
 
         {/* Corps scrollable */}
         <div className="flex-1 overflow-y-auto">
+          {/* Dropdowns Statut + Priorité — édition rapide en tête de panneau. */}
+          <Section title="Pipeline">
+            <div className="space-y-3">
+              <div>
+                <p className="mb-1.5 text-[11px] font-medium uppercase tracking-wider text-gray-400 dark:text-gray-600">
+                  Statut
+                </p>
+                <StatusInlineDropdown
+                  prospectId={prospect.id}
+                  currentStatut={status}
+                  onChange={onStatusChange}
+                />
+              </div>
+              <div>
+                <p className="mb-1.5 text-[11px] font-medium uppercase tracking-wider text-gray-400 dark:text-gray-600">
+                  Priorité
+                </p>
+                <PriorityInlineDropdown priorite={priorite} />
+              </div>
+            </div>
+          </Section>
+
           <ScoreSection prospect={prospect} />
           <IdentitySection prospect={prospect} />
           <ContactSection prospect={prospect} />
@@ -658,91 +827,32 @@ export function KanbanSidePanel({
               initialNotes={prospect.notes ?? null}
             />
           </Section>
-
-          {/* Historique appels — pas de route dédiée encore, on renvoie sur la fiche. */}
-          <Section title="Historique d'appels">
-            <Link
-              href={`/prospects/${prospect.id}#history`}
-              className="inline-flex items-center gap-1.5 text-sm font-medium text-blue-600 hover:underline dark:text-blue-400"
-            >
-              Voir la fiche complète
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                width="12"
-                height="12"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                aria-hidden="true"
-              >
-                <line x1="5" y1="12" x2="19" y2="12" />
-                <polyline points="12 5 19 12 12 19" />
-              </svg>
-            </Link>
-          </Section>
         </div>
 
-        {/* Footer fixe — transitions prev/next */}
+        {/* Footer fixe — CTA primaire vers la fiche complète. */}
         <footer className="border-t border-gray-200 bg-gray-50 px-5 py-3 dark:border-gray-800 dark:bg-gray-900/50">
-          {error && (
-            <p
-              role="alert"
-              className="mb-2 rounded-md bg-red-50 px-3 py-1.5 text-xs text-red-700 dark:bg-red-950/50 dark:text-red-400"
+          <Link
+            href={`/prospects/${prospect.id}`}
+            aria-label={`Voir le détail complet de ${prospect.raison_sociale}`}
+            className="flex w-full items-center justify-center gap-1.5 rounded-lg bg-green-600 px-3 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-green-700"
+          >
+            Voir le détail complet
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
             >
-              {error}
-            </p>
-          )}
-          <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={() => prevStatus && transitionTo(prevStatus)}
-              disabled={!prevStatus || isPending}
-              aria-label={prevLabel ? `Rétrograder vers ${prevLabel}` : 'Aucun statut précédent'}
-              className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-700 transition-colors hover:border-gray-300 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200 dark:hover:border-gray-600 dark:hover:bg-gray-800"
-            >
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                width="13"
-                height="13"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                aria-hidden="true"
-              >
-                <polyline points="15 18 9 12 15 6" />
-              </svg>
-              {prevLabel ?? 'Précédent'}
-            </button>
-            <button
-              type="button"
-              onClick={() => nextStatus && transitionTo(nextStatus)}
-              disabled={!nextStatus || isPending}
-              aria-label={nextLabel ? `Avancer vers ${nextLabel}` : 'Aucun statut suivant'}
-              className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-green-600 px-3 py-2 text-sm font-semibold text-white transition-colors hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              {nextLabel ?? 'Suivant'}
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                width="13"
-                height="13"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                aria-hidden="true"
-              >
-                <polyline points="9 18 15 12 9 6" />
-              </svg>
-            </button>
-          </div>
+              <line x1="5" y1="12" x2="19" y2="12" />
+              <polyline points="12 5 19 12 12 19" />
+            </svg>
+          </Link>
         </footer>
       </aside>
     </div>

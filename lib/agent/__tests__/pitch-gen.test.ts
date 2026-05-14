@@ -49,17 +49,14 @@ function makeProspect(overrides: Partial<Prospect> = {}): Prospect {
     beges_derniere_publication: '2020-03-15',
     score_priorite: 80,
     score_details: {
-      obligation_beges: 30,
-      secteur_prioritaire: 20,
-      beges_non_publie: 0,    // BEGES publié → 0 (le bonus est dans beges_expire)
-      beges_expire: 25,        // BEGES expiré (beges_valide=false) — tuning 2026-05-13
-      signaux_intention: 5,
-      taille_entreprise: 10,   // effectif 999 → tranche 800-1999 (tuning 2026-05-13)
-      contact_trouve: 10,      // tuning 2026-05-13 : 5 → 10
-      secteur_beges_mature: 0, // NAF "47.11F" non mature dans cette fixture
-      bonus_infraction_legale: 0, // BEGES publié → pas d'infraction L. 229-25 (tuning 2026-05-13)
-      penalite_deja_contacte: 0,
-      penalite_rejete: 0,
+      // Refonte 2026-05-14 — 3 piliers (taille / beges / contact) + weights + pénalités.
+      // Fixture cohérente avec : BEGES publié+expiré (100), effectif 999 (~80), tel (100).
+      taille: 80,
+      beges: 100,
+      contact: 100,
+      weights: { taille: 30, beges: 30, contact: 40 },
+      deja_contacte_penalty: 0,
+      rejete_penalty: 0,
     },
     signaux: [],
     statut: 'sourced',

@@ -11,7 +11,10 @@ export type ProspectStatus =
   | 'qualified'
   | 'contacted'
   | 'interested'
+  /** Legacy — conservé pour rétrocompat, n'est plus affiché dans le nouveau Kanban. */
   | 'rdv'
+  /** NEW (migration 010) : offre/devis envoyé, en attente de signature. */
+  | 'offer_sent'
   | 'converted'
   | 'rejected'
   | 'on_hold'
@@ -26,7 +29,29 @@ export type CallResult =
   | 'email_sent'
   | 'no_contact_point'
 
-export type Priority = 'haute' | 'normale' | 'basse'
+/**
+ * Priorité qualitative — valeurs canoniques de la refonte UI (migration 009).
+ * Utilisée par `Prospect.priorite` (édition manuelle utilisateur) et par
+ * `determinerPriorite()` dans `lib/agent/scoring.ts`.
+ *
+ * ATTENTION : `'normale'` a été remplacé par `'moyenne'`. La valeur historique
+ * `'normale'` reste exposée uniquement via `CallPriority` pour
+ * `DailyListItem.priorite` (enum DB `public.call_priority` non migré).
+ */
+export type Priority = 'haute' | 'moyenne' | 'basse'
+
+/**
+ * Priorité legacy pour `daily_list_items.priorite` (enum DB `public.call_priority`,
+ * défini en migration 001_initial.sql). `'normale'` est sémantiquement équivalent
+ * à `'moyenne'` côté nouvelle UI.
+ */
+export type CallPriority = 'haute' | 'normale' | 'basse'
+
+/**
+ * Alias explicite de `Priority` utilisé par les composants UI d'édition manuelle
+ * (`<PriorityDropdown>`). Distinct de `CallPriority` (legacy daily_list_items).
+ */
+export type ManualPriority = Priority
 
 export type DailyListStatus = 'pending' | 'generating' | 'ready' | 'completed'
 
@@ -58,6 +83,22 @@ export interface ProfileSettings {
   daily_call_target: number
   notification_email?: string
   offer_description?: string
+  /**
+   * Pondération des 3 piliers de scoring (somme attendue = 100).
+   * Défauts 30/30/40 (taille/BEGES/contact) — voir lib/agent/scoring.ts.
+   * Normalisée systématiquement à l'usage (re-projection si user fournit 25/25/25).
+   */
+  scoring_weights?: ScoringWeights
+}
+
+/**
+ * Pondération des piliers de scoring (taille, BEGES, contact).
+ * Somme attendue = 100 après normalisation par `normalizeScoringWeights`.
+ */
+export interface ScoringWeights {
+  taille: number
+  beges: number
+  contact: number
 }
 
 export interface Prospect {
@@ -98,6 +139,15 @@ export interface Prospect {
   score_details: ScoreDetails
   signaux: IntentionSignal[]
   statut: ProspectStatus
+  /**
+   * Priorité qualitative éditable manuellement par l'utilisateur (migration 009).
+   * Distincte de `score_priorite` (calculé). Défaut DB : `'moyenne'`, backfill
+   * initial dérivé de `score_priorite` (≥60 → haute, ≥30 → moyenne, sinon basse).
+   *
+   * Optionnel côté TS pour rester compatible avec les fixtures de tests
+   * pré-migration et les select() partiels.
+   */
+  priorite?: Priority
   source: string
   enriched_at?: string
   /** Horodatage de mise en archive — NULL/undefined = prospect actif. */
@@ -108,24 +158,69 @@ export interface Prospect {
   updated_at: string
 }
 
+/**
+ * Décomposition du score composite par pilier (0-100 avant pondération).
+ *
+ * Refonte 2026-05-14 — voir lib/agent/scoring.ts pour la logique de calcul.
+ *
+ * Les 3 piliers sont des sous-scores indépendants 0-100. Le score final
+ * (0-100) résulte de leur somme pondérée par `weights` (somme=100).
+ * Les pénalités déjà-contacté et rejeté sont appliquées hors piliers.
+ */
 export interface ScoreDetails {
+  // ── Refonte 3 piliers (NEW — calculés par lib/agent/scoring.ts) ───────────
+  /** Sous-score taille (effectif salarié) — 0-100 avant pondération. */
+  taille: number
+  /** Sous-score BEGES (infraction L. 229-25 / expiré / anticipation) — 0-100. */
+  beges: number
+  /** Sous-score contact (téléphone > email > LinkedIn) — 0-100. */
+  contact: number
+  /** Pondération effectivement appliquée (somme = 100 après normalisation). */
+  weights: ScoringWeights
+  /** Pénalité si prospect déjà contacté (-20 ou 0). */
+  deja_contacte_penalty: number
+  /** Pénalité si prospect statut=rejected (-50 ou 0). */
+  rejete_penalty: number
+
+  // ── Champs LEGACY — rétrocompat UI page détail prospect (Agent D refactorera) ─
+  /** @deprecated absorbé dans `beges`. Conservé pour les lignes pré-migration. */
+  obligation_beges?: number
+  /** @deprecated absorbé dans `beges` / `contact`. */
+  secteur_prioritaire?: number
+  /** @deprecated remplacé par `beges`. */
+  beges_non_publie?: number
+  /** @deprecated remplacé par `beges`. */
+  beges_expire?: number
+  /** @deprecated retiré du nouveau scoring 3 piliers. */
+  signaux_intention?: number
+  /** @deprecated remplacé par `taille`. */
+  taille_entreprise?: number
+  /** @deprecated remplacé par `contact`. */
+  contact_trouve?: number
+  /** @deprecated absorbé dans `beges`. */
+  secteur_beges_mature?: number
+  /** @deprecated remplacé par `beges`. */
+  bonus_infraction_legale?: number
+  /** @deprecated remplacé par `deja_contacte_penalty`. */
+  penalite_deja_contacte?: number
+  /** @deprecated remplacé par `rejete_penalty`. */
+  penalite_rejete?: number
+}
+
+/**
+ * Ancienne forme de `ScoreDetails` (avant refonte 2026-05-14). Conservée comme
+ * alias pour le code applicatif qui en dépend encore (page détail prospect).
+ * Sera retirée après refonte par Agent D.
+ */
+export interface LegacyScoreDetails {
   obligation_beges: number
   secteur_prioritaire: number
-  /** Points pour BEGES jamais publié (beges_publie = false). Mutuellement exclusif avec beges_expire. */
   beges_non_publie: number
-  /** Points pour BEGES publié mais expiré (>4 ans). Cible la plus chaude commercialement. */
   beges_expire: number
   signaux_intention: number
   taille_entreprise: number
   contact_trouve: number
-  /** Bonus si le secteur NAF est déjà acculturé au BEGES (santé / transport routier / agro-alimentaire). */
   secteur_beges_mature: number
-  /**
-   * Bonus combinatoire (+20) si l'entreprise est OBLIGÉE au BEGES (≥500 salariés ou Région ≥250)
-   * MAIS n'a publié AUCUN bilan sur l'ADEME (beges_publie=false). Profil "infraction Article L. 229-25"
-   * — lead le plus chaud du marché (amende jusqu'à 10 000 € par BEGES manquant).
-   * Mutuellement exclusif avec `beges_expire` (qui couvre les BEGES publiés mais expirés, hors infraction).
-   */
   bonus_infraction_legale: number
   penalite_deja_contacte: number
   penalite_rejete: number
@@ -295,3 +390,81 @@ export interface ApiError {
 }
 
 export type ApiResponse<T> = ApiSuccess<T> | ApiError
+
+// ------------------------------------------------------------
+// CONSTANTES PARTAGÉES
+// ------------------------------------------------------------
+
+/**
+ * Pondération par défaut des 3 piliers de scoring (somme = 100).
+ * Surchargeable via `profile.settings.scoring_weights`.
+ *
+ * Choix 2026-05-14 :
+ *   - Contact 40 % : sans canal direct, pas de conversion.
+ *   - Taille 30 % et BEGES 30 % : à parité (obligation potentielle / effective).
+ */
+export const DEFAULT_SCORING_WEIGHTS: ScoringWeights = {
+  taille: 30,
+  beges: 30,
+  contact: 40,
+}
+
+// ------------------------------------------------------------
+// MULTI-CONTACTS (migration 011_prospect_contacts)
+// ------------------------------------------------------------
+
+/**
+ * Contact multiple attaché à un prospect (DAF, RSE, Assistant DG, etc.).
+ * Étend le modèle initial qui stockait UN seul contact dans `prospects.contact_*`.
+ *
+ * `is_primary` : un seul TRUE par prospect (assuré par index unique partiel
+ * `prospect_contacts_one_primary_idx`).
+ */
+export interface ProspectContact {
+  id: string
+  user_id: string
+  prospect_id: string
+  nom?: string
+  prenom?: string
+  poste?: string
+  telephone?: string
+  email?: string
+  linkedin?: string
+  /** Origine : 'pappers', 'hunter', 'recherche_entreprises', 'manual', etc. */
+  source?: string
+  is_primary: boolean
+  created_at: string
+  updated_at: string
+}
+
+// ------------------------------------------------------------
+// HISTORIQUE D'ÉCHANGES (migration 012_prospect_exchanges)
+// ------------------------------------------------------------
+
+/**
+ * Type d'échange dans le fil chronologique d'un prospect.
+ * Aligné sur le CHECK constraint de `prospect_exchanges.type`.
+ */
+export type ExchangeType = 'appel' | 'email' | 'linkedin' | 'rdv' | 'autre'
+
+/**
+ * Journal libre des échanges manuels avec un prospect (hors `daily_list_items`).
+ * Capture emails envoyés, messages LinkedIn, rdv planifiés ad hoc, etc.
+ */
+export interface ProspectExchange {
+  id: string
+  user_id: string
+  prospect_id: string
+  /** Horodatage effectif (≠ `created_at` qui est l'horodatage de saisie). */
+  occurred_at: string
+  type: ExchangeType
+  /**
+   * Résultat libre. Peut matcher `CallResult` (interested, callback, …) mais
+   * non contraint à l'enum pour rester souple (échanges email/linkedin).
+   */
+  result?: string
+  notes?: string
+  callback_date?: string
+  created_at: string
+  updated_at: string
+}

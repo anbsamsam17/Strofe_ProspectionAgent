@@ -1,29 +1,58 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+// ============================================================
+// PipelineClient — Kanban CRM avec drag & drop
+// ------------------------------------------------------------
+// 8 colonnes statiques (cf. PIPELINE_COLUMNS dans la page) :
+//   sourced · qualified · contacted · interested · offer_sent
+//   · converted · rejected · on_hold
+//
+// Drag & drop (@dnd-kit/core) :
+//   - PointerSensor distance=8 (évite les drags accidentels au clic).
+//   - KeyboardSensor avec sortableKeyboardCoordinates (a11y).
+//   - useDroppable par colonne, useDraggable par card.
+//   - Optimistic update local → PATCH /api/prospects/[id] → rollback si erreur.
+//   - DragOverlay : preview légèrement opaque + rotate-2.
+//
+// Click sur une card : ouvre le KanbanSidePanel (détails + dropdowns).
+// ============================================================
+
+import { useCallback, useId, useMemo, useState } from 'react'
+import {
+  DndContext,
+  DragOverlay,
+  KeyboardSensor,
+  PointerSensor,
+  pointerWithin,
+  useDraggable,
+  useDroppable,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+  type DragStartEvent,
+} from '@dnd-kit/core'
+import { sortableKeyboardCoordinates } from '@dnd-kit/sortable'
 import type { Prospect, ProspectStatus } from '@/lib/types'
 import { KanbanSidePanel } from './kanban-side-panel'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
+// `offer_sent` est un nouveau statut ajouté par Agent A à `ProspectStatus`. Tant
+// que ce merge n'a pas eu lieu, on type-élargit localement pour ne pas casser
+// le build des autres composants qui dépendent encore de l'enum existant.
+// TODO(coord-A): remplacer par ProspectStatus une fois `offer_sent` mergé.
+export type KanbanStatus = ProspectStatus | 'offer_sent'
+
 interface PipelineColumn {
-  status: ProspectStatus
+  status: KanbanStatus
   label: string
   color: string
 }
 
 interface PipelineClientProps {
   columns: PipelineColumn[]
-  prospectsByStatus: Record<ProspectStatus, Prospect[]>
+  prospectsByStatus: Record<KanbanStatus, Prospect[]>
 }
-
-// Colonnes d'archive — masquées par défaut, affichées via toggle.
-// On les déclare en local car la page n'en envoie que 5 visibles ; ces 2 colonnes
-// sont conceptuellement spécifiques au panneau "Archive" du Kanban.
-const ARCHIVE_COLUMNS: PipelineColumn[] = [
-  { status: 'rejected', label: 'Rejeté', color: 'red' },
-  { status: 'on_hold', label: 'En pause', color: 'orange' },
-]
 
 // ── Config couleurs ───────────────────────────────────────────────────────────
 
@@ -102,10 +131,25 @@ const COLUMN_STYLES: Record<
     cardHover: 'hover:border-orange-300 hover:shadow-md dark:hover:border-orange-700',
     accent: 'bg-orange-500',
   },
+  indigo: {
+    header: 'bg-indigo-50 dark:bg-indigo-950/40',
+    headerText: 'text-indigo-800 dark:text-indigo-300',
+    dot: 'bg-indigo-500',
+    badge: 'bg-indigo-100 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-400',
+    card: 'border-indigo-100 dark:border-indigo-900/40',
+    cardHover: 'hover:border-indigo-300 hover:shadow-md dark:hover:border-indigo-700',
+    accent: 'bg-indigo-500',
+  },
+  emerald: {
+    header: 'bg-emerald-50 dark:bg-emerald-950/40',
+    headerText: 'text-emerald-800 dark:text-emerald-300',
+    dot: 'bg-emerald-500',
+    badge: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-400',
+    card: 'border-emerald-100 dark:border-emerald-900/40',
+    cardHover: 'hover:border-emerald-300 hover:shadow-md dark:hover:border-emerald-700',
+    accent: 'bg-emerald-500',
+  },
 }
-
-// Les chaînes de transition (prev/next) vivent maintenant dans kanban-side-panel.tsx
-// puisque c'est le seul endroit où on les déclenche.
 
 // ── Composant principal ───────────────────────────────────────────────────────
 
@@ -113,227 +157,163 @@ export function PipelineClient({
   columns,
   prospectsByStatus,
 }: PipelineClientProps) {
+  // État local du Kanban — optimistic updates.
   const [prospects, setProspects] = useState(prospectsByStatus)
   const [selectedProspect, setSelectedProspect] = useState<Prospect | null>(null)
-  const [showArchive, setShowArchive] = useState(false)
+  const [activeDragId, setActiveDragId] = useState<string | null>(null)
+  const [overColumn, setOverColumn] = useState<KanbanStatus | null>(null)
+  const [dragError, setDragError] = useState<string | null>(null)
 
-  // Fusion visuelle : les prospects "intéressés" sont rendus dans la colonne
-  // Qualifié, avec un badge "Intéressé" en plus. La logique de transition
-  // (PATCH /api/prospects/[id]) ne change pas — seule la présentation est fusionnée.
-  const displayedByColumn = useMemo<Record<ProspectStatus, Prospect[]>>(() => {
-    const merged: Record<ProspectStatus, Prospect[]> = {
-      ...prospects,
-      qualified: [
-        ...(prospects.qualified ?? []),
-        ...(prospects.interested ?? []),
-      ],
+  // Map id → Prospect pour retrouver rapidement la card draggée pendant l'overlay.
+  const prospectsById = useMemo(() => {
+    const map = new Map<string, Prospect>()
+    for (const list of Object.values(prospects)) {
+      for (const p of list) map.set(p.id, p)
     }
-    return merged
+    return map
   }, [prospects])
 
-  const archiveCount =
-    (prospects.rejected?.length ?? 0) + (prospects.on_hold?.length ?? 0)
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  )
 
-  const visibleColumns = showArchive ? [...columns, ...ARCHIVE_COLUMNS] : columns
+  const handleDragStart = useCallback((event: DragStartEvent) => {
+    setActiveDragId(String(event.active.id))
+    setDragError(null)
+  }, [])
 
-  function handleStatusChange(id: string, newStatus: ProspectStatus) {
-    setProspects((prev) => {
-      const updated = { ...prev }
-      // Retire le prospect de toutes les colonnes
-      for (const key of Object.keys(updated) as ProspectStatus[]) {
-        updated[key] = updated[key].filter((p) => p.id !== id)
+  const handleDragEnd = useCallback(
+    async (event: DragEndEvent) => {
+      const { active, over } = event
+      setActiveDragId(null)
+      setOverColumn(null)
+
+      if (!over) return
+
+      const prospectId = String(active.id)
+      const fromStatus = active.data.current?.fromStatus as KanbanStatus | undefined
+      const toStatus = over.id as KanbanStatus
+
+      if (!fromStatus || fromStatus === toStatus) return
+
+      // Snapshot pour rollback.
+      const snapshot = prospects
+
+      // Optimistic update : déplacer la card de fromStatus vers toStatus.
+      setProspects((prev) => {
+        const updated: Record<KanbanStatus, Prospect[]> = { ...prev }
+        const movingProspect = (prev[fromStatus] ?? []).find((p) => p.id === prospectId)
+        if (!movingProspect) return prev
+        updated[fromStatus] = (prev[fromStatus] ?? []).filter((p) => p.id !== prospectId)
+        updated[toStatus] = [
+          { ...movingProspect, statut: toStatus as ProspectStatus },
+          ...(prev[toStatus] ?? []),
+        ]
+        return updated
+      })
+
+      // PATCH côté serveur.
+      try {
+        const res = await fetch(`/api/prospects/${prospectId}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ statut: toStatus }),
+        })
+        if (!res.ok) {
+          const payload = (await res.json().catch(() => ({}))) as { error?: string }
+          throw new Error(payload.error ?? 'Erreur lors du changement de statut')
+        }
+      } catch (err) {
+        // Rollback + feedback minimal. Toast système maison à brancher post-merge.
+        setProspects(snapshot)
+        const message = err instanceof Error ? err.message : 'Erreur inconnue'
+        setDragError(message)
       }
-      // Cherche le prospect dans les données précédentes pour le mettre à jour
+    },
+    [prospects],
+  )
+
+  function handleStatusChange(id: string, newStatus: KanbanStatus) {
+    setProspects((prev) => {
+      const updated: Record<KanbanStatus, Prospect[]> = { ...prev }
+      for (const key of Object.keys(updated) as KanbanStatus[]) {
+        updated[key] = (updated[key] ?? []).filter((p) => p.id !== id)
+      }
       const allProspects = Object.values(prev).flat()
       const prospect = allProspects.find((p) => p.id === id)
       if (prospect) {
-        updated[newStatus] = [{ ...prospect, statut: newStatus }, ...updated[newStatus]]
+        updated[newStatus] = [
+          { ...prospect, statut: newStatus as ProspectStatus },
+          ...(updated[newStatus] ?? []),
+        ]
       }
       return updated
     })
   }
 
+  const activeProspect = activeDragId ? prospectsById.get(activeDragId) ?? null : null
+
   return (
     <>
-      {/* Barre Kanban — toggle archive à droite */}
-      <div className="mb-3 flex items-center justify-between gap-3">
-        <p className="text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
-          Kanban
-        </p>
-        <button
-          type="button"
-          onClick={() => setShowArchive((v) => !v)}
-          aria-pressed={showArchive}
-          aria-label={
-            showArchive
-              ? "Masquer l'archive"
-              : `Afficher l'archive (${archiveCount} prospects)`
-          }
-          className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-600 transition-colors hover:border-gray-300 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 dark:hover:border-gray-600 dark:hover:bg-gray-800"
+      {dragError && (
+        <div
+          role="alert"
+          className="mb-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-400"
         >
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            width="14"
-            height="14"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            aria-hidden="true"
-          >
-            <polyline points="21 8 21 21 3 21 3 8" />
-            <rect x="1" y="3" width="22" height="5" />
-            <line x1="10" y1="12" x2="14" y2="12" />
-          </svg>
-          {showArchive ? "Masquer l'archive" : `Voir l'archive`}
-          <span className="ml-1 rounded-full bg-gray-100 px-1.5 py-0.5 text-[10px] font-bold tabular-nums text-gray-600 dark:bg-gray-800 dark:text-gray-400">
-            {archiveCount}
-          </span>
-        </button>
-      </div>
+          {dragError}
+        </div>
+      )}
 
-      {/* Kanban — scroll horizontal */}
-      <div
-        className="flex gap-4 overflow-x-auto pb-6"
-        role="region"
-        aria-label="Pipeline CRM — vue kanban"
-        style={{ scrollSnapType: 'x mandatory' }}
+      <DndContext
+        sensors={sensors}
+        collisionDetection={pointerWithin}
+        onDragStart={handleDragStart}
+        onDragOver={(event) => {
+          setOverColumn((event.over?.id as KanbanStatus | undefined) ?? null)
+        }}
+        onDragCancel={() => {
+          setActiveDragId(null)
+          setOverColumn(null)
+        }}
+        onDragEnd={handleDragEnd}
       >
-        {visibleColumns.map((column) => {
-          const items = displayedByColumn[column.status] ?? []
-          const styles = COLUMN_STYLES[column.color] ?? COLUMN_STYLES.gray
+        {/* Kanban — scroll horizontal sur 8 colonnes */}
+        <div
+          className="flex gap-4 overflow-x-auto pb-6"
+          role="region"
+          aria-label="Pipeline CRM — vue kanban"
+        >
+          {columns.map((column) => {
+            const items = prospects[column.status] ?? []
+            const styles = COLUMN_STYLES[column.color] ?? COLUMN_STYLES.gray
+            const isOver = overColumn === column.status && activeDragId !== null
 
-          return (
-            <div
-              key={column.status}
-              className="flex w-[280px] flex-none flex-col gap-3 sm:w-[300px]"
-              role="group"
-              aria-label={`Colonne ${column.label} — ${items.length} prospect${items.length > 1 ? 's' : ''}`}
-              style={{ scrollSnapAlign: 'start' }}
-            >
-              {/* En-tête colonne */}
-              <div
-                className={`flex items-center justify-between rounded-xl px-3.5 py-2.5 ${styles.header}`}
-              >
-                <div className="flex items-center gap-2.5">
-                  <span
-                    className={`h-2.5 w-2.5 rounded-full ${styles.dot} shadow-sm`}
-                    aria-hidden="true"
-                  />
-                  <span className={`text-sm font-semibold ${styles.headerText}`}>
-                    {column.label}
-                  </span>
-                </div>
-                <span
-                  className={`rounded-full px-2 py-0.5 text-xs font-bold tabular-nums ${styles.badge}`}
-                >
-                  {items.length}
-                </span>
-              </div>
+            return (
+              <DroppableColumn
+                key={column.status}
+                column={column}
+                items={items}
+                styles={styles}
+                isOver={isOver}
+                activeDragId={activeDragId}
+                onSelect={setSelectedProspect}
+              />
+            )
+          })}
+        </div>
 
-              {/* Cards prospects */}
-              <div className="flex flex-col gap-2">
-                {items.length === 0 ? (
-                  <div className="flex flex-col items-center gap-2 rounded-xl border-2 border-dashed border-gray-200 px-4 py-8 text-center dark:border-gray-800">
-                    <svg
-                      xmlns="http://www.w3.org/2000/svg"
-                      width="20"
-                      height="20"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="1.5"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      className="text-gray-300 dark:text-gray-700"
-                      aria-hidden="true"
-                    >
-                      <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
-                      <line x1="9" y1="9" x2="15" y2="9" />
-                      <line x1="9" y1="12" x2="15" y2="12" />
-                      <line x1="9" y1="15" x2="12" y2="15" />
-                    </svg>
-                    <p className="text-xs text-gray-400 dark:text-gray-600">Aucun prospect</p>
-                  </div>
-                ) : (
-                  items.map((prospect) => (
-                    <button
-                      key={prospect.id}
-                      type="button"
-                      onClick={() => setSelectedProspect(prospect)}
-                      aria-label={`Voir les détails de ${prospect.raison_sociale}`}
-                      className={`group w-full rounded-xl border bg-white p-4 text-left shadow-sm transition-all duration-150 dark:bg-gray-900 ${styles.card} ${styles.cardHover} hover:-translate-y-0.5`}
-                    >
-                      {/* Nom de l'entreprise */}
-                      <p className="font-semibold leading-tight text-gray-900 line-clamp-1 transition-colors group-hover:text-green-700 dark:text-white dark:group-hover:text-green-400">
-                        {prospect.raison_sociale}
-                      </p>
+        <DragOverlay dropAnimation={null}>
+          {activeProspect ? (
+            <ProspectCardPreview prospect={activeProspect} />
+          ) : null}
+        </DragOverlay>
+      </DndContext>
 
-                      {/* Badge "Intéressé" — visible uniquement pour les prospects
-                          fusionnés depuis le statut interested dans la colonne Qualifié. */}
-                      {prospect.statut === 'interested' && (
-                        <span
-                          className="mt-2 inline-flex items-center gap-1 rounded-full bg-green-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-green-700 ring-1 ring-green-200 dark:bg-green-950/50 dark:text-green-300 dark:ring-green-900/60"
-                          aria-label="Statut intéressé"
-                        >
-                          <svg
-                            xmlns="http://www.w3.org/2000/svg"
-                            width="10"
-                            height="10"
-                            viewBox="0 0 24 24"
-                            fill="currentColor"
-                            aria-hidden="true"
-                          >
-                            <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" />
-                          </svg>
-                          Intéressé
-                        </span>
-                      )}
-
-                      {/* Secteur tag */}
-                      {prospect.secteur_libelle && (
-                        <span className="mt-2 inline-block max-w-full truncate rounded-md bg-gray-100 px-2 py-0.5 text-xs text-gray-500 dark:bg-gray-800 dark:text-gray-400">
-                          {prospect.secteur_libelle}
-                        </span>
-                      )}
-
-                      {/* Footer : ville + score */}
-                      <div className="mt-3 flex items-center justify-between gap-2">
-                        <span className="truncate text-xs text-gray-400 dark:text-gray-600">
-                          {prospect.ville ?? '—'}
-                        </span>
-                        {/* Score badge circulaire */}
-                        <span
-                          className={`flex-shrink-0 rounded-full px-2.5 py-0.5 text-xs font-bold tabular-nums ${
-                            prospect.score_priorite >= 75
-                              ? 'bg-green-100 text-green-700 dark:bg-green-950 dark:text-green-400'
-                              : prospect.score_priorite >= 50
-                                ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-950 dark:text-yellow-400'
-                                : 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400'
-                          }`}
-                          aria-label={`Score : ${prospect.score_priorite}`}
-                        >
-                          {prospect.score_priorite}
-                        </span>
-                      </div>
-                    </button>
-                  ))
-                )}
-              </div>
-            </div>
-          )
-        })}
-      </div>
-
-      {/* Side panel détail prospect — slide-in droit. On garde le composant
-          monté pour conserver la transition de sortie ; il gère lui-même
-          l'état visible via la prop `open`. */}
+      {/* Side panel détail prospect — slide-in droit. */}
       {selectedProspect && (
         <KanbanSidePanel
           prospect={selectedProspect}
-          columns={columns}
           open
           onClose={() => setSelectedProspect(null)}
           onStatusChange={(id, newStatus) => {
@@ -343,5 +323,216 @@ export function PipelineClient({
         />
       )}
     </>
+  )
+}
+
+// ── Colonne droppable ─────────────────────────────────────────────────────────
+
+interface DroppableColumnProps {
+  column: PipelineColumn
+  items: Prospect[]
+  styles: (typeof COLUMN_STYLES)[string]
+  isOver: boolean
+  activeDragId: string | null
+  onSelect: (prospect: Prospect) => void
+}
+
+function DroppableColumn({
+  column,
+  items,
+  styles,
+  isOver,
+  activeDragId,
+  onSelect,
+}: DroppableColumnProps) {
+  const { setNodeRef } = useDroppable({ id: column.status })
+
+  return (
+    <div
+      ref={setNodeRef}
+      className={`flex w-[280px] flex-none flex-col gap-3 rounded-2xl p-2 transition-colors duration-150 sm:w-[300px] ${
+        isOver
+          ? 'bg-green-50/30 ring-2 ring-green-400 dark:bg-green-950/20'
+          : 'bg-transparent ring-2 ring-transparent'
+      }`}
+      role="group"
+      aria-label={`Colonne ${column.label} — ${items.length} prospect${items.length > 1 ? 's' : ''}`}
+    >
+      <div
+        className={`flex items-center justify-between rounded-2xl px-4 py-3 ${styles.header}`}
+      >
+        <div className="flex items-center gap-2.5">
+          <span
+            className={`h-2.5 w-2.5 rounded-full ${styles.dot} shadow-sm`}
+            aria-hidden="true"
+          />
+          <span className={`text-sm font-semibold ${styles.headerText}`}>
+            {column.label}
+          </span>
+        </div>
+        <span
+          className={`rounded-full px-2 py-0.5 text-xs font-bold tabular-nums ${styles.badge}`}
+        >
+          {items.length}
+        </span>
+      </div>
+
+      <div className="flex flex-col gap-2">
+        {items.length === 0 ? (
+          <div className="flex flex-col items-center gap-2 rounded-2xl border-2 border-dashed border-gray-200 px-4 py-8 text-center dark:border-gray-800">
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="20"
+              height="20"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className="text-gray-300 dark:text-gray-700"
+              aria-hidden="true"
+            >
+              <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+              <line x1="9" y1="9" x2="15" y2="9" />
+              <line x1="9" y1="12" x2="15" y2="12" />
+              <line x1="9" y1="15" x2="12" y2="15" />
+            </svg>
+            <p className="text-xs text-gray-400 dark:text-gray-600">Aucun prospect</p>
+          </div>
+        ) : (
+          items.map((prospect) => (
+            <DraggableCard
+              key={prospect.id}
+              prospect={prospect}
+              styles={styles}
+              isBeingDragged={activeDragId === prospect.id}
+              onSelect={onSelect}
+            />
+          ))
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ── Card draggable ────────────────────────────────────────────────────────────
+
+interface DraggableCardProps {
+  prospect: Prospect
+  styles: (typeof COLUMN_STYLES)[string]
+  isBeingDragged: boolean
+  onSelect: (prospect: Prospect) => void
+}
+
+function DraggableCard({
+  prospect,
+  styles,
+  isBeingDragged,
+  onSelect,
+}: DraggableCardProps) {
+  const labelId = useId()
+  const { attributes, listeners, setNodeRef } = useDraggable({
+    id: prospect.id,
+    data: { fromStatus: prospect.statut as KanbanStatus },
+  })
+
+  // Click vs drag : PointerSensor avec distance=8 distingue déjà clic court (<8px) vs
+  // drag. Le onClick déclenche le panneau uniquement si pas de drag en cours.
+  function handleClick() {
+    if (isBeingDragged) return
+    onSelect(prospect)
+  }
+
+  return (
+    <div
+      ref={setNodeRef}
+      {...listeners}
+      {...attributes}
+      role="button"
+      tabIndex={0}
+      onClick={handleClick}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          // Évite que la space-bar du KeyboardSensor n'active la sélection.
+          if (e.target === e.currentTarget && e.key === 'Enter') {
+            e.preventDefault()
+            onSelect(prospect)
+          }
+        }
+      }}
+      aria-labelledby={labelId}
+      aria-roledescription="Carte prospect déplaçable"
+      className={`group w-full cursor-grab touch-none rounded-2xl border bg-white p-4 text-left shadow-sm transition-all duration-150 outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-1 active:cursor-grabbing dark:bg-gray-900 dark:focus-visible:ring-offset-gray-950 ${styles.card} ${styles.cardHover} hover:-translate-y-0.5 hover:shadow-md ${
+        isBeingDragged ? 'opacity-30' : 'opacity-100'
+      }`}
+    >
+      <p
+        id={labelId}
+        className="font-semibold leading-tight text-gray-900 line-clamp-1 transition-colors group-hover:text-green-700 dark:text-white dark:group-hover:text-green-400"
+      >
+        {prospect.raison_sociale}
+      </p>
+
+      {prospect.secteur_libelle && (
+        <span className="mt-2 inline-block max-w-full truncate rounded-md bg-gray-100 px-2 py-0.5 text-xs text-gray-500 dark:bg-gray-800 dark:text-gray-400">
+          {prospect.secteur_libelle}
+        </span>
+      )}
+
+      <div className="mt-3 flex items-center justify-between gap-2">
+        <span className="truncate text-xs text-gray-400 dark:text-gray-600">
+          {prospect.ville ?? '—'}
+        </span>
+        <span
+          className={`flex-shrink-0 rounded-full px-2.5 py-0.5 text-xs font-bold tabular-nums ${
+            prospect.score_priorite >= 75
+              ? 'bg-green-100 text-green-700 dark:bg-green-950 dark:text-green-400'
+              : prospect.score_priorite >= 50
+                ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-950 dark:text-yellow-400'
+                : 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400'
+          }`}
+          aria-label={`Score : ${prospect.score_priorite}`}
+        >
+          {prospect.score_priorite}
+        </span>
+      </div>
+    </div>
+  )
+}
+
+// ── Preview rendue dans le DragOverlay ────────────────────────────────────────
+
+function ProspectCardPreview({ prospect }: { prospect: Prospect }) {
+  return (
+    <div
+      className="pointer-events-none w-[280px] rotate-2 rounded-2xl border border-gray-200 bg-white p-4 shadow-2xl ring-1 ring-black/5 dark:border-gray-700 dark:bg-gray-900 dark:ring-white/10 sm:w-[300px]"
+      aria-hidden="true"
+    >
+      <p className="font-semibold leading-tight text-gray-900 line-clamp-1 dark:text-white">
+        {prospect.raison_sociale}
+      </p>
+      {prospect.secteur_libelle && (
+        <span className="mt-2 inline-block max-w-full truncate rounded-md bg-gray-100 px-2 py-0.5 text-xs text-gray-500 dark:bg-gray-800 dark:text-gray-400">
+          {prospect.secteur_libelle}
+        </span>
+      )}
+      <div className="mt-3 flex items-center justify-between gap-2">
+        <span className="truncate text-xs text-gray-400 dark:text-gray-600">
+          {prospect.ville ?? '—'}
+        </span>
+        <span
+          className={`flex-shrink-0 rounded-full px-2.5 py-0.5 text-xs font-bold tabular-nums ${
+            prospect.score_priorite >= 75
+              ? 'bg-green-100 text-green-700 dark:bg-green-950 dark:text-green-400'
+              : prospect.score_priorite >= 50
+                ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-950 dark:text-yellow-400'
+                : 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400'
+          }`}
+        >
+          {prospect.score_priorite}
+        </span>
+      </div>
+    </div>
   )
 }

@@ -660,4 +660,66 @@ manuelle via Sales Navigator côté humain.
 - `lib/types.ts` (champ additif sur `Prospect`)
 - Tests : `linkedin-company.test.ts` (28 cas) + `contact-enrichment.test.ts` (9 nouveaux cas)
 
+## 2026-05-14 — Refonte scoring vers 3 piliers configurables (taille/BEGES/contact 30/30/40)
+
+**Contexte** : feedback utilisateur, l'ancien barème additif (obligation BEGES +30,
+secteur prioritaire +20, sweet spot 250-800, signaux d'intention, bonus infraction
++20, NAF mature, etc.) était trop opaque pour le consultant ET impossible à
+reconfigurer sans toucher au code. Le scoring est désormais un sous-ensemble
+modulaire de 3 piliers explicites, pondérables par utilisateur.
+
+**Décision** : refonte complète de `lib/agent/scoring.ts` autour de 3 piliers
+0-100 indépendants, composés par somme pondérée (somme weights = 100) :
+
+- **Taille** (défaut 30 %) — ramp 250→450 (0→100), plateau 450→600 (100),
+  décroissance 600→5000 (100→20), plancher CAC40 (20). Optimum "juste au-dessus
+  de 500 salariés" : obligation BEGES nationale fraîche, Big4 pas encore incumbent.
+- **BEGES** (défaut 30 %) — 100 pour infraction L. 229-25 (obligé + non publié)
+  OU expiré >4 ans ; 50 pour anticipation commerciale (effectif 400-499 sans
+  obligation déclenchée) ; 0 sinon.
+- **Contact** (défaut 40 %) — hiérarchie stricte : téléphone (100) > email (50)
+  > LinkedIn (25) > rien (0). Pas de cumul — la qualité du point d'entrée prime.
+
+Les pénalités déjà-contacté (-20) et rejeté (-50) restent appliquées hors piliers,
+sur le score pondéré final, avec clamp [0, 100].
+
+**API publique** :
+- `calculerScore(prospect, dejaContacte, weights?)`
+- `getScoreDetails(prospect, dejaContacte, weights?)` retourne la nouvelle shape
+  `{ taille, beges, contact, weights, deja_contacte_penalty, rejete_penalty }`.
+- `determinerPriorite(score)` → `'haute' | 'moyenne' | 'basse'` (l'ancien
+  `'normale'` est conservé uniquement via `CallPriority` pour rétrocompat DB).
+- `normalizeScoringWeights(w?)` — projection vers somme = 100, retombe sur les
+  défauts 30/30/40 si input absent / nul / mal formé.
+
+**À ne pas répéter** :
+- Cumuler des bonus combinatoires non documentés (ex. l'ancien
+  `bonus_infraction_legale` +20 superposé à `obligation_beges` +30 +
+  `beges_non_publie` +15) — devient illisible pour le consultant.
+- Hardcoder des secteurs NAF prioritaires dans le scoring : la priorité métier
+  appartient au sourcing (filtrage Sirene), pas au calcul de score.
+
+**À refaire** :
+- Exposer les sous-scores 0-100 AVANT pondération côté `ScoreDetails` — permet
+  une jauge par-pilier dans l'UI sans recalculer.
+- Normaliser systématiquement les weights à l'usage (pas au stockage) — un
+  user peut saisir 25/25/25 dans le settings, le scoring re-projette en
+  33/33/34 sans muter sa préférence.
+
+**Breaking changes signalés** :
+- `Priority` : `'normale'` → `'moyenne'` (déjà aligné par Agent A).
+- `ScoreDetails` : shape complètement différente — les consommateurs UI
+  (page détail prospect, kanban-side-panel, top-priorities, agent-stats)
+  doivent être réécrits par Agents C/D/E.
+- `ProfileSettings` : nouveau champ optionnel `scoring_weights?: ScoringWeights`.
+
+**Fichiers** :
+- `lib/agent/scoring.ts` — réécriture totale (~280 lignes vs 313 avant).
+- `lib/agent/__tests__/scoring.test.ts` — réécriture totale, ~40 cas par pilier
+  + composition + clamp + pondération custom + pénalités.
+- `lib/agent/sourcing-runner.ts` — `enrichAndScore` accepte `scoringWeights?`,
+  passé depuis `settings.scoring_weights` côté `runPipelineSourcing`.
+- `lib/types.ts` — `ScoringWeights` + `ProfileSettings.scoring_weights?` +
+  refonte `ScoreDetails` (édition minimale, en coordination avec Agent A).
+
 <!-- Les entrées suivantes seront ajoutées automatiquement par Claude après chaque session -->

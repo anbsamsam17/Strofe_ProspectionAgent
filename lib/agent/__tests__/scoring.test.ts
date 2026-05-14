@@ -1,19 +1,20 @@
 // ============================================================
-// TESTS UNITAIRES — scoring.ts
+// TESTS UNITAIRES — scoring.ts (refonte 2026-05-14)
 // Vitest — pattern AAA (Arrange / Act / Assert)
-// Tuning 2026-05-13 : BEGES expiré +25 > vierge +15, sweet spot 250-800 +15,
-// téléphone +10, secteur mature +5, bonus_infraction_legale +20 (obligé sans
-// BEGES publié = infraction L. 229-25). Voir memory/hindsight.md.
+//
+// 3 piliers configurables (taille / BEGES / contact), défauts 30/30/40.
+// Pas de mock externe : `calculerScore`, `getScoreDetails`,
+// `determinerPriorite`, `normalizeScoringWeights` sont des fonctions pures.
 // ============================================================
 
 import { describe, expect, it } from 'vitest'
-import type { Prospect } from '@/lib/types'
+import type { Prospect, ScoringWeights } from '@/lib/types'
 import {
   calculerScore,
+  DEFAULT_SCORING_WEIGHTS,
   determinerPriorite,
-  estSecteurBegesMature,
-  estSecteurPrioritaire,
   getScoreDetails,
+  normalizeScoringWeights,
 } from '../scoring'
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -22,11 +23,10 @@ function makeProspect(overrides: Partial<Prospect> = {}): Partial<Prospect> {
   return {
     siren: '123456789',
     raison_sociale: 'Test SAS',
-    secteur_naf: '10.11Z', // agro → prioritaire + mature
-    effectif_min: 500,
-    effectif_max: 999,     // tranche 800-1999 → +10
+    effectif_min: 250,
+    effectif_max: 500,       // dans le plateau optimal [450, 600]
     obligation_beges: true,
-    beges_publie: false,
+    beges_publie: false,     // → infraction L. 229-25
     contact_telephone: '0556000000',
     signaux: [],
     statut: 'sourced',
@@ -34,210 +34,492 @@ function makeProspect(overrides: Partial<Prospect> = {}): Partial<Prospect> {
   }
 }
 
-// ── CAS 1 : Prospect idéal ──────────────────────────────────────────────────
-// Profil "infraction" (obligation=true && beges_publie=false) + tous bonus :
-// obligation +30, secteur prio +20, BEGES non publié +15, bonus infraction +20,
-// taille 999 +10, contact tel +10, secteur agro mature +5 = 110 → clamp 100
+// ─────────────────────────────────────────────────────────────────────────────
+// PILIER 1 — TAILLE
+// ─────────────────────────────────────────────────────────────────────────────
 
-describe('calculerScore — cas nominal', () => {
-  it('attribue un score maximal (clamp 100) au prospect idéal "infraction"', () => {
-    const prospect = makeProspect()
-    const score = calculerScore(prospect, false)
-
-    // Brut = 30 + 20 + 15 + 20 (bonus infraction) + 10 + 10 + 5 = 110 → clampé 100
-    expect(score).toBe(100)
-    expect(score).toBeGreaterThanOrEqual(60)
-    expect(score).toBeLessThanOrEqual(100)
+describe('Pilier Taille — sous-score 0-100', () => {
+  it('renvoie 0 pour un effectif < 250 (sous-seuil)', () => {
+    const details = getScoreDetails(makeProspect({ effectif_max: 100 }), false)
+    expect(details.taille).toBe(0)
   })
 
-  it('décompose correctement les points dans ScoreDetails', () => {
-    const prospect = makeProspect()
-    const details = getScoreDetails(prospect, false)
+  it('renvoie ~50 dans le ramp d\'entrée à effectif 350 (mi-pente)', () => {
+    const details = getScoreDetails(makeProspect({ effectif_max: 350 }), false)
+    // ramp [250, 450] linéaire 0 → 100 → à 350 on est à 50
+    expect(details.taille).toBe(50)
+  })
 
-    expect(details.obligation_beges).toBe(30)
-    expect(details.secteur_prioritaire).toBe(20)
-    expect(details.beges_non_publie).toBe(15)
-    expect(details.beges_expire).toBe(0)
-    expect(details.taille_entreprise).toBe(10)
-    expect(details.contact_trouve).toBe(10)
-    expect(details.secteur_beges_mature).toBe(5)
-    expect(details.bonus_infraction_legale).toBe(20)
+  it('renvoie 100 à effectif 500 (plateau optimal "juste au-dessus de 500")', () => {
+    const details = getScoreDetails(makeProspect({ effectif_max: 500 }), false)
+    expect(details.taille).toBe(100)
+  })
+
+  it('renvoie 100 à effectif 450 (début plateau)', () => {
+    const details = getScoreDetails(makeProspect({ effectif_max: 450 }), false)
+    expect(details.taille).toBe(100)
+  })
+
+  it('renvoie 100 à effectif 600 (fin plateau)', () => {
+    const details = getScoreDetails(makeProspect({ effectif_max: 600 }), false)
+    expect(details.taille).toBe(100)
+  })
+
+  it('décroît vers ~80 à effectif 1000 (début décroissance)', () => {
+    const details = getScoreDetails(makeProspect({ effectif_max: 1000 }), false)
+    // décroissance [600, 5000] de 100 → 20 (drop 80 sur range 4400)
+    // à 1000 : 100 - 80 * (400/4400) = 100 - 7.27 ≈ 93
+    // Note : 1000 est proche du début de la pente, donc plutôt ~92-93.
+    expect(details.taille).toBeGreaterThanOrEqual(85)
+    expect(details.taille).toBeLessThanOrEqual(95)
+  })
+
+  it('décroît vers ~57 à effectif 3000 (milieu décroissance)', () => {
+    const details = getScoreDetails(makeProspect({ effectif_max: 3000 }), false)
+    // à 3000 : 100 - 80 * (2400/4400) ≈ 56.4
+    expect(details.taille).toBeGreaterThanOrEqual(50)
+    expect(details.taille).toBeLessThanOrEqual(65)
+  })
+
+  it('renvoie 20 au plancher CAC40 (effectif >= 5000)', () => {
+    const details1 = getScoreDetails(makeProspect({ effectif_max: 5000 }), false)
+    const details2 = getScoreDetails(makeProspect({ effectif_max: 8000 }), false)
+    expect(details1.taille).toBe(20)
+    expect(details2.taille).toBe(20)
+  })
+
+  it('utilise effectif_min en fallback si effectif_max absent', () => {
+    const details = getScoreDetails(
+      makeProspect({ effectif_max: undefined, effectif_min: 500 }),
+      false,
+    )
+    expect(details.taille).toBe(100)
+  })
+
+  it('renvoie 0 si effectif absent partout', () => {
+    const details = getScoreDetails(
+      makeProspect({ effectif_max: undefined, effectif_min: undefined }),
+      false,
+    )
+    expect(details.taille).toBe(0)
   })
 })
 
-// ── CAS 2 : Prospect rejeté ─────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// PILIER 2 — BEGES
+// ─────────────────────────────────────────────────────────────────────────────
 
-describe('calculerScore — prospect rejeté', () => {
-  it('applique la pénalité -50 quand le statut est rejected', () => {
-    const prospect = makeProspect({ statut: 'rejected' })
-    const score = calculerScore(prospect, false)
-    const details = getScoreDetails(prospect, false)
+describe('Pilier BEGES — sous-score 0-100', () => {
+  it('renvoie 100 pour obligation + non publié (infraction L. 229-25)', () => {
+    const details = getScoreDetails(
+      makeProspect({ obligation_beges: true, beges_publie: false }),
+      false,
+    )
+    expect(details.beges).toBe(100)
+  })
 
-    expect(details.penalite_rejete).toBe(-50)
-    // Brut = 110 - 50 = 60 (le clamp à 100 s'applique avant la pénalité au niveau
-    // de la somme : 110 - 50 = 60, pas 100 - 50 = 50, car le clamp est appliqué
-    // une seule fois sur la somme finale)
-    expect(score).toBe(60)
+  it('renvoie 100 pour BEGES publié mais expiré (renouvellement quadriennal dépassé)', () => {
+    const details = getScoreDetails(
+      makeProspect({
+        obligation_beges: true,
+        beges_publie: true,
+        beges_valide: false,
+      }),
+      false,
+    )
+    expect(details.beges).toBe(100)
+  })
+
+  it('renvoie 50 pour entreprise proche du seuil (effectif 450) sans obligation', () => {
+    const details = getScoreDetails(
+      makeProspect({
+        obligation_beges: false,
+        beges_publie: false,
+        effectif_max: 450,
+      }),
+      false,
+    )
+    expect(details.beges).toBe(50)
+  })
+
+  it('renvoie 50 pour effectif 499 sans obligation (borne haute anticipation)', () => {
+    const details = getScoreDetails(
+      makeProspect({
+        obligation_beges: false,
+        beges_publie: false,
+        effectif_max: 499,
+      }),
+      false,
+    )
+    expect(details.beges).toBe(50)
+  })
+
+  it('renvoie 0 pour effectif 500 sans obligation (au-delà de la zone d\'anticipation)', () => {
+    const details = getScoreDetails(
+      makeProspect({
+        obligation_beges: false,
+        beges_publie: false,
+        effectif_max: 500,
+      }),
+      false,
+    )
+    expect(details.beges).toBe(0)
+  })
+
+  it('renvoie 0 pour BEGES publié et valide (à jour)', () => {
+    const details = getScoreDetails(
+      makeProspect({
+        obligation_beges: true,
+        beges_publie: true,
+        beges_valide: true,
+      }),
+      false,
+    )
+    expect(details.beges).toBe(0)
+  })
+
+  it('renvoie 0 pour PME sans obligation et hors zone d\'anticipation', () => {
+    const details = getScoreDetails(
+      makeProspect({
+        obligation_beges: false,
+        beges_publie: false,
+        effectif_max: 100,
+      }),
+      false,
+    )
+    expect(details.beges).toBe(0)
   })
 })
 
-// ── CAS 3 : Déjà contacté ───────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// PILIER 3 — CONTACT
+// ─────────────────────────────────────────────────────────────────────────────
 
-describe('calculerScore — déjà contacté', () => {
-  it('applique la pénalité -20 quand dejaContacte = true', () => {
-    const prospect = makeProspect()
-    const scoreNoContact = calculerScore(prospect, false)
-    const scoreDejaContacte = calculerScore(prospect, true)
-    const details = getScoreDetails(prospect, true)
+describe('Pilier Contact — sous-score 0-100', () => {
+  it('renvoie 100 si téléphone direct présent', () => {
+    const details = getScoreDetails(
+      makeProspect({
+        contact_telephone: '0145000000',
+        contact_email: undefined,
+        contact_linkedin: undefined,
+      }),
+      false,
+    )
+    expect(details.contact).toBe(100)
+  })
 
-    expect(details.penalite_deja_contacte).toBe(-20)
-    // Sans pénalité : brut 110 clampé à 100. Avec pénalité : brut 90 (110-20),
-    // pas clampé. La différence apparente n'est donc pas -20 mais -10.
-    expect(scoreNoContact).toBe(100)
-    expect(scoreDejaContacte).toBe(90)
+  it('renvoie 50 si email présent sans téléphone', () => {
+    const details = getScoreDetails(
+      makeProspect({
+        contact_telephone: undefined,
+        contact_email: 'contact@example.fr',
+        contact_linkedin: undefined,
+      }),
+      false,
+    )
+    expect(details.contact).toBe(50)
+  })
+
+  it('renvoie 25 si LinkedIn présent sans email ni téléphone', () => {
+    const details = getScoreDetails(
+      makeProspect({
+        contact_telephone: undefined,
+        contact_email: undefined,
+        contact_linkedin: 'https://linkedin.com/in/test',
+      }),
+      false,
+    )
+    expect(details.contact).toBe(25)
+  })
+
+  it('renvoie 0 si aucun canal de contact', () => {
+    const details = getScoreDetails(
+      makeProspect({
+        contact_telephone: undefined,
+        contact_email: undefined,
+        contact_linkedin: undefined,
+      }),
+      false,
+    )
+    expect(details.contact).toBe(0)
+  })
+
+  it('téléphone l\'emporte sur email + LinkedIn cumulés', () => {
+    const details = getScoreDetails(
+      makeProspect({
+        contact_telephone: '0145000000',
+        contact_email: 'a@b.fr',
+        contact_linkedin: 'https://linkedin.com/in/x',
+      }),
+      false,
+    )
+    expect(details.contact).toBe(100)
+  })
+
+  it('email l\'emporte sur LinkedIn quand pas de téléphone', () => {
+    const details = getScoreDetails(
+      makeProspect({
+        contact_telephone: undefined,
+        contact_email: 'a@b.fr',
+        contact_linkedin: 'https://linkedin.com/in/x',
+      }),
+      false,
+    )
+    expect(details.contact).toBe(50)
   })
 })
 
-// ── CAS 4 : Prospect faible priorité ────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// PONDÉRATION — normalizeScoringWeights
+// ─────────────────────────────────────────────────────────────────────────────
 
-describe('calculerScore — prospect faible priorité', () => {
-  it('retourne un score bas pour un prospect non prioritaire', () => {
-    const prospect = makeProspect({
-      obligation_beges: false,
-      secteur_naf: '47.11F',
-      beges_publie: true,
-      beges_valide: true,
-      contact_telephone: undefined,
-      effectif_min: 200,
-      effectif_max: 249,
-      signaux: [],
+describe('normalizeScoringWeights', () => {
+  it('retourne les défauts 30/30/40 si undefined', () => {
+    expect(normalizeScoringWeights()).toEqual(DEFAULT_SCORING_WEIGHTS)
+    expect(normalizeScoringWeights(undefined)).toEqual(DEFAULT_SCORING_WEIGHTS)
+  })
+
+  it('retourne les défauts 30/30/40 si tous les poids valent 0', () => {
+    expect(normalizeScoringWeights({ taille: 0, beges: 0, contact: 0 })).toEqual(
+      DEFAULT_SCORING_WEIGHTS,
+    )
+  })
+
+  it('passe inchangé si somme déjà = 100', () => {
+    const w: ScoringWeights = { taille: 40, beges: 30, contact: 30 }
+    expect(normalizeScoringWeights(w)).toEqual(w)
+  })
+
+  it('re-projette une pondération non-normalisée 1/1/2 vers 25/25/50', () => {
+    expect(normalizeScoringWeights({ taille: 1, beges: 1, contact: 2 })).toEqual({
+      taille: 25,
+      beges: 25,
+      contact: 50,
     })
+  })
 
-    const score = calculerScore(prospect, false)
-    const details = getScoreDetails(prospect, false)
+  it('re-projette 25/25/25 vers ~33/33/34 (somme = 100 préservée)', () => {
+    const result = normalizeScoringWeights({ taille: 25, beges: 25, contact: 25 })
+    expect(result.taille + result.beges + result.contact).toBe(100)
+    // contact reçoit le reste (compense l'arrondi)
+    expect(result.taille).toBe(33)
+    expect(result.beges).toBe(33)
+    expect(result.contact).toBe(34)
+  })
 
-    expect(details.obligation_beges).toBe(0)
-    expect(details.secteur_prioritaire).toBe(0)
-    expect(details.beges_non_publie).toBe(0)
-    expect(details.beges_expire).toBe(0)
-    expect(details.contact_trouve).toBe(0)
-    expect(details.taille_entreprise).toBe(0)
-    expect(details.secteur_beges_mature).toBe(0)
-    expect(score).toBe(0)
+  it('clamp les valeurs négatives / non-finies à 0', () => {
+    // Cast : on teste un input mal formé du runtime (JSON.parse user input).
+    const garbage = { taille: -10, beges: Number.NaN, contact: 20 } as unknown as ScoringWeights
+    expect(normalizeScoringWeights(garbage)).toEqual({ taille: 0, beges: 0, contact: 100 })
   })
 })
 
-// ── CAS 5 : Score plancher à 0 ──────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// SCORE GLOBAL — pondération par défaut
+// ─────────────────────────────────────────────────────────────────────────────
 
-describe('calculerScore — score plancher à 0', () => {
-  it('ne retourne jamais un score négatif', () => {
+describe('calculerScore — pondération par défaut 30/30/40', () => {
+  it('compose correctement un cas connu (taille 100 + BEGES 100 + contact 100)', () => {
     const prospect = makeProspect({
+      effectif_max: 500, // taille 100
+      obligation_beges: true,
+      beges_publie: false, // BEGES 100
+      contact_telephone: '0145000000', // contact 100
+    })
+    const score = calculerScore(prospect, false)
+    // (100*30 + 100*30 + 100*40) / 100 = 100
+    expect(score).toBe(100)
+  })
+
+  it('compose correctement (taille 0 + BEGES 0 + contact 100) = 40', () => {
+    const prospect = makeProspect({
+      effectif_max: 100,
       obligation_beges: false,
-      secteur_naf: '47.11F',
+      beges_publie: true,
+      beges_valide: true,
+      contact_telephone: '0145000000',
+    })
+    const score = calculerScore(prospect, false)
+    // (0*30 + 0*30 + 100*40) / 100 = 40
+    expect(score).toBe(40)
+  })
+
+  it('compose correctement (taille 100 + BEGES 0 + contact 0) = 30', () => {
+    const prospect = makeProspect({
+      effectif_max: 500,
+      obligation_beges: true,
       beges_publie: true,
       beges_valide: true,
       contact_telephone: undefined,
-      effectif_min: 0,
-      effectif_max: 0,
-      signaux: [],
+      contact_email: undefined,
+      contact_linkedin: undefined,
+    })
+    const score = calculerScore(prospect, false)
+    // (100*30 + 0*30 + 0*40) / 100 = 30
+    expect(score).toBe(30)
+  })
+
+  it('compose correctement (taille 100 + BEGES 100 + contact 50) = 80', () => {
+    const prospect = makeProspect({
+      effectif_max: 500,             // taille 100
+      obligation_beges: true,
+      beges_publie: false,           // BEGES 100
+      contact_telephone: undefined,
+      contact_email: 'a@b.fr',       // contact 50
+      contact_linkedin: undefined,
+    })
+    const score = calculerScore(prospect, false)
+    // (100*30 + 100*30 + 50*40) / 100 = 30 + 30 + 20 = 80
+    expect(score).toBe(80)
+  })
+})
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SCORE GLOBAL — pondération custom
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('calculerScore — pondération custom', () => {
+  it('un user qui privilégie la taille (50/25/25) déprime le score d\'un prospect contact-only', () => {
+    const prospect = makeProspect({
+      effectif_max: 100,             // taille 0
+      obligation_beges: false,
+      beges_publie: true,
+      beges_valide: true,             // BEGES 0
+      contact_telephone: '0145000000', // contact 100
+    })
+    const scoreDefault = calculerScore(prospect, false)
+    const scoreCustom = calculerScore(prospect, false, {
+      taille: 50,
+      beges: 25,
+      contact: 25,
+    })
+    // Default 30/30/40 → 40 ; custom 50/25/25 → 25
+    expect(scoreDefault).toBe(40)
+    expect(scoreCustom).toBe(25)
+    expect(scoreCustom).toBeLessThan(scoreDefault)
+  })
+
+  it('normalise une pondération 1/1/2 et applique le résultat', () => {
+    const prospect = makeProspect({
+      effectif_max: 500,             // taille 100
+      obligation_beges: true,
+      beges_publie: false,           // BEGES 100
+      contact_telephone: '0145000000', // contact 100
+    })
+    const score = calculerScore(prospect, false, { taille: 1, beges: 1, contact: 2 })
+    // Normalisé 25/25/50 → (100*25 + 100*25 + 100*50) / 100 = 100
+    expect(score).toBe(100)
+  })
+
+  it('expose les weights normalisés dans ScoreDetails', () => {
+    const details = getScoreDetails(makeProspect(), false, {
+      taille: 1, beges: 1, contact: 2,
+    })
+    expect(details.weights).toEqual({ taille: 25, beges: 25, contact: 50 })
+  })
+})
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PÉNALITÉS
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('calculerScore — pénalités', () => {
+  it('applique -20 si déjà contacté', () => {
+    const prospect = makeProspect({
+      effectif_max: 500,
+      obligation_beges: true,
+      beges_publie: false,
+      contact_telephone: '0145000000',
+    })
+    const detailsNoContact = getScoreDetails(prospect, false)
+    const detailsDejaContacte = getScoreDetails(prospect, true)
+
+    expect(detailsNoContact.deja_contacte_penalty).toBe(0)
+    expect(detailsDejaContacte.deja_contacte_penalty).toBe(-20)
+
+    // Score brut = 100 ; avec pénalité = 80
+    expect(calculerScore(prospect, false)).toBe(100)
+    expect(calculerScore(prospect, true)).toBe(80)
+  })
+
+  it('applique -50 si statut = rejected', () => {
+    const prospect = makeProspect({
+      effectif_max: 500,
+      obligation_beges: true,
+      beges_publie: false,
+      contact_telephone: '0145000000',
       statut: 'rejected',
     })
+    const details = getScoreDetails(prospect, false)
+    expect(details.rejete_penalty).toBe(-50)
+    // Score brut = 100 ; avec pénalité = 50
+    expect(calculerScore(prospect, false)).toBe(50)
+  })
 
-    const score = calculerScore(prospect, true)
+  it('cumule pénalités déjà contacté + rejeté', () => {
+    const prospect = makeProspect({
+      effectif_max: 500,
+      obligation_beges: true,
+      beges_publie: false,
+      contact_telephone: '0145000000',
+      statut: 'rejected',
+    })
+    const details = getScoreDetails(prospect, true)
+    expect(details.deja_contacte_penalty).toBe(-20)
+    expect(details.rejete_penalty).toBe(-50)
+    // Score brut = 100 ; avec pénalités = 100 - 20 - 50 = 30
+    expect(calculerScore(prospect, true)).toBe(30)
+  })
+})
 
+// ─────────────────────────────────────────────────────────────────────────────
+// CLAMP — bornes [0, 100]
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('calculerScore — clamp [0, 100]', () => {
+  it('ne retourne jamais un score négatif', () => {
+    const prospect = makeProspect({
+      effectif_max: 100,           // taille 0
+      obligation_beges: false,
+      beges_publie: true,
+      beges_valide: true,          // BEGES 0
+      contact_telephone: undefined,
+      contact_email: undefined,
+      contact_linkedin: undefined, // contact 0
+      statut: 'rejected',          // -50
+    })
+    const score = calculerScore(prospect, true) // -20 supplémentaire
     expect(score).toBe(0)
     expect(score).toBeGreaterThanOrEqual(0)
   })
-})
 
-// ── CAS 6 : Signaux d'intention — plafond à 15 ──────────────────────────────
-
-describe('calculerScore — signaux intention', () => {
-  it('plafonne les signaux à 15 points même avec plusieurs signaux lourds', () => {
+  it('ne dépasse jamais 100 même avec piliers max', () => {
     const prospect = makeProspect({
-      obligation_beges: false,
-      secteur_naf: '47.11F',
-      beges_publie: true,
-      beges_valide: true,
-      contact_telephone: undefined,
-      effectif_max: 0,
-      signaux: [
-        { type: 'job_posting', description: 'RSE', weight: 10 },
-        { type: 'sustainability_report_missing', description: 'Rapport absent', weight: 10 },
-        { type: 'press_release', description: 'Annonce', weight: 5 },
-      ],
+      effectif_max: 500,
+      obligation_beges: true,
+      beges_publie: false,
+      contact_telephone: '0145000000',
     })
-
-    const details = getScoreDetails(prospect, false)
     const score = calculerScore(prospect, false)
-
-    expect(details.signaux_intention).toBe(15)
-    expect(score).toBe(15)
+    expect(score).toBeLessThanOrEqual(100)
   })
 })
 
-// ── CAS 7 : estSecteurPrioritaire ───────────────────────────────────────────
-
-describe('estSecteurPrioritaire', () => {
-  it('reconnaît un code NAF avec point comme prioritaire', () => {
-    expect(estSecteurPrioritaire('01.21Z')).toBe(true)
-    expect(estSecteurPrioritaire('30.30Z')).toBe(true)
-    expect(estSecteurPrioritaire('52.10B')).toBe(true)
-  })
-
-  it('reconnaît un code NAF sans point (format compact) comme prioritaire', () => {
-    expect(estSecteurPrioritaire('0121Z')).toBe(true)
-    expect(estSecteurPrioritaire('4941A')).toBe(true)
-  })
-
-  it('retourne false pour un secteur hors liste prioritaire', () => {
-    expect(estSecteurPrioritaire('47.11F')).toBe(false)
-    expect(estSecteurPrioritaire('64.19Z')).toBe(false)
-    expect(estSecteurPrioritaire('')).toBe(false)
-  })
-})
-
-// ── CAS 7bis : estSecteurBegesMature ────────────────────────────────────────
-
-describe('estSecteurBegesMature', () => {
-  it('reconnaît la santé (86.10Z, 86.21Z) comme mature', () => {
-    expect(estSecteurBegesMature('86.10Z')).toBe(true)
-    expect(estSecteurBegesMature('86.21Z')).toBe(true)
-  })
-
-  it('reconnaît le transport routier (49.41A, 49.41B, 52.10B) comme mature', () => {
-    expect(estSecteurBegesMature('49.41A')).toBe(true)
-    expect(estSecteurBegesMature('49.41B')).toBe(true)
-    expect(estSecteurBegesMature('52.10B')).toBe(true)
-  })
-
-  it('reconnaît tout NAF agro (préfixe 10.) comme mature', () => {
-    expect(estSecteurBegesMature('10.11Z')).toBe(true)
-    expect(estSecteurBegesMature('10.71A')).toBe(true)
-    expect(estSecteurBegesMature('1051A')).toBe(true)
-  })
-
-  it('retourne false hors liste / préfixes', () => {
-    expect(estSecteurBegesMature('47.11F')).toBe(false)
-    expect(estSecteurBegesMature('64.19Z')).toBe(false)
-    expect(estSecteurBegesMature('30.30Z')).toBe(false)
-    expect(estSecteurBegesMature('')).toBe(false)
-  })
-})
-
-// ── CAS 8 : determinerPriorite ──────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// PRIORITÉ — seuils
+// ─────────────────────────────────────────────────────────────────────────────
 
 describe('determinerPriorite', () => {
   it('retourne "haute" pour score >= 60', () => {
     expect(determinerPriorite(60)).toBe('haute')
-    expect(determinerPriorite(90)).toBe('haute')
+    expect(determinerPriorite(80)).toBe('haute')
     expect(determinerPriorite(100)).toBe('haute')
   })
 
-  it('retourne "normale" pour score entre 30 et 59', () => {
-    expect(determinerPriorite(30)).toBe('normale')
-    expect(determinerPriorite(45)).toBe('normale')
-    expect(determinerPriorite(59)).toBe('normale')
+  it('retourne "moyenne" pour score entre 30 et 59', () => {
+    expect(determinerPriorite(30)).toBe('moyenne')
+    expect(determinerPriorite(45)).toBe('moyenne')
+    expect(determinerPriorite(59)).toBe('moyenne')
   })
 
   it('retourne "basse" pour score < 30', () => {
@@ -247,282 +529,31 @@ describe('determinerPriorite', () => {
   })
 })
 
-// ── CAS 9 : cohérence somme vs score ────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// COHÉRENCE — getScoreDetails ↔ calculerScore
+// ─────────────────────────────────────────────────────────────────────────────
 
-describe('getScoreDetails', () => {
-  it('la somme des détails clampée correspond bien au score calculerScore', () => {
-    const prospect = makeProspect()
-    const details = getScoreDetails(prospect, false)
-    const sum =
-      details.obligation_beges +
-      details.secteur_prioritaire +
-      details.beges_non_publie +
-      details.beges_expire +
-      details.signaux_intention +
-      details.taille_entreprise +
-      details.contact_trouve +
-      details.secteur_beges_mature +
-      details.bonus_infraction_legale +
-      details.penalite_deja_contacte +
-      details.penalite_rejete
-    const scoreFromDetails = Math.max(0, Math.min(100, sum))
-    const scoreFromFn = calculerScore(prospect, false)
-
-    expect(scoreFromDetails).toBe(scoreFromFn)
-  })
-})
-
-// ── CAS 10 : BEGES expiré + santé + sweet spot + tel → CHAUD ────────────────
-
-describe('calculerScore — BEGES expiré 5 ans + santé 400 sal + téléphone trouvé', () => {
-  it('produit un score élevé (>75) — prospect le plus chaud commercialement', () => {
+describe('cohérence getScoreDetails ↔ calculerScore', () => {
+  it('le score reconstruit à partir des détails correspond à calculerScore', () => {
     const prospect = makeProspect({
-      secteur_naf: '86.10Z',
-      obligation_beges: true,
-      beges_publie: true,
-      beges_valide: false,
-      effectif_min: 250,
-      effectif_max: 400,
-      contact_telephone: '0145000000',
-      signaux: [
-        { type: 'job_posting', description: 'Recrutement Responsable RSE', weight: 10 },
-      ],
-    })
-
-    const score = calculerScore(prospect, false)
-    const details = getScoreDetails(prospect, false)
-
-    expect(details.obligation_beges).toBe(30)
-    expect(details.beges_expire).toBe(25)
-    expect(details.beges_non_publie).toBe(0)
-    expect(details.taille_entreprise).toBe(15)
-    expect(details.contact_trouve).toBe(10)
-    expect(details.secteur_beges_mature).toBe(5)
-    expect(details.signaux_intention).toBe(10)
-    // 30 + 0 + 0 + 25 + 10 + 15 + 10 + 5 = 95
-    expect(score).toBe(95)
-    expect(score).toBeGreaterThan(75)
-  })
-})
-
-// ── CAS 11 : BEGES jamais publié + CAC40 → HAUTE (infraction L. 229-25) ─────
-
-describe('calculerScore — BEGES jamais publié + CAC40 5000 sal.', () => {
-  it('produit un score haut grâce au bonus infraction — obligé + BEGES absent', () => {
-    const prospect = makeProspect({
-      secteur_naf: '64.19Z',
-      obligation_beges: true,
-      beges_publie: false,
-      effectif_min: 5000,
-      effectif_max: 9999,
-      contact_telephone: undefined,
-      signaux: [],
-    })
-
-    const score = calculerScore(prospect, false)
-    const details = getScoreDetails(prospect, false)
-
-    expect(details.taille_entreprise).toBe(2)
-    expect(details.beges_non_publie).toBe(15)
-    expect(details.beges_expire).toBe(0)
-    expect(details.secteur_beges_mature).toBe(0)
-    expect(details.bonus_infraction_legale).toBe(20)
-    // 30 + 0 + 15 + 0 + 0 + 2 + 0 + 0 + 20 = 67
-    expect(score).toBe(67)
-    expect(score).toBeGreaterThanOrEqual(60) // priorité haute garantie
-  })
-})
-
-// ── CAS 12 : BEGES récent valide + PME → FAIBLE ─────────────────────────────
-
-describe('calculerScore — BEGES récent encore valide + PME 50 sal.', () => {
-  it('produit un score faible — pas de bonus BEGES, sous seuil sweet spot', () => {
-    const prospect = makeProspect({
-      secteur_naf: '47.11F',
-      obligation_beges: false,
-      beges_publie: true,
-      beges_valide: true,
-      effectif_min: 20,
-      effectif_max: 50,
-      contact_telephone: undefined,
-      signaux: [],
-    })
-
-    const score = calculerScore(prospect, false)
-    const details = getScoreDetails(prospect, false)
-
-    expect(details.beges_non_publie).toBe(0)
-    expect(details.beges_expire).toBe(0)
-    expect(details.taille_entreprise).toBe(0)
-    expect(details.obligation_beges).toBe(0)
-    expect(score).toBe(0)
-    expect(score).toBeLessThan(30)
-  })
-})
-
-// ── CAS 13 : Cap à 100 ──────────────────────────────────────────────────────
-
-describe('calculerScore — cap à 100 sur cumul max', () => {
-  it('clampe le score brut > 100 à exactement 100', () => {
-    const prospect = makeProspect({
-      secteur_naf: '10.11Z',
-      obligation_beges: true,
-      beges_publie: true,
-      beges_valide: false,
-      effectif_min: 250,
       effectif_max: 500,
-      contact_telephone: '0145000000',
-      signaux: [
-        { type: 'job_posting', description: 'RSE', weight: 10 },
-        { type: 'sustainability_report_missing', description: 'Rapport', weight: 10 },
-      ],
-    })
-
-    const score = calculerScore(prospect, false)
-    expect(score).toBe(100)
-  })
-})
-
-// ── CAS 14 : Exclusivité beges_non_publie vs beges_expire ───────────────────
-
-describe('calculerScore — BEGES expiré vs non publié sont exclusifs', () => {
-  it('BEGES non publié : beges_non_publie=15, beges_expire=0', () => {
-    const p = makeProspect({ beges_publie: false })
-    const details = getScoreDetails(p, false)
-    expect(details.beges_non_publie).toBe(15)
-    expect(details.beges_expire).toBe(0)
-  })
-
-  it('BEGES expiré : beges_non_publie=0, beges_expire=25', () => {
-    const p = makeProspect({ beges_publie: true, beges_valide: false })
-    const details = getScoreDetails(p, false)
-    expect(details.beges_non_publie).toBe(0)
-    expect(details.beges_expire).toBe(25)
-  })
-
-  it('BEGES valide : les deux à 0', () => {
-    const p = makeProspect({ beges_publie: true, beges_valide: true })
-    const details = getScoreDetails(p, false)
-    expect(details.beges_non_publie).toBe(0)
-    expect(details.beges_expire).toBe(0)
-  })
-
-  it('confirme que beges_expire (25) > beges_non_publie (15)', () => {
-    const pExpire = makeProspect({
-      beges_publie: true, beges_valide: false,
-      secteur_naf: '47.11F', obligation_beges: false,
-      effectif_max: 0, contact_telephone: undefined, signaux: [],
-    })
-    const pVierge = makeProspect({
-      beges_publie: false,
-      secteur_naf: '47.11F', obligation_beges: false,
-      effectif_max: 0, contact_telephone: undefined, signaux: [],
-    })
-    expect(calculerScore(pExpire, false)).toBeGreaterThan(calculerScore(pVierge, false))
-  })
-})
-
-// ── CAS 15 : Bonus infraction L. 229-25 — profil minimal en haut du Top ─────
-// Garantie business : un prospect "obligé + BEGES absent" doit dépasser
-// même un prospect très bien équipé MAIS pas en infraction (BEGES expiré).
-
-describe('calculerScore — bonus infraction L. 229-25 garantit le top', () => {
-  it('attribue +20 au profil "obligé + beges_publie=false" — infraction', () => {
-    const pInfraction = makeProspect({
-      // Minimaliste : pas de NAF prioritaire, pas de NAF mature, pas de tel,
-      // pas de signaux, effectif sous sweet spot — UNIQUEMENT obligation + BEGES absent.
-      secteur_naf: '47.11F',
       obligation_beges: true,
       beges_publie: false,
-      effectif_min: 100,
-      effectif_max: 200, // < 250 → 0 pt taille
+      contact_email: 'a@b.fr',
       contact_telephone: undefined,
-      signaux: [],
     })
-
-    const details = getScoreDetails(pInfraction, false)
-    const score = calculerScore(pInfraction, false)
-
-    expect(details.obligation_beges).toBe(30)
-    expect(details.beges_non_publie).toBe(15)
-    expect(details.bonus_infraction_legale).toBe(20)
-    // 30 + 0 + 15 + 0 + 0 + 0 + 0 + 0 + 20 = 65 — exactement le seuil haute (60)
-    expect(score).toBe(65)
-    expect(score).toBeGreaterThanOrEqual(60) // priorité haute garantie sans autre critère
-  })
-
-  it('domine un prospect "tout bon SAUF BEGES expiré" (pas en infraction)', () => {
-    // Profil "infraction" minimal — voir test précédent
-    const pInfractionMinimal = makeProspect({
-      secteur_naf: '47.11F',
-      obligation_beges: true,
-      beges_publie: false,
-      effectif_min: 100,
-      effectif_max: 200,
-      contact_telephone: undefined,
-      signaux: [],
-    })
-
-    // Profil "tout bon" mais BEGES expiré (publié + obsolète, pas absent)
-    // → pas en infraction L. 229-25 → bonus_infraction_legale = 0
-    const pToutBonSaufExpire = makeProspect({
-      secteur_naf: '47.11F', // non prio, non mature
-      obligation_beges: false, // PAS obligé
-      beges_publie: true,
-      beges_valide: false, // expiré → +25
-      effectif_min: 300,
-      effectif_max: 500, // sweet spot → +15
-      contact_telephone: '0145000000', // → +10
-      signaux: [{ type: 'job_posting', description: 'RSE', weight: 10 }], // → +10
-    })
-
-    const scoreInfraction = calculerScore(pInfractionMinimal, false)
-    const scoreToutBon = calculerScore(pToutBonSaufExpire, false)
-
-    // Infraction = 65 ; tout bon sauf expiré = 0 + 0 + 0 + 25 + 10 + 15 + 10 + 0 = 60
-    expect(scoreInfraction).toBe(65)
-    expect(scoreToutBon).toBe(60)
-    expect(scoreInfraction).toBeGreaterThanOrEqual(scoreToutBon)
-  })
-})
-
-// ── CAS 16 : BEGES expiré != infraction (le bonus ne s'applique PAS) ────────
-
-describe('calculerScore — bonus infraction NE s\'applique PAS si BEGES expiré', () => {
-  it('obligation=true && beges_publie=true && beges_valide=false → bonus_infraction_legale=0', () => {
-    // Un BEGES expiré n'est PAS une infraction L. 229-25 — un bilan existe,
-    // l'obligation initiale est remplie. Seul le renouvellement quadriennal
-    // est dépassé. Cas géré par POINTS_BEGES_EXPIRE = 25.
-    const prospect = makeProspect({
-      obligation_beges: true,
-      beges_publie: true,
-      beges_valide: false,
-    })
-
     const details = getScoreDetails(prospect, false)
+    const reconstructed =
+      Math.round(
+        (details.taille * details.weights.taille +
+          details.beges * details.weights.beges +
+          details.contact * details.weights.contact) /
+          100,
+      ) +
+      details.deja_contacte_penalty +
+      details.rejete_penalty
+    const clamped = Math.max(0, Math.min(100, reconstructed))
 
-    expect(details.obligation_beges).toBe(30)
-    expect(details.beges_non_publie).toBe(0)
-    expect(details.beges_expire).toBe(25)
-    expect(details.bonus_infraction_legale).toBe(0) // pas d'infraction
-  })
-})
-
-// ── CAS 17 : PME pas obligée (le bonus ne s'applique PAS) ───────────────────
-
-describe('calculerScore — bonus infraction NE s\'applique PAS si non obligé', () => {
-  it('obligation=false && beges_publie=false → bonus_infraction_legale=0', () => {
-    // Une PME (< 500 sal., hors Région ≥ 250) sans BEGES n'est PAS en infraction —
-    // elle n'a pas l'obligation. Le bonus ne doit pas s'appliquer.
-    const prospect = makeProspect({
-      obligation_beges: false,
-      beges_publie: false,
-    })
-
-    const details = getScoreDetails(prospect, false)
-
-    expect(details.obligation_beges).toBe(0)
-    expect(details.beges_non_publie).toBe(15) // points BEGES absent restent
-    expect(details.bonus_infraction_legale).toBe(0) // mais pas le bonus infraction
+    expect(clamped).toBe(calculerScore(prospect, false))
   })
 })

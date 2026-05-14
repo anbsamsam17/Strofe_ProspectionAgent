@@ -21,6 +21,8 @@ function emptyCounts(): Record<ProspectStatus, number> {
     interested: 0,
     contacted: 0,
     rdv: 0,
+    // TODO(agent-E/pipeline) : compteur dédié au statut offer_sent
+    offer_sent: 0,
     converted: 0,
     rejected: 0,
     on_hold: 0,
