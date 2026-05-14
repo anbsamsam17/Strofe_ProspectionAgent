@@ -9,7 +9,6 @@ import { buildBegesUrl } from '@/lib/utils/beges-url'
 import { RunStatusBanner } from '@/components/dashboard/run-status-banner'
 import {
   STATUS_LABELS_COMPACT,
-  STATUS_STYLES_SOFT,
 } from '@/lib/constants/prospect-status'
 
 // ── Types contact filter ──────────────────────────────────────────────────────
@@ -39,8 +38,19 @@ export const dynamic = 'force-dynamic'
 
 const PAGE_SIZE = 20
 
-// STATUS_LABELS_COMPACT + STATUS_STYLES_SOFT importés de @/lib/constants/prospect-status
-// (source unique de vérité — voir lib/constants/prospect-status.ts).
+// ── Styles badge tech dark (ring-1 translucide, visible sur fond navy) ────────
+
+const STATUS_STYLES_TECH: Record<string, { badge: string; dot: string }> = {
+  sourced:    { badge: 'bg-gray-500/10 text-gray-300 ring-1 ring-gray-500/20',     dot: 'bg-gray-400' },
+  qualified:  { badge: 'bg-blue-500/10 text-blue-300 ring-1 ring-blue-500/20',     dot: 'bg-blue-400' },
+  contacted:  { badge: 'bg-yellow-500/10 text-yellow-300 ring-1 ring-yellow-500/20', dot: 'bg-yellow-400' },
+  interested: { badge: 'bg-green-500/10 text-green-300 ring-1 ring-green-500/20',  dot: 'bg-green-400' },
+  rdv:        { badge: 'bg-green-500/10 text-green-300 ring-1 ring-green-500/20',  dot: 'bg-green-400' },
+  offer_sent: { badge: 'bg-indigo-500/10 text-indigo-300 ring-1 ring-indigo-500/20', dot: 'bg-indigo-400' },
+  converted:  { badge: 'bg-emerald-500/10 text-emerald-300 ring-1 ring-emerald-500/20', dot: 'bg-emerald-400' },
+  rejected:   { badge: 'bg-red-500/10 text-red-300 ring-1 ring-red-500/20',        dot: 'bg-red-400' },
+  on_hold:    { badge: 'bg-orange-500/10 text-orange-300 ring-1 ring-orange-500/20', dot: 'bg-orange-400' },
+}
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -112,7 +122,7 @@ function SortIcon({
       strokeWidth="2"
       strokeLinecap="round"
       strokeLinejoin="round"
-      className="ml-1 text-green-600 dark:text-green-400"
+      className="ml-1 text-green-400"
       aria-hidden="true"
     >
       <polyline points="18 15 12 9 6 15" />
@@ -128,7 +138,7 @@ function SortIcon({
       strokeWidth="2"
       strokeLinecap="round"
       strokeLinejoin="round"
-      className="ml-1 text-green-600 dark:text-green-400"
+      className="ml-1 text-green-400"
       aria-hidden="true"
     >
       <polyline points="6 9 12 15 18 9" />
@@ -137,19 +147,24 @@ function SortIcon({
 }
 
 function ScoreCell({ score }: { score: number }) {
-  const tone =
-    score >= 75 ? 'bg-green-500' : score >= 50 ? 'bg-yellow-500' : 'bg-gray-400'
+  const barColor =
+    score >= 75
+      ? 'bg-gradient-to-r from-green-500 to-emerald-400'
+      : score >= 50
+        ? 'bg-gradient-to-r from-yellow-500 to-amber-400'
+        : 'bg-gray-600'
+
   return (
     <div className="flex items-center gap-2">
-      <span className="w-7 text-right text-sm font-bold tabular-nums text-gray-900 dark:text-white">
+      <span className="w-7 text-right font-mono text-sm font-bold tabular-nums text-white">
         {score}
       </span>
       <div
-        className="h-1.5 w-16 overflow-hidden rounded-full bg-gray-200 dark:bg-gray-700"
+        className="h-1 w-14 overflow-hidden rounded-full bg-white/10"
         aria-hidden="true"
       >
         <div
-          className={`h-1.5 rounded-full transition-all ${tone}`}
+          className={`h-1 rounded-full transition-all ${barColor}`}
           style={{ width: `${Math.min(100, Math.max(0, score))}%` }}
         />
       </div>
@@ -167,16 +182,13 @@ function BegesBadge({ prospect }: { prospect: Prospect }) {
   let badgeLabel: string
 
   if (begesPublie && begesValide) {
-    badgeClass =
-      'bg-green-50 text-green-700 border-green-200 dark:bg-green-950/50 dark:text-green-400 dark:border-green-800'
+    badgeClass = 'bg-green-500/10 text-green-300 ring-1 ring-green-500/20'
     badgeLabel = 'Publié'
   } else if (begesPublie && !begesValide) {
-    badgeClass =
-      'bg-orange-50 text-orange-700 border-orange-200 dark:bg-orange-950/50 dark:text-orange-400 dark:border-orange-800'
+    badgeClass = 'bg-orange-500/10 text-orange-300 ring-1 ring-orange-500/20'
     badgeLabel = 'Expiré'
   } else {
-    badgeClass =
-      'bg-red-50 text-red-700 border-red-200 dark:bg-red-950/50 dark:text-red-400 dark:border-red-800'
+    badgeClass = 'bg-red-500/10 text-red-300 ring-1 ring-red-500/20'
     badgeLabel = 'Absent'
   }
 
@@ -188,12 +200,12 @@ function BegesBadge({ prospect }: { prospect: Prospect }) {
 
   const badge = (
     <span
-      className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-medium ${badgeClass}`}
+      className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ${badgeClass}`}
       title={title}
     >
       {badgeLabel}
       {begesDate && (
-        <span className="opacity-70">
+        <span className="opacity-60">
           {' '}
           {new Intl.DateTimeFormat('fr-FR', { year: 'numeric' }).format(
             new Date(begesDate),
@@ -231,6 +243,8 @@ interface SearchParams {
   /** "1" pour afficher uniquement les prospects archivés. */
   archived?: string
   contact_type?: string
+  /** "missing" pour ne lister que les entreprises avec BEGES absent OU expiré. */
+  beges?: string
 }
 
 export default async function ProspectsPage({
@@ -256,6 +270,7 @@ export default async function ProspectsPage({
   const scoreMin = params.score_min ? parseInt(params.score_min, 10) : 0
   const showArchived = params.archived === '1'
   const contactTypes = parseContactTypes(params.contact_type)
+  const begesFilter: 'missing' | undefined = params.beges === 'missing' ? 'missing' : undefined
 
   const from = (page - 1) * PAGE_SIZE
   const to = from + PAGE_SIZE - 1
@@ -291,6 +306,11 @@ export default async function ProspectsPage({
       .map((t) => `${CONTACT_FIELD_BY_TYPE[t]}.not.is.null`)
       .join(',')
     query = query.or(orClause)
+  }
+  if (begesFilter === 'missing') {
+    // BEGES manquant = absent (beges_publie=false) OU expiré (beges_publie=true && beges_valide=false).
+    // En SQL : `WHERE beges_publie = false OR beges_valide = false`.
+    query = query.or('beges_publie.eq.false,beges_valide.eq.false')
   }
 
   // Compteur "nouveaux dernier run" — récupère le started_at du dernier run agent
@@ -352,8 +372,9 @@ export default async function ProspectsPage({
     return buildHref({ sort, order, page: '1' })
   }
 
+  // Classes header colonne — label mono tech cyan
   const th =
-    'px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400'
+    'px-4 py-3 text-left font-mono text-[10px] uppercase tracking-[0.18em] text-cyan-400/70'
 
   const dateFmt = new Intl.DateTimeFormat('fr-FR', { dateStyle: 'short' })
 
@@ -363,48 +384,52 @@ export default async function ProspectsPage({
           même si l'utilisateur a navigué hors du dashboard. */}
       <RunStatusBanner />
 
-      {/* En-tête */}
+      {/* ── En-tête tech cockpit ─────────────────────────────────────────── */}
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-gray-900 dark:text-white">
+          {/* Label mono au-dessus du titre */}
+          <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-green-400/70">
+            <span>{'// glan · base prospects'}</span>
+          </p>
+          <h1 className="mt-1 bg-gradient-to-br from-white via-green-100 to-green-300 bg-clip-text text-3xl font-bold tracking-tight text-transparent">
             Prospects
           </h1>
-          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-            <span className="font-semibold text-gray-700 dark:text-gray-300">
-              {totalCount}
-            </span>{' '}
-            au total
+          <p className="mt-1 font-mono text-[11px] text-green-400/70">
+            {'// '}{totalCount} au total
             {newSinceLastRun > 0 && (
-              <>
-                {' · '}
-                <span className="font-semibold text-green-700 dark:text-green-400">
-                  {newSinceLastRun} nouveau{newSinceLastRun > 1 ? 'x' : ''}
-                </span>{' '}
-                dernier run
-              </>
+              <span className="ml-1 text-green-300/90">
+                · {newSinceLastRun} nouveau{newSinceLastRun > 1 ? 'x' : ''} dernier run
+              </span>
             )}
           </p>
         </div>
       </div>
 
-      {/* Filtres sticky en haut du scroll. Le wrapper étend le fond aux bords
-          du <main> pour masquer le contenu qui passe derrière (sinon halo). */}
-      <div className="sticky top-0 z-10 -mx-4 border-b border-gray-200/80 bg-gray-50/95 px-4 py-3 backdrop-blur supports-[backdrop-filter]:bg-gray-50/80 dark:border-gray-800/80 dark:bg-gray-950/95 dark:supports-[backdrop-filter]:bg-gray-950/80 sm:-mx-6 sm:px-6">
-        <ProspectsFilters
-          currentStatuts={statutFilter}
-          currentSecteur={secteurFilter}
-          currentScoreMin={scoreMin}
-          currentArchived={showArchived}
-          currentContactTypes={contactTypes}
-        />
+      {/* ── Filtres sticky — wrapper translucide pour effet continuité ──── */}
+      <div className="sticky top-0 z-10 -mx-4 px-4 py-3 backdrop-blur-xl sm:-mx-6 sm:px-6">
+        {/* Fond semi-transparent pour masquer le contenu qui passe derrière */}
+        <div className="absolute inset-0 bg-[oklch(11%_0.022_250_/_0.85)] backdrop-blur-xl" aria-hidden="true" />
+        <div className="relative">
+          <ProspectsFilters
+            currentStatuts={statutFilter}
+            currentSecteur={secteurFilter}
+            currentScoreMin={scoreMin}
+            currentArchived={showArchived}
+            currentContactTypes={contactTypes}
+            currentBegesFilter={begesFilter}
+          />
+        </div>
       </div>
 
-      {/* Tableau unifié — tous les prospects triés par score décroissant (défaut). */}
-      <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-900">
+      {/* ── Tableau prospects — style glassmorphism tech ─────────────────── */}
+      <div className="overflow-hidden rounded-2xl border border-white/[0.08] bg-white/[0.03] backdrop-blur-md">
+        {/* Accent top border brand */}
+        <div className="h-px w-full bg-gradient-to-r from-transparent via-green-400/50 to-transparent" aria-hidden="true" />
+
         <div className="overflow-x-auto">
           <table className="w-full text-sm" aria-label="Liste des prospects">
             <thead>
-              <tr className="border-b border-gray-200 bg-gray-50/80 dark:border-gray-800 dark:bg-gray-800/40">
+              <tr className="border-b border-white/[0.06] bg-white/[0.02]">
                 <th scope="col" className={th}>
                   <span className="sr-only">Rang</span>
                   <span aria-hidden="true">#</span>
@@ -416,7 +441,7 @@ export default async function ProspectsPage({
                 >
                   <Link
                     href={buildSortHref('score_priorite')}
-                    className="group inline-flex items-center hover:text-gray-900 dark:hover:text-white"
+                    className="group inline-flex items-center hover:text-cyan-300"
                   >
                     Score
                     <SortIcon
@@ -433,7 +458,7 @@ export default async function ProspectsPage({
                 >
                   <Link
                     href={buildSortHref('raison_sociale')}
-                    className="group inline-flex items-center hover:text-gray-900 dark:hover:text-white"
+                    className="group inline-flex items-center hover:text-cyan-300"
                   >
                     Entreprise
                     <SortIcon
@@ -450,7 +475,7 @@ export default async function ProspectsPage({
                   Géographie
                 </th>
                 <th scope="col" className={`${th} hidden lg:table-cell`}>
-                  État BEGES
+                  BEGES
                 </th>
                 <th
                   scope="col"
@@ -459,7 +484,7 @@ export default async function ProspectsPage({
                 >
                   <Link
                     href={buildSortHref('statut')}
-                    className="group inline-flex items-center hover:text-gray-900 dark:hover:text-white"
+                    className="group inline-flex items-center hover:text-cyan-300"
                   >
                     Statut
                     <SortIcon
@@ -476,7 +501,7 @@ export default async function ProspectsPage({
                 >
                   <Link
                     href={buildSortHref('updated_at')}
-                    className="group inline-flex items-center hover:text-gray-900 dark:hover:text-white"
+                    className="group inline-flex items-center hover:text-cyan-300"
                   >
                     Dernière action
                     <SortIcon
@@ -493,7 +518,7 @@ export default async function ProspectsPage({
                 >
                   <Link
                     href={buildSortHref('created_at')}
-                    className="group inline-flex items-center hover:text-gray-900 dark:hover:text-white"
+                    className="group inline-flex items-center hover:text-cyan-300"
                   >
                     Ajouté le
                     <SortIcon
@@ -512,20 +537,18 @@ export default async function ProspectsPage({
               {prospects && prospects.length > 0 ? (
                 (prospects as unknown as Prospect[]).map((prospect, idx) => {
                   const statut = prospect.statut as ProspectStatus
-                  const statusStyle = STATUS_STYLES_SOFT[statut] ?? STATUS_STYLES_SOFT.sourced
+                  const statusStyle =
+                    STATUS_STYLES_TECH[statut] ?? STATUS_STYLES_TECH.sourced
                   const statusLabel = STATUS_LABELS_COMPACT[statut] ?? prospect.statut
-                  const isEven = idx % 2 === 0
                   const rank = from + idx + 1
 
                   return (
                     <tr
                       key={prospect.id}
-                      className={`group border-b border-gray-100 transition-colors duration-150 last:border-0 hover:bg-green-50/40 dark:border-gray-800/60 dark:hover:bg-green-950/10 ${
-                        isEven ? '' : 'bg-gray-50/40 dark:bg-gray-800/10'
-                      }`}
+                      className="group border-b border-white/[0.04] transition-colors duration-150 last:border-0 hover:bg-white/[0.03]"
                     >
                       {/* 1. Rang */}
-                      <td className="px-4 py-3.5 text-xs font-medium tabular-nums text-gray-400 dark:text-gray-600">
+                      <td className="px-4 py-3.5 font-mono text-xs tabular-nums text-gray-500">
                         {rank}
                       </td>
 
@@ -537,43 +560,43 @@ export default async function ProspectsPage({
                       {/* 3. Entreprise */}
                       <td className="px-4 py-3.5">
                         <Link href={`/prospects/${prospect.id}`} className="block">
-                          <p className="font-semibold text-gray-900 transition-colors group-hover:text-green-700 dark:text-white dark:group-hover:text-green-400">
+                          <p className="font-semibold text-white transition-colors group-hover:text-green-300">
                             {prospect.raison_sociale}
                           </p>
                           {prospect.siren && (
-                            <p className="mt-0.5 text-xs text-gray-400 dark:text-gray-600">
-                              SIREN {prospect.siren}
+                            <p className="mt-0.5 font-mono text-[10px] text-gray-500">
+                              {prospect.siren}
                             </p>
                           )}
                         </Link>
                       </td>
 
                       {/* 4. Taille */}
-                      <td className="hidden px-4 py-3.5 text-sm text-gray-600 dark:text-gray-400 lg:table-cell">
+                      <td className="hidden px-4 py-3.5 text-sm tabular-nums text-gray-400 lg:table-cell">
                         {prospect.effectif_min && prospect.effectif_max ? (
-                          <span className="tabular-nums">
+                          <span>
                             {prospect.effectif_min}–{prospect.effectif_max}
                           </span>
                         ) : prospect.effectif_min ? (
-                          <span className="tabular-nums">+{prospect.effectif_min}</span>
+                          <span>+{prospect.effectif_min}</span>
                         ) : (
-                          <span className="text-gray-400 dark:text-gray-600">—</span>
+                          <span className="text-gray-500">—</span>
                         )}
                       </td>
 
                       {/* 5. Géographie */}
-                      <td className="hidden px-4 py-3.5 text-sm text-gray-600 dark:text-gray-400 sm:table-cell">
+                      <td className="hidden px-4 py-3.5 text-sm text-gray-400 sm:table-cell">
                         {prospect.ville ? (
                           <span>
                             {prospect.ville}
                             {prospect.code_postal && (
-                              <span className="ml-1 text-xs text-gray-400 dark:text-gray-600">
-                                ({prospect.code_postal})
+                              <span className="ml-1 font-mono text-[10px] text-gray-500">
+                                {prospect.code_postal}
                               </span>
                             )}
                           </span>
                         ) : (
-                          <span className="text-gray-400 dark:text-gray-600">—</span>
+                          <span className="text-gray-500">—</span>
                         )}
                       </td>
 
@@ -596,12 +619,12 @@ export default async function ProspectsPage({
                       </td>
 
                       {/* 8. Dernière action */}
-                      <td className="hidden px-4 py-3.5 text-sm tabular-nums text-gray-500 dark:text-gray-500 xl:table-cell">
+                      <td className="hidden px-4 py-3.5 font-mono text-xs tabular-nums text-gray-500 xl:table-cell">
                         {dateFmt.format(new Date(prospect.updated_at))}
                       </td>
 
-                      {/* 9. Ajouté le (date de création du prospect en base) */}
-                      <td className="hidden px-4 py-3.5 text-sm tabular-nums text-gray-500 dark:text-gray-500 xl:table-cell">
+                      {/* 9. Ajouté le */}
+                      <td className="hidden px-4 py-3.5 font-mono text-xs tabular-nums text-gray-500 xl:table-cell">
                         {dateFmt.format(new Date(prospect.created_at))}
                       </td>
 
@@ -623,7 +646,8 @@ export default async function ProspectsPage({
                 <tr>
                   <td colSpan={10} className="px-4 py-16 text-center">
                     <div className="flex flex-col items-center gap-3">
-                      <div className="flex h-12 w-12 items-center justify-center rounded-full bg-gray-100 dark:bg-gray-800">
+                      {/* Icône cercle translucide */}
+                      <div className="flex h-12 w-12 items-center justify-center rounded-full bg-white/[0.04] ring-1 ring-white/[0.08]">
                         <svg
                           xmlns="http://www.w3.org/2000/svg"
                           width="20"
@@ -634,30 +658,30 @@ export default async function ProspectsPage({
                           strokeWidth="1.5"
                           strokeLinecap="round"
                           strokeLinejoin="round"
-                          className="text-gray-400 dark:text-gray-600"
+                          className="text-gray-500"
                           aria-hidden="true"
                         >
                           <circle cx="11" cy="11" r="8" />
                           <line x1="21" y1="21" x2="16.65" y2="16.65" />
                         </svg>
                       </div>
-                      <p className="text-sm font-medium text-gray-500 dark:text-gray-400">
+                      <p className="text-sm font-semibold text-gray-200">
                         Aucun prospect trouvé
                       </p>
-                      <p className="text-xs text-gray-400 dark:text-gray-600">
+                      <p className="text-xs text-gray-500">
                         {hasActiveFilters
-                          ? 'Essayez de modifier ou réinitialiser vos filtres.'
+                          ? 'Modifiez ou réinitialisez vos filtres.'
                           : 'La prochaine campagne nocturne remplira cette liste.'}
                       </p>
                       {hasActiveFilters && (
                         <Link
                           href="/prospects"
-                          className="mt-2 inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 transition-colors hover:border-gray-300 hover:bg-gray-50 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-300 dark:hover:bg-gray-800"
+                          className="mt-2 inline-flex items-center gap-2 rounded-lg border border-white/10 bg-white/[0.05] px-4 py-2 text-xs font-medium text-gray-300 transition-colors hover:border-green-500/30 hover:bg-green-500/10 hover:text-green-300"
                         >
                           <svg
                             xmlns="http://www.w3.org/2000/svg"
-                            width="13"
-                            height="13"
+                            width="12"
+                            height="12"
                             viewBox="0 0 24 24"
                             fill="none"
                             stroke="currentColor"
@@ -680,20 +704,20 @@ export default async function ProspectsPage({
           </table>
         </div>
 
-        {/* Pagination */}
+        {/* ── Pagination — style translucide ───────────────────────────── */}
         {totalPages > 1 && (
-          <div className="flex items-center justify-between border-t border-gray-200 px-5 py-3.5 dark:border-gray-800">
-            <p className="text-xs text-gray-500 dark:text-gray-400">
-              Page{' '}
-              <span className="font-semibold tabular-nums text-gray-700 dark:text-gray-300">
+          <div className="flex items-center justify-between border-t border-white/[0.06] px-5 py-3.5">
+            <p className="font-mono text-xs text-gray-500">
+              p.{' '}
+              <span className="tabular-nums text-gray-300">
                 {page}
-              </span>{' '}
-              sur{' '}
-              <span className="font-semibold tabular-nums text-gray-700 dark:text-gray-300">
+              </span>
+              {' / '}
+              <span className="tabular-nums text-gray-300">
                 {totalPages}
-              </span>{' '}
-              —{' '}
-              <span className="font-semibold tabular-nums text-gray-700 dark:text-gray-300">
+              </span>
+              {' — '}
+              <span className="tabular-nums text-gray-300">
                 {totalCount}
               </span>{' '}
               résultats
@@ -703,7 +727,7 @@ export default async function ProspectsPage({
                 <Link
                   href={buildHref({ page: String(page - 1) })}
                   aria-label="Page précédente"
-                  className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-600 transition-colors hover:border-gray-300 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 dark:hover:bg-gray-800"
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/[0.04] px-3 py-1.5 font-mono text-xs text-gray-300 transition-colors hover:border-white/20 hover:bg-white/[0.08] hover:text-white"
                 >
                   <svg
                     xmlns="http://www.w3.org/2000/svg"
@@ -719,10 +743,10 @@ export default async function ProspectsPage({
                   >
                     <polyline points="15 18 9 12 15 6" />
                   </svg>
-                  Précédent
+                  Préc.
                 </Link>
               ) : (
-                <span className="inline-flex cursor-not-allowed items-center gap-1.5 rounded-lg border border-gray-100 bg-white px-3 py-1.5 text-xs font-medium text-gray-300 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-700">
+                <span className="inline-flex cursor-not-allowed items-center gap-1.5 rounded-lg border border-white/[0.05] bg-white/[0.02] px-3 py-1.5 font-mono text-xs text-gray-500">
                   <svg
                     xmlns="http://www.w3.org/2000/svg"
                     width="12"
@@ -737,11 +761,11 @@ export default async function ProspectsPage({
                   >
                     <polyline points="15 18 9 12 15 6" />
                   </svg>
-                  Précédent
+                  Préc.
                 </span>
               )}
 
-              <span className="rounded-lg bg-green-600 px-3 py-1.5 text-xs font-semibold tabular-nums text-white">
+              <span className="rounded-lg bg-green-500/15 px-3 py-1.5 font-mono text-xs font-semibold tabular-nums text-green-300 ring-1 ring-green-500/30">
                 {page}
               </span>
 
@@ -749,9 +773,9 @@ export default async function ProspectsPage({
                 <Link
                   href={buildHref({ page: String(page + 1) })}
                   aria-label="Page suivante"
-                  className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-600 transition-colors hover:border-gray-300 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 dark:hover:bg-gray-800"
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/[0.04] px-3 py-1.5 font-mono text-xs text-gray-300 transition-colors hover:border-white/20 hover:bg-white/[0.08] hover:text-white"
                 >
-                  Suivant
+                  Suiv.
                   <svg
                     xmlns="http://www.w3.org/2000/svg"
                     width="12"
@@ -768,8 +792,8 @@ export default async function ProspectsPage({
                   </svg>
                 </Link>
               ) : (
-                <span className="inline-flex cursor-not-allowed items-center gap-1.5 rounded-lg border border-gray-100 bg-white px-3 py-1.5 text-xs font-medium text-gray-300 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-700">
-                  Suivant
+                <span className="inline-flex cursor-not-allowed items-center gap-1.5 rounded-lg border border-white/[0.05] bg-white/[0.02] px-3 py-1.5 font-mono text-xs text-gray-500">
+                  Suiv.
                   <svg
                     xmlns="http://www.w3.org/2000/svg"
                     width="12"

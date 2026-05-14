@@ -6,12 +6,20 @@ import type { ProspectStatus } from '@/lib/types'
 
 export type ContactFilterType = 'phone' | 'email' | 'linkedin'
 
+/**
+ * Filtre BEGES :
+ *   - 'missing' : entreprises avec BEGES absent OU expiré (cible commerciale chaude).
+ *   - undefined : pas de filtre BEGES.
+ */
+export type BegesFilterValue = 'missing'
+
 interface ProspectsFiltersProps {
   currentStatuts: string[]
   currentSecteur: string
   currentScoreMin: number
   currentArchived: boolean
   currentContactTypes?: ContactFilterType[]
+  currentBegesFilter?: BegesFilterValue
 }
 
 // TODO(Agent A): `offer_sent` à ajouter à `ProspectStatus` (`lib/types.ts`).
@@ -45,6 +53,7 @@ export function ProspectsFilters({
   currentScoreMin,
   currentArchived,
   currentContactTypes = [],
+  currentBegesFilter,
 }: ProspectsFiltersProps) {
   const router = useRouter()
   const pathname = usePathname()
@@ -56,6 +65,7 @@ export function ProspectsFilters({
   const [scoreMin, setScoreMin] = useState(currentScoreMin)
   const [archived, setArchived] = useState<boolean>(currentArchived)
   const [contactTypes, setContactTypes] = useState<ContactFilterType[]>(currentContactTypes)
+  const [begesFilter, setBegesFilter] = useState<BegesFilterValue | undefined>(currentBegesFilter)
 
   function applyFilters(
     newStatuts: string[],
@@ -63,6 +73,7 @@ export function ProspectsFilters({
     newScoreMin: number,
     newArchived: boolean,
     newContactTypes: ContactFilterType[],
+    newBegesFilter: BegesFilterValue | undefined,
   ) {
     const params = new URLSearchParams(searchParams.toString())
     params.set('page', '1')
@@ -97,6 +108,12 @@ export function ProspectsFilters({
       params.delete('contact_type')
     }
 
+    if (newBegesFilter) {
+      params.set('beges', newBegesFilter)
+    } else {
+      params.delete('beges')
+    }
+
     startTransition(() => {
       router.push(`${pathname}?${params.toString()}`)
     })
@@ -107,7 +124,7 @@ export function ProspectsFilters({
       ? statuts.filter((s) => s !== value)
       : [...statuts, value]
     setStatuts(next)
-    applyFilters(next, secteur, scoreMin, archived, contactTypes)
+    applyFilters(next, secteur, scoreMin, archived, contactTypes, begesFilter)
   }
 
   function toggleContactType(value: ContactFilterType) {
@@ -115,7 +132,13 @@ export function ProspectsFilters({
       ? contactTypes.filter((t) => t !== value)
       : [...contactTypes, value]
     setContactTypes(next)
-    applyFilters(statuts, secteur, scoreMin, archived, next)
+    applyFilters(statuts, secteur, scoreMin, archived, next, begesFilter)
+  }
+
+  function toggleBegesFilter() {
+    const next: BegesFilterValue | undefined = begesFilter === 'missing' ? undefined : 'missing'
+    setBegesFilter(next)
+    applyFilters(statuts, secteur, scoreMin, archived, contactTypes, next)
   }
 
   function handleSecteurChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -124,20 +147,20 @@ export function ProspectsFilters({
 
   function handleSecteurKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
     if (e.key === 'Enter') {
-      applyFilters(statuts, secteur, scoreMin, archived, contactTypes)
+      applyFilters(statuts, secteur, scoreMin, archived, contactTypes, begesFilter)
     }
   }
 
   function handleScoreChange(e: React.ChangeEvent<HTMLInputElement>) {
     const val = parseInt(e.target.value, 10)
     setScoreMin(val)
-    applyFilters(statuts, secteur, val, archived, contactTypes)
+    applyFilters(statuts, secteur, val, archived, contactTypes, begesFilter)
   }
 
   function toggleArchived() {
     const next = !archived
     setArchived(next)
-    applyFilters(statuts, secteur, scoreMin, next, contactTypes)
+    applyFilters(statuts, secteur, scoreMin, next, contactTypes, begesFilter)
   }
 
   function handleReset() {
@@ -156,7 +179,8 @@ export function ProspectsFilters({
     secteur ||
     scoreMin > 0 ||
     archived ||
-    contactTypes.length > 0
+    contactTypes.length > 0 ||
+    !!begesFilter
   const scorePercent = scoreMin
 
   return (
@@ -235,7 +259,7 @@ export function ProspectsFilters({
                 value={secteur}
                 onChange={handleSecteurChange}
                 onKeyDown={handleSecteurKeyDown}
-                onBlur={() => applyFilters(statuts, secteur, scoreMin, archived, contactTypes)}
+                onBlur={() => applyFilters(statuts, secteur, scoreMin, archived, contactTypes, begesFilter)}
                 placeholder="ex : Transport..."
                 className="w-full rounded-lg border border-gray-200 bg-white py-2 pl-9 pr-3 text-sm text-gray-900 placeholder-gray-400 transition focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-500/20 dark:border-gray-700 dark:bg-gray-800 dark:text-white dark:placeholder-gray-600"
               />
@@ -328,6 +352,53 @@ export function ProspectsFilters({
             </div>
           </fieldset>
 
+          {/* Toggle BEGES manquant (absent OU expiré) — cible commerciale chaude */}
+          <div>
+            <button
+              type="button"
+              onClick={toggleBegesFilter}
+              aria-pressed={begesFilter === 'missing'}
+              aria-label="Filtrer : BEGES absent ou expiré"
+              className={`inline-flex w-full items-center justify-between rounded-lg border px-3 py-2 text-xs font-medium transition-colors ${
+                begesFilter === 'missing'
+                  ? 'border-red-300 bg-red-50 text-red-700 dark:border-red-700 dark:bg-red-950/40 dark:text-red-400'
+                  : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300 hover:bg-gray-50 dark:border-gray-700 dark:bg-transparent dark:text-gray-400 dark:hover:bg-gray-800/50'
+              }`}
+            >
+              <span className="inline-flex items-center gap-2">
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="13"
+                  height="13"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden="true"
+                >
+                  <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+                  <line x1="12" y1="9" x2="12" y2="13" />
+                  <line x1="12" y1="17" x2="12.01" y2="17" />
+                </svg>
+                BEGES manquant
+              </span>
+              <span
+                className={`relative inline-block h-4 w-7 rounded-full transition-colors ${
+                  begesFilter === 'missing' ? 'bg-red-500' : 'bg-gray-300 dark:bg-gray-700'
+                }`}
+                aria-hidden="true"
+              >
+                <span
+                  className={`absolute top-0.5 h-3 w-3 rounded-full bg-white shadow-sm transition-transform ${
+                    begesFilter === 'missing' ? 'translate-x-3.5' : 'translate-x-0.5'
+                  }`}
+                />
+              </span>
+            </button>
+          </div>
+
           {/* Toggle archivés — masqués par défaut, accessibles via filtre */}
           <div>
             <button
@@ -385,6 +456,7 @@ export function ProspectsFilters({
               secteur && `secteur "${secteur}"`,
               scoreMin > 0 && `score ≥ ${scoreMin}`,
               archived && 'archivés',
+              begesFilter === 'missing' && 'BEGES manquant',
               contactTypes.length > 0 &&
                 `contact : ${contactTypes
                   .map((t) => ALL_CONTACT_TYPES.find((c) => c.value === t)?.label ?? t)
