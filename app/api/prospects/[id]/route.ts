@@ -22,6 +22,7 @@ const PROSPECT_STATUTS: [ProspectStatus, ...ProspectStatus[]] = [
   'contacted',
   'interested',
   'rdv',
+  'offer_sent',
   'converted',
   'rejected',
   'on_hold',

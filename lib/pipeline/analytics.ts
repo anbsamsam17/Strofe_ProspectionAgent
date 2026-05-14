@@ -51,12 +51,16 @@ const FUNNEL_LABELS: Record<FunnelStep, string> = {
 export function buildFunnel(
   countsByStatus: Record<ProspectStatus, number>,
 ): FunnelStage[] {
+  // Défensif : `?? 0` sur chaque accès — si l'appelant construit un Record partiel
+  // (oubli d'un statut, ex. `offer_sent` ajouté plus tard), `undefined + n` produit
+  // NaN qui se propage dans tous les calculs et casse le SVG du funnel (polygon
+  // avec `points="NaN,NaN …"` → crash SSR render observé prod digest 245842919).
   const fused: Record<FunnelStep, number> = {
-    sourced: countsByStatus.sourced,
-    qualified: countsByStatus.qualified + countsByStatus.interested,
-    contacted: countsByStatus.contacted,
-    rdv: countsByStatus.rdv,
-    converted: countsByStatus.converted,
+    sourced: countsByStatus.sourced ?? 0,
+    qualified: (countsByStatus.qualified ?? 0) + (countsByStatus.interested ?? 0),
+    contacted: countsByStatus.contacted ?? 0,
+    rdv: countsByStatus.rdv ?? 0,
+    converted: countsByStatus.converted ?? 0,
   }
 
   const sourced = fused.sourced || 0

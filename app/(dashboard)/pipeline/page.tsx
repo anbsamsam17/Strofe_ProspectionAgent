@@ -9,7 +9,7 @@ import {
   PipelineClient,
   type KanbanStatus,
 } from '@/components/pipeline/pipeline-client'
-import { PeriodToggle, parseRange } from '@/components/pipeline/period-toggle'
+import { PeriodToggle, parseRange, type PipelineRange } from '@/components/pipeline/period-toggle'
 import type { Prospect, ProspectStatus } from '@/lib/types'
 
 // Force le rendu dynamique — KPI + Kanban dépendent des données + searchParams.
@@ -38,16 +38,104 @@ const PIPELINE_COLUMNS: { status: KanbanStatus; label: string; color: string }[]
 // Statuts chargés côté SSR. On inclut `rdv` pour ne pas perdre les prospects
 // legacy (ils sont fetchés mais pas affichés tant qu'une colonne dédiée n'est
 // pas créée — ils restent visibles via /prospects).
+// `offer_sent` est aussi inclus pour charger les prospects qui ont déjà été
+// promus dans cette colonne post-migration 010.
 const KANBAN_STATUSES: ProspectStatus[] = [
   'sourced',
   'qualified',
   'contacted',
   'interested',
   'rdv',
+  'offer_sent',
   'converted',
   'rejected',
   'on_hold',
 ]
+
+// Tous les statuts attendus dans `countsByStatus` — alignés sur `ProspectStatus`.
+// Source unique de vérité pour initialiser le Record et éviter qu'un statut
+// orphelin en DB (ou un nouveau ajouté à l'enum sans MAJ du code) corrompe le
+// Record en y injectant une clé sans initialisation à `0`.
+const ALL_STATUSES: readonly ProspectStatus[] = [
+  'sourced',
+  'qualified',
+  'contacted',
+  'interested',
+  'rdv',
+  'offer_sent',
+  'converted',
+  'rejected',
+  'on_hold',
+] as const
+
+function emptyCountsByStatus(): Record<ProspectStatus, number> {
+  return ALL_STATUSES.reduce(
+    (acc, s) => {
+      acc[s] = 0
+      return acc
+    },
+    {} as Record<ProspectStatus, number>,
+  )
+}
+
+function emptyProspectsByStatus(): Record<KanbanStatus, Prospect[]> {
+  // KanbanStatus == ProspectStatus depuis la migration 010 ; ALL_STATUSES couvre déjà tout.
+  return ALL_STATUSES.reduce(
+    (acc, s) => {
+      acc[s as KanbanStatus] = []
+      return acc
+    },
+    {} as Record<KanbanStatus, Prospect[]>,
+  )
+}
+
+interface PipelineData {
+  prospectsByStatus: Record<KanbanStatus, Prospect[]>
+  countsByStatus: Record<ProspectStatus, number>
+}
+
+async function fetchPipelineData(): Promise<PipelineData> {
+  const supabase = await createClient()
+
+  // RLS filtre implicitement sur user_id — pas de .eq('user_id', ...) ici.
+  const { data: prospects, error } = await supabase
+    .from('prospects')
+    .select('*')
+    .in('statut', KANBAN_STATUSES)
+    .order('score_priorite', { ascending: false })
+
+  if (error) {
+    // Log structuré (pas de PII) puis re-throw pour pouvoir afficher un fallback
+    // côté page sans bubble silencieux à l'error boundary.
+    console.error('[/pipeline] prospects fetch error', {
+      code: error.code,
+      message: error.message,
+      details: error.details,
+    })
+    throw new Error(`Pipeline DB fetch failed: ${error.message}`)
+  }
+
+  const prospectsByStatus = emptyProspectsByStatus()
+
+  for (const prospect of (prospects ?? []) as unknown as Prospect[]) {
+    const status = prospect.statut as KanbanStatus
+    // Garde défensive : un statut hors enum (legacy / data corrompue) est ignoré
+    // au lieu de cracher (Object indexing TS-safe via hasOwn).
+    if (Object.prototype.hasOwnProperty.call(prospectsByStatus, status)) {
+      prospectsByStatus[status].push(prospect)
+    }
+  }
+
+  // Counts par statut pour le funnel — initialisation exhaustive depuis ALL_STATUSES
+  // (évite tout undefined si un statut était oublié dans la littérale).
+  const countsByStatus = emptyCountsByStatus()
+  for (const s of ALL_STATUSES) {
+    // Cast safe : KanbanStatus == ProspectStatus.
+    countsByStatus[s] = prospectsByStatus[s as KanbanStatus]?.length ?? 0
+  }
+
+  return { prospectsByStatus, countsByStatus }
+}
 
 export default async function PipelinePage({ searchParams }: PipelinePageProps) {
   const params = await searchParams
@@ -61,48 +149,22 @@ export default async function PipelinePage({ searchParams }: PipelinePageProps) 
 
   if (!user) redirect('/login')
 
-  // RLS filtre implicitement sur user_id — pas de .eq('user_id', ...) ici.
-  const { data: prospects } = await supabase
-    .from('prospects')
-    .select('*')
-    .in('statut', KANBAN_STATUSES)
-    .order('score_priorite', { ascending: false })
-
-  // On clé le Record sur KanbanStatus (qui inclut `offer_sent`). Les prospects
-  // en `rdv` (legacy) sont volontairement ignorés du Kanban — accessible via
-  // /prospects pour ne pas perdre l'historique commercial.
-  const prospectsByStatus: Record<KanbanStatus, Prospect[]> = {
-    sourced: [],
-    qualified: [],
-    contacted: [],
-    interested: [],
-    offer_sent: [],
-    rdv: [],
-    converted: [],
-    rejected: [],
-    on_hold: [],
+  // Try/catch global pour éviter qu'une erreur de fetch / mapping bubble vers
+  // /pipeline/error.tsx (le contrat UX est : la page reste utilisable, on
+  // affiche un fallback explicite avec diagnostic).
+  let data: PipelineData
+  try {
+    data = await fetchPipelineData()
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    console.error('[/pipeline] data fetch error — render fallback', {
+      message: msg,
+      stack: err instanceof Error ? err.stack : undefined,
+    })
+    return <PipelinePageFallback range={range} reason={msg} />
   }
 
-  for (const prospect of (prospects ?? []) as unknown as Prospect[]) {
-    const status = prospect.statut as KanbanStatus
-    if (prospectsByStatus[status]) {
-      prospectsByStatus[status].push(prospect)
-    }
-  }
-
-  // Counts par statut pour le funnel — clé sur ProspectStatus (existant).
-  // TODO post-merge: étendre funnel + agent-stats pour intégrer `offer_sent`.
-  const countsByStatus: Record<ProspectStatus, number> = {
-    sourced: prospectsByStatus.sourced.length,
-    qualified: prospectsByStatus.qualified.length,
-    interested: prospectsByStatus.interested.length,
-    contacted: prospectsByStatus.contacted.length,
-    rdv: prospectsByStatus.rdv.length,
-    offer_sent: prospectsByStatus.offer_sent?.length ?? 0,
-    converted: prospectsByStatus.converted.length,
-    rejected: prospectsByStatus.rejected.length,
-    on_hold: prospectsByStatus.on_hold.length,
-  }
+  const { prospectsByStatus, countsByStatus } = data
 
   return (
     <div className="space-y-6">
@@ -126,9 +188,12 @@ export default async function PipelinePage({ searchParams }: PipelinePageProps) 
         <KpiCards range={range} />
       </Suspense>
 
-      {/* Analytics — funnel conversion + stats agent côte à côte sur desktop */}
+      {/* Analytics — funnel conversion + stats agent côte à côte sur desktop.
+          ConversionFunnel est isolé dans son propre boundary défensif pour
+          ne pas faire crasher la page si buildFunnel / la geometry SVG throw
+          sur un Record corrompu. */}
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
-        <ConversionFunnel countsByStatus={countsByStatus} />
+        <SafeConversionFunnel countsByStatus={countsByStatus} />
         <Suspense fallback={<AgentStatsSkeleton />}>
           <AgentStats range={range} />
         </Suspense>
@@ -139,6 +204,102 @@ export default async function PipelinePage({ searchParams }: PipelinePageProps) 
         columns={PIPELINE_COLUMNS}
         prospectsByStatus={prospectsByStatus}
       />
+    </div>
+  )
+}
+
+// ── Defensive wrappers ─────────────────────────────────────────────────────────
+
+/**
+ * Wrapper try/catch synchrone autour de <ConversionFunnel> — `buildFunnel` est
+ * une fonction pure mais on se protège d'un éventuel throw au render SVG
+ * (computeFunnelGeometry sur counts non finis, etc.).
+ */
+function SafeConversionFunnel({
+  countsByStatus,
+}: {
+  countsByStatus: Record<ProspectStatus, number>
+}) {
+  try {
+    return <ConversionFunnel countsByStatus={countsByStatus} />
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    console.error('[/pipeline] ConversionFunnel render error', {
+      message: msg,
+      stack: err instanceof Error ? err.stack : undefined,
+    })
+    return (
+      <section
+        role="alert"
+        className="rounded-2xl border border-amber-200 bg-amber-50 p-5 dark:border-amber-900/40 dark:bg-amber-950/30"
+      >
+        <h2 className="text-sm font-semibold uppercase tracking-wider text-amber-700 dark:text-amber-400">
+          Entonnoir de conversion — indisponible
+        </h2>
+        <p className="mt-2 text-sm text-amber-700 dark:text-amber-400">
+          Le graphique n&apos;a pas pu être généré. Le reste du pipeline reste
+          utilisable.
+        </p>
+        <p className="mt-2 break-words font-mono text-xs text-amber-700 dark:text-amber-400">
+          {msg}
+        </p>
+      </section>
+    )
+  }
+}
+
+/**
+ * Fallback complet de la page si le fetch DB des prospects échoue. On garde le
+ * header + PeriodToggle pour ne pas casser la navigation, et on encadre le
+ * diagnostic dans un panel d'erreur. Le KpiCards/AgentStats sous Suspense
+ * gardent leur propre try/catch interne et restent fonctionnels.
+ */
+function PipelinePageFallback({
+  range,
+  reason,
+}: {
+  range: PipelineRange
+  reason: string
+}) {
+  return (
+    <div className="space-y-6">
+      <header className="sticky top-0 z-20 -mx-4 flex flex-wrap items-end justify-between gap-3 border-b border-gray-200 bg-white/80 px-4 py-4 backdrop-blur supports-[backdrop-filter]:bg-white/60 dark:border-gray-800 dark:bg-gray-950/80 dark:supports-[backdrop-filter]:bg-gray-950/60 sm:-mx-6 sm:px-6">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight text-gray-900 dark:text-white">
+            Pipeline
+          </h1>
+          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+            Vue d&apos;ensemble du pipeline CRM et de l&apos;activité agent
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <PeriodToggle current={range} />
+        </div>
+      </header>
+
+      <section
+        role="alert"
+        className="rounded-2xl border border-amber-200 bg-amber-50 p-5 dark:border-amber-900/40 dark:bg-amber-950/30"
+      >
+        <h2 className="text-sm font-semibold uppercase tracking-wider text-amber-700 dark:text-amber-400">
+          Pipeline — chargement partiel
+        </h2>
+        <p className="mt-2 text-sm text-amber-700 dark:text-amber-400">
+          La liste des prospects n&apos;a pas pu être chargée. Les KPI et stats
+          agent ci-dessous restent disponibles si la requête associée a réussi.
+        </p>
+        <p className="mt-2 break-words font-mono text-xs text-amber-700 dark:text-amber-400">
+          {reason}
+        </p>
+      </section>
+
+      <Suspense fallback={<KpiCardsSkeleton />}>
+        <KpiCards range={range} />
+      </Suspense>
+
+      <Suspense fallback={<AgentStatsSkeleton />}>
+        <AgentStats range={range} />
+      </Suspense>
     </div>
   )
 }
