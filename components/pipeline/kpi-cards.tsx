@@ -1,6 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
-import type { PipelineRange } from './period-toggle'
-import { rangeStartISO } from './period-toggle'
+import type { PipelineRange } from '@/lib/pipeline/range'
+import { rangeStartISO } from '@/lib/pipeline/range'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 

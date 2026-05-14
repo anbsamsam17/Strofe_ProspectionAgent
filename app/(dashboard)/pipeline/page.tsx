@@ -9,7 +9,8 @@ import {
   PipelineClient,
   type KanbanStatus,
 } from '@/components/pipeline/pipeline-client'
-import { PeriodToggle, parseRange, type PipelineRange } from '@/components/pipeline/period-toggle'
+import { PeriodToggle } from '@/components/pipeline/period-toggle'
+import { parseRange, type PipelineRange } from '@/lib/pipeline/range'
 import { SectionErrorFallback } from '@/components/pipeline/section-error-fallback'
 import { ServerErrorBoundary } from '@/components/pipeline/server-error-boundary'
 import { ClientErrorBoundary } from '@/components/pipeline/client-error-boundary'

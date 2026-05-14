@@ -8,8 +8,8 @@ import {
   type RunStat,
   type SectorStat,
 } from '@/lib/pipeline/analytics'
-import type { PipelineRange } from './period-toggle'
-import { rangeStartISO } from './period-toggle'
+import type { PipelineRange } from '@/lib/pipeline/range'
+import { rangeStartISO } from '@/lib/pipeline/range'
 
 // ── Constantes de dessin ────────────────────────────────────────────────────
 
