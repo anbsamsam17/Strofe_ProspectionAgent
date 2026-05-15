@@ -154,7 +154,7 @@ export function ProspectDetailEditor({
         <button
           type="button"
           onClick={() => setIsEditing(true)}
-          className="absolute right-0 top-0 inline-flex items-center gap-1.5 rounded-md border border-white/[0.08] bg-white/[0.04] backdrop-blur-md px-2.5 py-1 text-xs font-medium text-gray-600 transition-colors hover:border-green-300 hover:bg-green-50 hover:text-green-700 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-400 dark:hover:border-green-700 dark:hover:bg-green-950/40 dark:hover:text-green-400"
+          className="absolute right-0 top-0 inline-flex items-center gap-1.5 rounded-md border border-white/[0.08] bg-white/[0.04] backdrop-blur-md px-2.5 py-1 text-xs font-medium text-gray-300 transition-colors hover:border-green-500/30 hover:bg-green-500/10 hover:text-green-300"
           aria-label={SECTION_TITLES[section]}
         >
           <svg
@@ -195,19 +195,19 @@ export function ProspectDetailEditor({
 
       {error && (
         <p
-          className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950/60 dark:text-red-400"
+          className="rounded-lg bg-red-500/15 px-3 py-2 text-sm text-red-200 ring-1 ring-red-500/25"
           role="alert"
         >
           {error}
         </p>
       )}
 
-      <div className="flex items-center justify-end gap-2 border-t border-white/[0.06] pt-4 dark:border-gray-800">
+      <div className="flex items-center justify-end gap-2 border-t border-white/[0.06] pt-4">
         <button
           type="button"
           onClick={handleCancel}
           disabled={isSaving}
-          className="inline-flex items-center rounded-lg border border-white/[0.08] bg-white/[0.04] backdrop-blur-md px-3.5 py-1.5 text-sm font-medium text-gray-600 transition-colors hover:border-gray-300 hover:bg-white/[0.06] disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
+          className="inline-flex items-center rounded-lg border border-white/[0.08] bg-white/[0.04] backdrop-blur-md px-3.5 py-1.5 text-sm font-medium text-gray-200 transition-colors hover:bg-white/[0.06] disabled:cursor-not-allowed disabled:opacity-50"
         >
           Annuler
         </button>
@@ -245,7 +245,7 @@ function TextInput({
     <div>
       <label
         htmlFor={`field-${name}`}
-        className="mb-1 block text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400"
+        className="mb-1 block font-mono text-[10px] uppercase tracking-[0.18em] text-cyan-400/80"
       >
         {label}
       </label>
@@ -256,7 +256,7 @@ function TextInput({
         value={strVal}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
-        className="w-full rounded-lg border border-white/[0.08] bg-white/[0.04] backdrop-blur-md px-3 py-2 text-sm text-gray-900 placeholder-gray-400 transition focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-500/20 dark:border-gray-700 dark:bg-gray-800 dark:text-white dark:placeholder-gray-500"
+        className="w-full rounded-lg border border-white/[0.08] bg-white/[0.04] backdrop-blur-md px-3 py-2 text-sm text-white placeholder:text-gray-500 transition focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-500/20"
       />
     </div>
   )
@@ -275,14 +275,14 @@ function CheckboxInput({
 }) {
   const checked = value === true
   return (
-    <label htmlFor={`field-${name}`} className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+    <label htmlFor={`field-${name}`} className="flex items-center gap-2 text-sm text-gray-200">
       <input
         id={`field-${name}`}
         name={name}
         type="checkbox"
         checked={checked}
         onChange={(e) => onChange(e.target.checked)}
-        className="h-4 w-4 rounded border-gray-300 text-green-600 focus:ring-green-500"
+        className="h-4 w-4 rounded border-white/20 bg-white/[0.06] text-green-500 focus:ring-green-500"
       />
       {label}
     </label>
@@ -445,7 +445,7 @@ function StatutField({
     <div>
       <label
         htmlFor="field-statut"
-        className="mb-1 block text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400"
+        className="mb-1 block font-mono text-[10px] uppercase tracking-[0.18em] text-cyan-400/80"
       >
         Statut CRM
       </label>
@@ -453,7 +453,7 @@ function StatutField({
         id="field-statut"
         value={current}
         onChange={(e) => onChange('statut', e.target.value)}
-        className="w-full rounded-lg border border-white/[0.08] bg-white/[0.04] backdrop-blur-md px-3 py-2 text-sm text-gray-900 transition focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-500/20 dark:border-gray-700 dark:bg-gray-800 dark:text-white"
+        className="w-full rounded-lg border border-white/[0.08] bg-white/[0.04] backdrop-blur-md px-3 py-2 text-sm text-white transition focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-500/20"
       >
         {STATUS_OPTIONS.map((opt) => (
           <option key={opt.value} value={opt.value}>

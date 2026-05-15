@@ -73,9 +73,9 @@ export function ContactsList({ prospect, contacts }: ContactsListProps) {
       : ([fallbackFromProspect(prospect)].filter(Boolean) as ProspectContact[])
 
   return (
-    <div className="overflow-hidden rounded-2xl border border-white/[0.08] bg-white/[0.03] backdrop-blur-md shadow-sm dark:border-gray-800 dark:bg-gray-900">
-      <div className="flex items-center justify-between gap-3 border-b border-white/[0.06] px-6 py-4 dark:border-gray-800">
-        <h2 className="text-sm font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
+    <div className="overflow-hidden rounded-2xl border border-white/[0.08] bg-white/[0.03] backdrop-blur-md shadow-sm">
+      <div className="flex items-center justify-between gap-3 border-b border-white/[0.06] px-6 py-4">
+        <h2 className="font-mono text-[11px] uppercase tracking-[0.18em] text-cyan-400/80">
           Contacts identifiés{displayed.length > 0 ? ` (${displayed.length})` : ''}
         </h2>
         <AddContactDialog prospectId={prospect.id} />
@@ -90,7 +90,7 @@ export function ContactsList({ prospect, contacts }: ContactsListProps) {
             ))}
           </ul>
         ) : (
-          <p className="text-sm text-gray-400 dark:text-gray-400">
+          <p className="text-sm text-gray-400">
             Aucun contact identifié pour cette entreprise.
           </p>
         )}
@@ -127,7 +127,7 @@ function ContactCard({ contact }: { contact: ProspectContact }) {
         {contact.telephone && (
           <a
             href={`tel:${contact.telephone.replace(/\s/g, '')}`}
-            className="inline-flex items-center gap-1.5 text-sm font-medium text-green-600 transition-colors hover:text-green-700 dark:text-green-400 dark:hover:text-green-300"
+            className="inline-flex items-center gap-1.5 text-sm font-medium text-green-400 transition-colors hover:text-green-300"
             aria-label={`Appeler le ${contact.telephone}`}
           >
             <svg
@@ -151,7 +151,7 @@ function ContactCard({ contact }: { contact: ProspectContact }) {
         {contact.email && (
           <a
             href={`mailto:${contact.email}`}
-            className="inline-flex items-center gap-1.5 text-sm font-medium text-green-600 transition-colors hover:text-green-700 dark:text-green-400 dark:hover:text-green-300"
+            className="inline-flex items-center gap-1.5 text-sm font-medium text-green-400 transition-colors hover:text-green-300"
             aria-label={`Envoyer un email à ${contact.email}`}
           >
             <svg
@@ -178,7 +178,7 @@ function ContactCard({ contact }: { contact: ProspectContact }) {
             href={contact.linkedin}
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex items-center gap-1.5 text-sm font-medium text-blue-600 transition-colors hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300"
+            className="inline-flex items-center gap-1.5 text-sm font-medium text-blue-400 transition-colors hover:text-blue-300"
             aria-label={`Voir le profil LinkedIn (ouvre dans un nouvel onglet)`}
           >
             <svg

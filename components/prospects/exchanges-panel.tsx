@@ -170,9 +170,9 @@ export function ExchangesPanel({ prospectId, exchanges, calls }: ExchangesPanelP
   ].sort((a, b) => (a.occurred_at < b.occurred_at ? 1 : -1))
 
   return (
-    <div className="overflow-hidden rounded-2xl border border-white/[0.08] bg-white/[0.03] backdrop-blur-md shadow-sm dark:border-gray-800 dark:bg-gray-900">
-      <div className="flex items-center justify-between gap-3 border-b border-white/[0.06] px-6 py-4 dark:border-gray-800">
-        <h2 className="text-sm font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
+    <div className="overflow-hidden rounded-2xl border border-white/[0.08] bg-white/[0.03] backdrop-blur-md shadow-sm">
+      <div className="flex items-center justify-between gap-3 border-b border-white/[0.06] px-6 py-4">
+        <h2 className="font-mono text-[11px] uppercase tracking-[0.18em] text-cyan-400/80">
           Historique des échanges{timeline.length > 0 ? ` (${timeline.length})` : ''}
         </h2>
         <NewExchangeDialog prospectId={prospectId} />
@@ -180,7 +180,7 @@ export function ExchangesPanel({ prospectId, exchanges, calls }: ExchangesPanelP
       <div className="px-6 py-5">
         {timeline.length > 0 ? (
           <ul
-            className="divide-y divide-white/[0.06] dark:divide-gray-800"
+            className="divide-y divide-white/[0.06]"
             aria-label="Historique des échanges avec ce prospect"
           >
             {timeline.map((item) => {
@@ -189,7 +189,7 @@ export function ExchangesPanel({ prospectId, exchanges, calls }: ExchangesPanelP
               return (
                 <li key={item.key} className="py-4 first:pt-0 last:pb-0">
                   <div className="flex flex-wrap items-center gap-2">
-                    <span className="text-sm font-semibold text-gray-900 dark:text-white">
+                    <span className="text-sm font-semibold text-white">
                       {formatDate(item.occurred_at)}
                     </span>
                     <span
@@ -205,13 +205,13 @@ export function ExchangesPanel({ prospectId, exchanges, calls }: ExchangesPanelP
                       </span>
                     )}
                     {item.callback_date && (
-                      <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2.5 py-0.5 text-xs font-medium text-blue-700 dark:bg-blue-950/40 dark:text-blue-400">
+                      <span className="inline-flex items-center gap-1 rounded-full bg-blue-500/15 px-2.5 py-0.5 text-xs font-medium text-blue-200 ring-1 ring-blue-500/25">
                         Rappel le {formatShortDate(item.callback_date)}
                       </span>
                     )}
                   </div>
                   {item.notes && (
-                    <p className="mt-2 whitespace-pre-line text-sm text-gray-700 dark:text-gray-300">
+                    <p className="mt-2 whitespace-pre-line text-sm text-gray-200">
                       {item.notes}
                     </p>
                   )}
@@ -220,7 +220,7 @@ export function ExchangesPanel({ prospectId, exchanges, calls }: ExchangesPanelP
             })}
           </ul>
         ) : (
-          <p className="text-sm text-gray-400 dark:text-gray-400">
+          <p className="text-sm text-gray-400">
             Aucun échange enregistré pour ce prospect.
           </p>
         )}

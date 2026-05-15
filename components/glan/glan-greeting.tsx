@@ -14,7 +14,7 @@
 // ============================================================
 
 import { useEffect, useState, type ReactNode } from 'react'
-import { GlanCharacterLoader } from './glan-character-loader'
+import { GlanPortrait } from './glan-portrait'
 import { useGlanStatus } from '@/lib/hooks/use-glan-status'
 import { AnimatedCounter } from '@/components/ui/animated-counter'
 
@@ -128,10 +128,9 @@ export function GlanGreeting({
       />
 
       <div className="relative flex flex-col items-center gap-5 sm:flex-row sm:items-center sm:gap-8 sm:text-left">
-        <GlanCharacterLoader
+        <GlanPortrait
           state={glanState}
           size={180}
-          fallbackSize="lg"
           className="flex-shrink-0"
         />
 

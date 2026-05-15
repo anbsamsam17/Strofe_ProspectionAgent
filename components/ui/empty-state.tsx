@@ -144,13 +144,13 @@ export function EmptyState({
     <div
       className={`flex flex-col items-center gap-3 py-12 text-center ${className}`}
     >
-      <div className="flex h-12 w-12 items-center justify-center rounded-full bg-white/[0.05] text-gray-400 dark:bg-gray-800 dark:text-gray-400">
+      <div className="flex h-12 w-12 items-center justify-center rounded-full bg-white/[0.05] text-gray-400 ring-1 ring-white/[0.08]">
         {preset.icon}
       </div>
-      <p className="text-sm font-medium text-gray-700 dark:text-gray-300">
+      <p className="text-sm font-medium text-gray-200">
         {finalTitle}
       </p>
-      <p className="max-w-sm text-xs text-gray-500 dark:text-gray-500">
+      <p className="max-w-sm text-xs text-gray-500">
         {finalDescription}
       </p>
       {action && <div className="mt-2">{action}</div>}

@@ -11,7 +11,7 @@
 
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
-import { GlanCharacterLoader } from '@/components/glan/glan-character-loader'
+import { GlanPortrait } from '@/components/glan/glan-portrait'
 import { GlanTimeline } from '@/components/glan/glan-timeline'
 import { GlanLogStream } from '@/components/glan/glan-log-stream'
 import { GlassCard } from '@/components/ui/glass-card'
@@ -42,9 +42,9 @@ function formatDuration(ms: number | null): string {
 }
 
 const STATUS_TONE: Record<string, string> = {
-  running: 'bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-400',
-  completed: 'bg-green-50 text-green-700 dark:bg-green-950 dark:text-green-400',
-  failed: 'bg-red-50 text-red-700 dark:bg-red-950 dark:text-red-400',
+  running: 'bg-blue-500/15 text-blue-200 ring-1 ring-blue-500/25',
+  completed: 'bg-green-500/15 text-green-200 ring-1 ring-green-500/25',
+  failed: 'bg-red-500/15 text-red-200 ring-1 ring-red-500/25',
 }
 
 const STATUS_LABEL: Record<string, string> = {
@@ -74,7 +74,7 @@ export default async function GlanPage() {
     <div className="mx-auto max-w-5xl space-y-6">
       {/* En-tête */}
       <header className="flex flex-col items-center gap-4 rounded-2xl border border-white/[0.08] bg-white/[0.03] backdrop-blur-md p-8 text-center shadow-sm sm:flex-row sm:text-left">
-        <GlanCharacterLoader
+        <GlanPortrait
           state={
             lastRun?.status === 'running'
               ? 'working'
@@ -85,19 +85,18 @@ export default async function GlanPage() {
                   : 'dormant'
           }
           size={320}
-          fallbackSize="lg"
           className="flex-shrink-0"
         />
         <div className="flex flex-col gap-1.5">
-          <h1 className="text-2xl font-bold tracking-tight text-gray-900 dark:text-white">
+          <h1 className="text-2xl font-bold tracking-tight text-white">
             Glan
           </h1>
-          <p className="text-sm text-gray-500 dark:text-gray-400">
+          <p className="text-sm text-gray-300">
             Votre agent de prospection. Chaque nuit à 22h, je scanne Sirene et
             ADEME pour identifier les entreprises soumises à l&apos;obligation
             BEGES et les ajouter à votre liste.
           </p>
-          <p className="text-xs text-gray-400 dark:text-gray-400">
+          <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-green-400/80">
             — Glan
           </p>
         </div>
@@ -108,10 +107,10 @@ export default async function GlanPage() {
         <GlassCard variant="elevated" className="space-y-5">
           <div className="flex flex-wrap items-baseline justify-between gap-3">
             <div>
-              <p className="text-xs font-semibold uppercase tracking-widest text-gray-400 dark:text-gray-400">
-                Dernier run
+              <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-cyan-400/80">
+                {'// Dernier run'}
               </p>
-              <h2 className="mt-1 text-lg font-semibold text-gray-900 dark:text-white">
+              <h2 className="mt-1 text-lg font-semibold text-white">
                 {formatDateTime(lastRun.started_at)}
               </h2>
             </div>
@@ -143,14 +142,14 @@ export default async function GlanPage() {
           {/* Timeline + Logs côte à côte */}
           <div className="grid gap-5 lg:grid-cols-2">
             <div>
-              <p className="mb-3 text-xs font-semibold uppercase tracking-widest text-gray-400 dark:text-gray-400">
-                Phases
+              <p className="mb-3 font-mono text-[10px] uppercase tracking-[0.18em] text-cyan-400/80">
+                {'// Phases'}
               </p>
               <GlanTimeline run={lastRun} />
             </div>
             <div>
-              <p className="mb-3 text-xs font-semibold uppercase tracking-widest text-gray-400 dark:text-gray-400">
-                Logs
+              <p className="mb-3 font-mono text-[10px] uppercase tracking-[0.18em] text-cyan-400/80">
+                {'// Logs'}
               </p>
               <GlanLogStream
                 logs={Array.isArray(lastRun.logs) ? lastRun.logs : []}
@@ -172,8 +171,8 @@ export default async function GlanPage() {
       {/* Historique des runs précédents */}
       {runs.length > 1 && (
         <section>
-          <h2 className="mb-3 text-sm font-semibold uppercase tracking-widest text-gray-400 dark:text-gray-400">
-            Historique récent
+          <h2 className="mb-3 font-mono text-[11px] uppercase tracking-[0.18em] text-cyan-400/80">
+            {'// Historique récent'}
           </h2>
           <ol className="space-y-2">
             {runs.slice(1).map((run) => {
@@ -187,7 +186,7 @@ export default async function GlanPage() {
                   className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-white/[0.08] bg-white/[0.03] backdrop-blur-md px-4 py-3"
                 >
                   <div className="flex items-baseline gap-3">
-                    <p className="font-mono text-sm tabular-nums text-gray-900 dark:text-white">
+                    <p className="font-mono text-sm tabular-nums text-white">
                       {formatDateTime(run.started_at)}
                     </p>
                     <span
@@ -196,20 +195,20 @@ export default async function GlanPage() {
                       {STATUS_LABEL[run.status] ?? run.status}
                     </span>
                   </div>
-                  <div className="flex items-baseline gap-4 text-xs text-gray-500 dark:text-gray-400">
+                  <div className="flex items-baseline gap-4 text-xs text-gray-400">
                     <span>
-                      <span className="font-medium text-gray-700 dark:text-gray-300">
+                      <span className="font-medium text-gray-200">
                         {run.prospects_sourced ?? 0}
                       </span>{' '}
                       sourcés
                     </span>
                     <span>
-                      <span className="font-medium text-gray-700 dark:text-gray-300">
+                      <span className="font-medium text-gray-200">
                         {run.prospects_qualified ?? 0}
                       </span>{' '}
                       qualifiés
                     </span>
-                    <span className="font-mono">{formatDuration(duration)}</span>
+                    <span className="font-mono text-gray-400">{formatDuration(duration)}</span>
                   </div>
                 </li>
               )
@@ -224,10 +223,10 @@ export default async function GlanPage() {
 function Stat({ label, value }: { label: string; value: number | string }) {
   return (
     <div>
-      <p className="text-xs font-medium text-gray-500 dark:text-gray-400">
+      <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-cyan-400/80">
         {label}
       </p>
-      <p className="mt-1 text-2xl font-bold tabular-nums text-gray-900 dark:text-white">
+      <p className="mt-1 text-2xl font-bold tabular-nums text-white">
         {value}
       </p>
     </div>

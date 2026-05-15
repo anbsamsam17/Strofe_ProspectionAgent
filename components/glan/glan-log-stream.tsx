@@ -27,9 +27,9 @@ interface GlanLogStreamProps {
 }
 
 const LEVEL_COLOR: Record<AgentLog['level'], string> = {
-  info: 'text-green-600 dark:text-green-400',
-  warn: 'text-amber-600 dark:text-amber-400',
-  error: 'text-red-600 dark:text-red-400',
+  info: 'text-green-400',
+  warn: 'text-amber-400',
+  error: 'text-red-400',
 }
 
 const LEVEL_SYMBOL: Record<AgentLog['level'], string> = {
@@ -75,7 +75,7 @@ export function GlanLogStream({
   if (logs.length === 0) {
     return (
       <div
-        className={`rounded-xl border border-white/[0.08] bg-white/[0.02] px-4 py-6 text-center text-sm text-gray-500 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-400 ${className}`}
+        className={`rounded-xl border border-white/[0.08] bg-white/[0.02] px-4 py-6 text-center text-sm text-gray-400 ${className}`}
         role="status"
       >
         <p className="font-mono text-xs">En attente du premier log…</p>
@@ -88,7 +88,7 @@ export function GlanLogStream({
       ref={scrollRef}
       onScroll={handleScroll}
       style={{ maxHeight }}
-      className={`overflow-y-auto rounded-xl border border-white/[0.08] bg-white/[0.02] px-3 py-2 font-mono text-xs leading-relaxed dark:border-gray-800 dark:bg-gray-950 ${className}`}
+      className={`overflow-y-auto rounded-xl border border-white/[0.08] bg-white/[0.02] px-3 py-2 font-mono text-xs leading-relaxed ${className}`}
       role="log"
       aria-live="polite"
       aria-relevant="additions"
@@ -99,7 +99,7 @@ export function GlanLogStream({
           key={`${log.timestamp}-${idx}`}
           className="flex gap-2 py-0.5 animate-fade-in-up"
         >
-          <span className="flex-shrink-0 select-none text-gray-400 tabular-nums dark:text-gray-400">
+          <span className="flex-shrink-0 select-none text-gray-500 tabular-nums">
             {formatTime(log.timestamp)}
           </span>
           <span
@@ -108,10 +108,10 @@ export function GlanLogStream({
           >
             {LEVEL_SYMBOL[log.level]}
           </span>
-          <span className="flex-shrink-0 select-none text-gray-500 dark:text-gray-500">
+          <span className="flex-shrink-0 select-none text-cyan-400/70">
             [{log.phase}]
           </span>
-          <span className="break-words text-gray-700 dark:text-gray-300">
+          <span className="break-words text-gray-200">
             {log.message}
           </span>
         </li>

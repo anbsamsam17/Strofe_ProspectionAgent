@@ -8,9 +8,19 @@
 // holographique animée** qui change d'ambiance par état :
 //
 //   - dormant : halo bleu doux, particules lentes, anneau respirant
-//   - working : halo vert + cyan, scan-line tournant, particules orbitales
-//   - done    : halo doré, sparkles, glow flash
-//   - error   : halo rouge atténué, micro-tremblement, anneau pulsant
+//   - working : halo vert + cyan, scan-line tournant, particules orbitales,
+//               speech-dots animés (".." synchronisation)
+//   - done    : halo doré, sparkles burst transitoire, glow flash
+//   - error   : halo rouge atténué, vibration transitoire, anneau pulsant
+//
+// Couches d'animation (par-dessus le PNG statique) :
+//   1. Head-bob — léger oscillation Y ±2px (4s ease in/out infinite)
+//   2. Clignement (eyelid overlay) — span horizontal à hauteur des yeux,
+//      scaleY 0→1→0 sur 250ms toutes les 4-6s. Désactivé en error.
+//   3. Speech-dots — 3 dots animés `…` en bas-droite en mode working.
+//   4. Sparkles burst — 6 étoiles SVG qui explosent depuis le centre
+//      à l'entrée dans l'état `done` (transient, ~1.5s).
+//   5. Vibration error — shake horizontal ±3px sur 0.6s à l'entrée error.
 //
 // Le portrait suit le curseur (parallax tilt ±6°) sauf si
 // prefers-reduced-motion ou prop `interactive={false}`.
@@ -50,28 +60,28 @@ const STATE_PALETTE: Record<
   }
 > = {
   dormant: {
-    glow: 'oklch(60% 0.12 240 / 0.35)',
+    glow: 'oklch(60% 0.12 240 / 0.45)',
     ring: 'oklch(60% 0.10 240 / 0.4)',
     accent: '#7aa7ff',
     accentSoft: 'oklch(60% 0.12 240 / 0.15)',
     label: 'Glan au repos',
   },
   working: {
-    glow: 'oklch(70% 0.19 152 / 0.55)',
+    glow: 'oklch(70% 0.19 152 / 0.75)',
     ring: 'oklch(70% 0.19 152 / 0.55)',
     accent: '#22c55e',
     accentSoft: 'oklch(70% 0.19 152 / 0.2)',
     label: 'Glan travaille',
   },
   done: {
-    glow: 'oklch(82% 0.15 88 / 0.6)',
+    glow: 'oklch(82% 0.15 88 / 0.8)',
     ring: 'oklch(82% 0.15 88 / 0.55)',
     accent: '#eab308',
     accentSoft: 'oklch(82% 0.15 88 / 0.2)',
     label: 'Glan a terminé',
   },
   error: {
-    glow: 'oklch(65% 0.20 27 / 0.5)',
+    glow: 'oklch(65% 0.20 27 / 0.65)',
     ring: 'oklch(65% 0.20 27 / 0.5)',
     accent: '#ef4444',
     accentSoft: 'oklch(65% 0.20 27 / 0.15)',
@@ -87,6 +97,9 @@ const STATE_IMAGE_FILE: Record<GlanPortraitState, string> = {
 }
 
 const PARTICLE_COUNT = 14
+const SPARKLE_COUNT = 6
+const SPARKLE_DURATION_MS = 1500
+const VIBRATION_DURATION_MS = 600
 
 interface Particle {
   angle: number
@@ -115,6 +128,12 @@ function buildParticles(seed: number): Particle[] {
   }))
 }
 
+// 6 directions équidistantes (60° pas) pour l'explosion des sparkles.
+const SPARKLE_ANGLES = Array.from(
+  { length: SPARKLE_COUNT },
+  (_, i) => (i / SPARKLE_COUNT) * Math.PI * 2,
+)
+
 export function GlanPortrait({
   state = 'dormant',
   size = 320,
@@ -129,10 +148,36 @@ export function GlanPortrait({
   const [imgSrc, setImgSrc] = useState<string>(STATE_IMAGE_FILE[state])
   const particles = useMemo(() => buildParticles(state.length * 13 + size), [state, size])
 
+  // Transients triggered uniquement à l'entrée dans done/error.
+  const [sparkleBurstKey, setSparkleBurstKey] = useState(0)
+  const [showSparkles, setShowSparkles] = useState(false)
+  const [shakeKey, setShakeKey] = useState(0)
+  const [shaking, setShaking] = useState(false)
+  const previousState = useRef<GlanPortraitState>(state)
+
   // Fallback : si l'image dédiée n'existe pas (404), retombe sur portrait.png.
   useEffect(() => {
     setImgSrc(STATE_IMAGE_FILE[state])
   }, [state])
+
+  // Sparkles burst à l'entrée dans `done`.
+  useEffect(() => {
+    if (prefersReducedMotion) return
+    const prev = previousState.current
+    previousState.current = state
+    if (state === 'done' && prev !== 'done') {
+      setSparkleBurstKey((k) => k + 1)
+      setShowSparkles(true)
+      const timeout = window.setTimeout(() => setShowSparkles(false), SPARKLE_DURATION_MS)
+      return () => window.clearTimeout(timeout)
+    }
+    if (state === 'error' && prev !== 'error') {
+      setShakeKey((k) => k + 1)
+      setShaking(true)
+      const timeout = window.setTimeout(() => setShaking(false), VIBRATION_DURATION_MS)
+      return () => window.clearTimeout(timeout)
+    }
+  }, [state, prefersReducedMotion])
 
   const enableTilt = interactive && !prefersReducedMotion
 
@@ -150,6 +195,17 @@ export function GlanPortrait({
   function handlePointerLeave() {
     setTilt({ x: 0, y: 0 })
   }
+
+  // Head-bob : oscillation Y subtile, désactivée en error & reduced-motion.
+  const bobAnimation =
+    prefersReducedMotion || state === 'error'
+      ? undefined
+      : { y: [0, -2, 0, 2, 0] }
+
+  // Vibration error : shake horizontal transitoire.
+  const shakeAnimation = shaking
+    ? { x: [-3, 3, -2, 2, -1, 1, 0] }
+    : undefined
 
   return (
     <div
@@ -220,15 +276,26 @@ export function GlanPortrait({
         />
       )}
 
-      {/* ── Portrait (tilt parallax + frame holo) ────────────────────────── */}
+      {/* ── Portrait (tilt parallax + head-bob + vibration error + frame) ── */}
       <m.div
+        key={`portrait-${shakeKey}`}
         className="relative h-full w-full rounded-full"
         style={{
           transformStyle: 'preserve-3d',
-          boxShadow: `0 0 ${size * 0.12}px ${palette.glow}, inset 0 0 0 2px ${palette.ring}, inset 0 0 0 1px rgba(255,255,255,0.08)`,
+          boxShadow: `0 0 ${size * 0.18}px ${palette.glow}, inset 0 0 0 2px ${palette.ring}, inset 0 0 0 1px rgba(255,255,255,0.08)`,
         }}
-        animate={{ rotateX: tilt.x, rotateY: tilt.y }}
-        transition={{ type: 'spring', stiffness: 140, damping: 18 }}
+        animate={{
+          rotateX: tilt.x,
+          rotateY: tilt.y,
+          ...(bobAnimation ?? {}),
+          ...(shakeAnimation ?? {}),
+        }}
+        transition={{
+          rotateX: { type: 'spring', stiffness: 140, damping: 18 },
+          rotateY: { type: 'spring', stiffness: 140, damping: 18 },
+          y: { duration: 4, repeat: Infinity, ease: 'easeInOut' },
+          x: { duration: VIBRATION_DURATION_MS / 1000, ease: 'easeInOut' },
+        }}
       >
         {/* Frame circulaire (border + inner shadow) */}
         <span
@@ -269,6 +336,32 @@ export function GlanPortrait({
             }}
           />
 
+          {/* ── Eyelid overlay (clignement simulé) ──────────────────────── */}
+          {/* Span horizontal positionné à hauteur des yeux (~40% du haut).
+              scaleY 0→1→0 anime un "clignement" toutes les 4-6s.
+              Désactivé en error (sourcils froncés) et reduced-motion. */}
+          {state !== 'error' && !prefersReducedMotion && (
+            <m.span
+              aria-hidden="true"
+              className="pointer-events-none absolute left-[18%] right-[18%] rounded-[40%]"
+              data-testid="glan-portrait-eyelid"
+              style={{
+                top: '37%',
+                height: '8%',
+                background: `linear-gradient(180deg, ${palette.accent}88 0%, ${palette.accent}55 100%)`,
+                transformOrigin: 'center top',
+                opacity: 0.55,
+              }}
+              animate={{ scaleY: [0, 1, 0] }}
+              transition={{
+                duration: 0.28,
+                repeat: Infinity,
+                repeatDelay: state === 'working' ? 3.2 : 5.4,
+                ease: 'easeInOut',
+              }}
+            />
+          )}
+
           {/* Tint overlay coloré subtile */}
           <span
             aria-hidden="true"
@@ -299,7 +392,7 @@ export function GlanPortrait({
         >
           {particles.map((p, i) => (
             <span
-              key={i}
+              key={`particle-${i}`}
               className="glan-portrait-particle absolute left-1/2 top-1/2 rounded-full"
               style={
                 {
@@ -319,6 +412,49 @@ export function GlanPortrait({
         </span>
       )}
 
+      {/* ── Sparkles burst (transient, à l'entrée dans `done`) ──────────── */}
+      {showSparkles && !prefersReducedMotion && (
+        <span
+          key={`sparkles-${sparkleBurstKey}`}
+          aria-hidden="true"
+          data-testid="glan-portrait-sparkles"
+          className="pointer-events-none absolute inset-0"
+        >
+          {SPARKLE_ANGLES.map((angle, i) => {
+            const distance = size * 0.42
+            const dx = Math.cos(angle) * distance
+            const dy = Math.sin(angle) * distance
+            return (
+              <m.svg
+                key={`sparkle-${i}`}
+                viewBox="0 0 12 12"
+                width={12}
+                height={12}
+                className="absolute left-1/2 top-1/2"
+                style={{
+                  marginLeft: -6,
+                  marginTop: -6,
+                  color: palette.accent,
+                  filter: `drop-shadow(0 0 4px ${palette.accent})`,
+                }}
+                initial={{ x: 0, y: 0, scale: 0.2, opacity: 0 }}
+                animate={{ x: dx, y: dy, scale: [0.2, 1, 0.6], opacity: [0, 1, 0] }}
+                transition={{
+                  duration: SPARKLE_DURATION_MS / 1000,
+                  ease: 'easeOut',
+                  delay: i * 0.04,
+                }}
+              >
+                <path
+                  d="M6 0 L7.2 4.8 L12 6 L7.2 7.2 L6 12 L4.8 7.2 L0 6 L4.8 4.8 Z"
+                  fill="currentColor"
+                />
+              </m.svg>
+            )
+          })}
+        </span>
+      )}
+
       {/* ── Indicateur état (pastille en bas-droite) ────────────────────── */}
       <span
         aria-hidden="true"
@@ -332,6 +468,36 @@ export function GlanPortrait({
           />
         )}
       </span>
+
+      {/* ── Speech indicator (3 dots) — uniquement en working ───────────── */}
+      {state === 'working' && !prefersReducedMotion && (
+        <span
+          aria-hidden="true"
+          data-testid="glan-portrait-speech-dots"
+          className="absolute -bottom-1 right-6 flex items-end gap-0.5"
+          style={{ height: 6 }}
+        >
+          {[0, 1, 2].map((i) => (
+            <m.span
+              key={`speech-dot-${i}`}
+              className="block rounded-full"
+              style={{
+                width: 3,
+                height: 3,
+                background: palette.accent,
+                boxShadow: `0 0 4px ${palette.accent}`,
+              }}
+              animate={{ y: [0, -3, 0], opacity: [0.45, 1, 0.45] }}
+              transition={{
+                duration: 0.9,
+                repeat: Infinity,
+                delay: i * 0.18,
+                ease: 'easeInOut',
+              }}
+            />
+          ))}
+        </span>
+      )}
 
       {/* Label optionnel sous l'avatar */}
       {showLabel && (

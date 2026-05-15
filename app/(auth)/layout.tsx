@@ -1,6 +1,6 @@
 import type { Metadata } from "next"
 import Link from "next/link"
-import { GlanAvatar } from "@/components/glan/glan-avatar"
+import { GlanPortrait } from "@/components/glan/glan-portrait"
 
 export const metadata: Metadata = {
   robots: { index: false, follow: false },
@@ -150,7 +150,7 @@ function DecorativePanel() {
 
           {/* Mascot + tagline */}
           <div className="mb-8 flex items-center gap-4">
-            <GlanAvatar state="working" size="lg" />
+            <GlanPortrait state="working" size={160} />
             <div>
               <p className="text-sm font-mono italic text-gray-400/80 leading-relaxed max-w-[260px]">
                 &ldquo;Pendant que vous dormez, je scanne Sirene et ADEME pour vous

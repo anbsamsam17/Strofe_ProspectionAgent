@@ -52,7 +52,6 @@ export function AddContactDialog({ prospectId }: AddContactDialogProps) {
       clearTimeout(t)
       document.removeEventListener('keydown', onKeyDown)
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open])
 
   function closeDialog() {
@@ -153,13 +152,13 @@ export function AddContactDialog({ prospectId }: AddContactDialogProps) {
             if (e.target === e.currentTarget) closeDialog()
           }}
         >
-          <div className="w-[calc(100vw-2rem)] max-w-lg rounded-2xl border border-white/[0.08] bg-white/[0.03] backdrop-blur-md p-6 shadow-2xl dark:border-gray-800 dark:bg-gray-900">
+          <div className="w-[calc(100vw-2rem)] max-w-lg rounded-2xl border border-white/[0.08] bg-[oklch(14%_0.02_240)]/95 backdrop-blur-md p-6 shadow-2xl ring-1 ring-black/30">
             <div className="mb-5 flex items-start justify-between gap-3">
               <div>
-                <h3 id="add-contact-title" className="text-lg font-semibold text-gray-900 dark:text-white">
+                <h3 id="add-contact-title" className="text-lg font-semibold text-white">
                   Ajouter un contact
                 </h3>
-                <p className="mt-0.5 text-sm text-gray-500 dark:text-gray-400">
+                <p className="mt-0.5 text-sm text-gray-400">
                   Renseignez au moins un champ d&apos;identification.
                 </p>
               </div>
@@ -167,7 +166,7 @@ export function AddContactDialog({ prospectId }: AddContactDialogProps) {
                 type="button"
                 onClick={closeDialog}
                 aria-label="Fermer la fenêtre"
-                className="rounded-md p-1 text-gray-400 transition-colors hover:bg-white/[0.06] hover:text-gray-700 dark:hover:bg-gray-800 dark:hover:text-gray-200"
+                className="rounded-md p-1 text-gray-400 transition-colors hover:bg-white/[0.06] hover:text-gray-200"
               >
                 <svg
                   xmlns="http://www.w3.org/2000/svg"
@@ -235,12 +234,12 @@ export function AddContactDialog({ prospectId }: AddContactDialogProps) {
                 placeholder="https://linkedin.com/in/..."
               />
 
-              <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+              <label className="flex items-center gap-2 text-sm text-gray-200">
                 <input
                   type="checkbox"
                   checked={form.is_primary}
                   onChange={(e) => update('is_primary', e.target.checked)}
-                  className="h-4 w-4 rounded border-gray-300 text-green-600 focus:ring-green-500"
+                  className="h-4 w-4 rounded border-white/20 bg-white/[0.06] text-green-500 focus:ring-green-500"
                 />
                 Définir comme contact principal
               </label>
@@ -248,18 +247,18 @@ export function AddContactDialog({ prospectId }: AddContactDialogProps) {
               {error && (
                 <p
                   role="alert"
-                  className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950/60 dark:text-red-400"
+                  className="rounded-lg bg-red-500/15 px-3 py-2 text-sm text-red-200 ring-1 ring-red-500/25"
                 >
                   {error}
                 </p>
               )}
 
-              <div className="flex items-center justify-end gap-2 border-t border-white/[0.06] pt-4 dark:border-gray-800">
+              <div className="flex items-center justify-end gap-2 border-t border-white/[0.06] pt-4">
                 <button
                   type="button"
                   onClick={closeDialog}
                   disabled={pending}
-                  className="rounded-lg border border-white/[0.08] bg-white/[0.04] backdrop-blur-md px-4 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-white/[0.06] disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
+                  className="rounded-lg border border-white/[0.08] bg-white/[0.04] backdrop-blur-md px-4 py-2 text-sm font-medium text-gray-200 transition-colors hover:bg-white/[0.06] disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   Annuler
                 </button>
@@ -302,7 +301,7 @@ function FieldText({
     <div>
       <label
         htmlFor={id}
-        className="mb-1 block text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400"
+        className="mb-1 block font-mono text-[10px] uppercase tracking-[0.18em] text-cyan-400/80"
       >
         {label}
       </label>
@@ -313,7 +312,7 @@ function FieldText({
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
-        className="w-full rounded-lg border border-white/[0.08] bg-white/[0.04] backdrop-blur-md px-3 py-2 text-sm text-gray-900 placeholder-gray-400 transition focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-500/20 dark:border-gray-700 dark:bg-gray-800 dark:text-white dark:placeholder-gray-500"
+        className="w-full rounded-lg border border-white/[0.08] bg-white/[0.04] backdrop-blur-md px-3 py-2 text-sm text-white placeholder:text-gray-500 transition focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-500/20"
       />
     </div>
   )

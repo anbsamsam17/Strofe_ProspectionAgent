@@ -8,7 +8,7 @@
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
-import { GlanCharacterLoader } from '@/components/glan/glan-character-loader'
+import { GlanPortrait } from '@/components/glan/glan-portrait'
 import { BorderBeam } from '@/components/ui/border-beam'
 
 export const metadata = {
@@ -42,7 +42,7 @@ export default async function OnboardingPage() {
             className="absolute -inset-6 rounded-full bg-green-500/8 blur-2xl"
             aria-hidden="true"
           />
-          <GlanCharacterLoader state="working" size={200} fallbackSize="lg" />
+          <GlanPortrait state="working" size={200} />
         </div>
 
         <div className="space-y-2">

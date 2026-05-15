@@ -142,7 +142,7 @@ export function ProspectActionsMenu({
         aria-expanded={open}
         aria-label={`Actions pour ${prospectName}`}
         disabled={pending}
-        className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-white/[0.08] bg-white/[0.04] backdrop-blur-md text-gray-500 transition-colors hover:border-gray-300 hover:bg-white/[0.06] hover:text-gray-700 disabled:opacity-60 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-200"
+        className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-white/[0.08] bg-white/[0.04] backdrop-blur-md text-gray-300 transition-colors hover:border-white/20 hover:bg-white/[0.08] hover:text-white disabled:opacity-60"
       >
         <svg
           xmlns="http://www.w3.org/2000/svg"
@@ -165,14 +165,14 @@ export function ProspectActionsMenu({
       {open && (
         <div
           role="menu"
-          className="absolute right-0 z-20 mt-1 w-56 origin-top-right overflow-hidden rounded-lg border border-white/[0.08] bg-white/[0.04] backdrop-blur-md py-1 shadow-lg dark:border-gray-700 dark:bg-gray-900"
+          className="absolute right-0 z-20 mt-1 w-56 origin-top-right overflow-hidden rounded-lg border border-white/[0.08] bg-[oklch(14%_0.02_240)]/95 backdrop-blur-xl py-1 shadow-2xl ring-1 ring-black/30"
         >
           {/* Statut */}
           <button
             type="button"
             role="menuitem"
             onClick={() => setStatusOpen((v) => !v)}
-            className="flex w-full items-center justify-between px-3 py-2 text-left text-sm text-gray-700 transition-colors hover:bg-white/[0.06] dark:text-gray-200 dark:hover:bg-gray-800"
+            className="flex w-full items-center justify-between px-3 py-2 text-left text-sm text-gray-200 transition-colors hover:bg-white/[0.06]"
           >
             <span className="inline-flex items-center gap-2">
               <svg
@@ -223,7 +223,7 @@ export function ProspectActionsMenu({
                     role="menuitem"
                     disabled={pending || isCurrent}
                     onClick={() => handleStatusChange(opt.value)}
-                    className="flex w-full items-center gap-2 px-5 py-1.5 text-left text-xs text-gray-600 transition-colors hover:bg-white/[0.06] disabled:cursor-not-allowed disabled:opacity-50 dark:text-gray-300 dark:hover:bg-gray-900"
+                    className="flex w-full items-center gap-2 px-5 py-1.5 text-left text-xs text-gray-300 transition-colors hover:bg-white/[0.06] disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     <span
                       className={`h-1.5 w-1.5 flex-shrink-0 rounded-full ${opt.dot}`}
@@ -231,7 +231,7 @@ export function ProspectActionsMenu({
                     />
                     {opt.label}
                     {isCurrent && (
-                      <span className="ml-auto text-[10px] text-green-600 dark:text-green-400">
+                      <span className="ml-auto text-[10px] text-green-400">
                         actuel
                       </span>
                     )}
@@ -246,7 +246,7 @@ export function ProspectActionsMenu({
             type="button"
             role="menuitem"
             onClick={handleOpenNotes}
-            className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-gray-700 transition-colors hover:bg-white/[0.06] dark:text-gray-200 dark:hover:bg-gray-800"
+            className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-gray-200 transition-colors hover:bg-white/[0.06]"
           >
             <svg
               xmlns="http://www.w3.org/2000/svg"
@@ -275,7 +275,7 @@ export function ProspectActionsMenu({
             role="menuitem"
             disabled={pending}
             onClick={handleArchive}
-            className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-gray-700 transition-colors hover:bg-white/[0.06] disabled:opacity-50 dark:text-gray-200 dark:hover:bg-gray-800"
+            className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-gray-200 transition-colors hover:bg-white/[0.06] disabled:opacity-50"
           >
             <svg
               xmlns="http://www.w3.org/2000/svg"
@@ -297,7 +297,7 @@ export function ProspectActionsMenu({
           </button>
 
           {/* Supprimer */}
-          <div className="my-1 border-t border-white/[0.06] dark:border-gray-800" />
+          <div className="my-1 border-t border-white/[0.06]" />
           <button
             type="button"
             role="menuitem"
@@ -308,7 +308,7 @@ export function ProspectActionsMenu({
                 ? 'Statut protégé — archivez d’abord ce prospect.'
                 : `Supprimer ${prospectName}`
             }
-            className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-red-600 transition-colors hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50 dark:text-red-400 dark:hover:bg-red-950/20"
+            className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-red-300 transition-colors hover:bg-red-500/10 disabled:cursor-not-allowed disabled:opacity-50"
           >
             <svg
               xmlns="http://www.w3.org/2000/svg"
@@ -334,7 +334,7 @@ export function ProspectActionsMenu({
           {error && (
             <p
               role="alert"
-              className="border-t border-red-100 bg-red-50 px-3 py-2 text-xs text-red-700 dark:border-red-900/50 dark:bg-red-950/30 dark:text-red-400"
+              className="border-t border-red-500/25 bg-red-500/10 px-3 py-2 text-xs text-red-200"
             >
               {error}
             </p>

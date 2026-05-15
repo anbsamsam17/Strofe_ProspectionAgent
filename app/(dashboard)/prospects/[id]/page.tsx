@@ -50,7 +50,7 @@ function SectionCard({
   return (
     <div className="overflow-hidden rounded-2xl border border-white/[0.08] bg-white/[0.03] backdrop-blur-md shadow-sm">
       <div className="flex items-center justify-between gap-3 border-b border-white/[0.06] px-6 py-4">
-        <h2 className="text-sm font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
+        <h2 className="font-mono text-[11px] uppercase tracking-[0.18em] text-cyan-400/80">
           {title}
         </h2>
         {action}
@@ -63,8 +63,8 @@ function SectionCard({
 function InfoRow({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div className="flex flex-col gap-0.5 sm:flex-row sm:gap-4">
-      <dt className="w-40 flex-shrink-0 text-sm text-gray-500 dark:text-gray-400">{label}</dt>
-      <dd className="text-sm font-medium text-gray-900 dark:text-white">{value}</dd>
+      <dt className="w-40 flex-shrink-0 text-sm text-gray-400">{label}</dt>
+      <dd className="text-sm font-medium text-white">{value}</dd>
     </div>
   )
 }
@@ -82,11 +82,11 @@ function ScoreRow({
   const contribution = Math.round((pillar * weight) / 100)
   return (
     <div className="flex items-center justify-between gap-3">
-      <dt className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
+      <dt className="flex items-center gap-2 text-sm text-gray-300">
         <span>{label}</span>
-        <span className="text-xs text-gray-400 dark:text-gray-500">(pondération {weight}%)</span>
+        <span className="text-xs text-gray-500">(pondération {weight}%)</span>
       </dt>
-      <dd className="text-sm font-semibold tabular-nums text-gray-900 dark:text-white">
+      <dd className="text-sm font-semibold tabular-nums text-white">
         {contribution} / {weight} pts
       </dd>
     </div>
@@ -96,8 +96,8 @@ function ScoreRow({
 function PenaltyRow({ label, value }: { label: string; value: number }) {
   return (
     <div className="flex items-center justify-between gap-3">
-      <dt className="text-sm text-red-600 dark:text-red-400">{label}</dt>
-      <dd className="text-sm font-semibold tabular-nums text-red-600 dark:text-red-400">
+      <dt className="text-sm text-red-300">{label}</dt>
+      <dd className="text-sm font-semibold tabular-nums text-red-300">
         {value > 0 ? `-${value}` : value} pts
       </dd>
     </div>
@@ -199,7 +199,7 @@ export default async function ProspectDetailPage({ params }: PageProps) {
       <div>
         <Link
           href="/prospects"
-          className="mb-4 inline-flex items-center gap-1.5 text-sm text-gray-500 transition-colors hover:text-gray-900 dark:text-gray-400 dark:hover:text-white"
+          className="mb-4 inline-flex items-center gap-1.5 text-sm text-gray-400 transition-colors hover:text-white"
           aria-label="Retour à la liste des prospects"
         >
           <svg
@@ -221,11 +221,11 @@ export default async function ProspectDetailPage({ params }: PageProps) {
 
         <div className="flex flex-wrap items-start gap-4">
           <div className="min-w-0 flex-1">
-            <h1 className="text-2xl font-bold tracking-tight text-gray-900 dark:text-white">
+            <h1 className="text-2xl font-bold tracking-tight text-white">
               {prospect.raison_sociale}
             </h1>
             {prospect.siren && (
-              <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+              <p className="mt-1 font-mono text-sm tabular-nums text-gray-400">
                 SIREN {prospect.siren}
               </p>
             )}
@@ -243,7 +243,7 @@ export default async function ProspectDetailPage({ params }: PageProps) {
 
             {/* Badge archive */}
             {prospect.archived_at && (
-              <span className="inline-flex items-center gap-1.5 rounded-full border border-orange-200 bg-orange-50 px-3 py-1 text-sm font-medium text-orange-700 dark:border-orange-800 dark:bg-orange-950/40 dark:text-orange-400">
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-orange-500/15 px-3 py-1 text-sm font-medium text-orange-200 ring-1 ring-orange-500/25">
                 <svg
                   xmlns="http://www.w3.org/2000/svg"
                   width="12"
@@ -317,7 +317,7 @@ export default async function ProspectDetailPage({ params }: PageProps) {
               <InfoRow
                 label="Source"
                 value={
-                  <span className="inline-flex items-center rounded-md bg-white/[0.05] px-2 py-0.5 text-xs font-medium text-gray-600 dark:bg-gray-800 dark:text-gray-400">
+                  <span className="inline-flex items-center rounded-md bg-white/[0.05] px-2 py-0.5 text-xs font-medium text-gray-300 ring-1 ring-white/[0.08]">
                     {prospect.source}
                   </span>
                 }
@@ -332,14 +332,14 @@ export default async function ProspectDetailPage({ params }: PageProps) {
             {/* Barre de progression globale */}
             <div>
               <div className="mb-1.5 flex items-center justify-between">
-                <span className="text-sm text-gray-500 dark:text-gray-400">Score global</span>
-                <span className="text-2xl font-bold tabular-nums text-gray-900 dark:text-white">
+                <span className="text-sm text-gray-400">Score global</span>
+                <span className="text-2xl font-bold tabular-nums text-white">
                   {prospect.score_priorite}
-                  <span className="ml-1 text-sm font-normal text-gray-400">/100</span>
+                  <span className="ml-1 text-sm font-normal text-gray-500">/100</span>
                 </span>
               </div>
               <div
-                className="h-3 overflow-hidden rounded-full bg-white/[0.08] dark:bg-gray-700"
+                className="h-3 overflow-hidden rounded-full bg-white/[0.08]"
                 role="progressbar"
                 aria-valuenow={prospect.score_priorite}
                 aria-valuemin={0}
@@ -356,8 +356,8 @@ export default async function ProspectDetailPage({ params }: PageProps) {
             {/* Décomposition 3 piliers */}
             {scoreDetails && (
               <div className="space-y-2">
-                <p className="text-xs font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">
-                  Décomposition
+                <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-cyan-400/80">
+                  {'// Décomposition'}
                 </p>
                 <dl className="space-y-2">
                   <ScoreRow label="Taille" pillar={scoreDetails.taille ?? 0} weight={weights.taille} />
@@ -366,7 +366,7 @@ export default async function ProspectDetailPage({ params }: PageProps) {
                 </dl>
 
                 {(scoreDetails.deja_contacte_penalty > 0 || scoreDetails.rejete_penalty > 0) && (
-                  <dl className="mt-3 space-y-1.5 border-t border-white/[0.06] pt-3 dark:border-gray-800">
+                  <dl className="mt-3 space-y-1.5 border-t border-white/[0.06] pt-3">
                     {scoreDetails.deja_contacte_penalty > 0 && (
                       <PenaltyRow label="Déjà contacté" value={scoreDetails.deja_contacte_penalty} />
                     )}
@@ -379,12 +379,12 @@ export default async function ProspectDetailPage({ params }: PageProps) {
             )}
 
             {/* Caption pondérations */}
-            <p className="text-xs text-gray-500 dark:text-gray-400">
+            <p className="text-xs text-gray-400">
               Pondération actuelle : Taille {weights.taille}% · BEGES {weights.beges}% · Contact{' '}
               {weights.contact}%{' '}
               <Link
                 href="/settings#scoring"
-                className="ml-1 font-medium text-green-600 hover:text-green-700 dark:text-green-400 dark:hover:text-green-300"
+                className="ml-1 font-medium text-green-400 hover:text-green-300"
               >
                 Modifier
               </Link>
@@ -402,7 +402,7 @@ export default async function ProspectDetailPage({ params }: PageProps) {
               {/* Badge état principal */}
               <div className="flex flex-wrap items-center gap-2">
                 {begesValide && (
-                  <span className="inline-flex items-center gap-1.5 rounded-full border border-green-200 bg-green-50 px-3 py-1 text-sm font-semibold text-green-700 dark:border-green-800 dark:bg-green-950/50 dark:text-green-400">
+                  <span className="inline-flex items-center gap-1.5 rounded-full bg-green-500/15 px-3 py-1 text-sm font-semibold text-green-200 ring-1 ring-green-500/25">
                     <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                       <polyline points="20 6 9 17 4 12" />
                     </svg>
@@ -410,7 +410,7 @@ export default async function ProspectDetailPage({ params }: PageProps) {
                   </span>
                 )}
                 {begesExpire && (
-                  <span className="inline-flex items-center gap-1.5 rounded-full border border-orange-200 bg-orange-50 px-3 py-1 text-sm font-semibold text-orange-700 dark:border-orange-800 dark:bg-orange-950/50 dark:text-orange-400">
+                  <span className="inline-flex items-center gap-1.5 rounded-full bg-orange-500/15 px-3 py-1 text-sm font-semibold text-orange-200 ring-1 ring-orange-500/25">
                     <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                       <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
                       <line x1="12" y1="9" x2="12" y2="13" />
@@ -420,7 +420,7 @@ export default async function ProspectDetailPage({ params }: PageProps) {
                   </span>
                 )}
                 {begesAbsent && (
-                  <span className="inline-flex items-center gap-1.5 rounded-full border border-red-200 bg-red-50 px-3 py-1 text-sm font-semibold text-red-700 dark:border-red-800 dark:bg-red-950/50 dark:text-red-400">
+                  <span className="inline-flex items-center gap-1.5 rounded-full bg-red-500/15 px-3 py-1 text-sm font-semibold text-red-200 ring-1 ring-red-500/25">
                     <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                       <circle cx="12" cy="12" r="10" />
                       <line x1="15" y1="9" x2="9" y2="15" />
@@ -430,16 +430,16 @@ export default async function ProspectDetailPage({ params }: PageProps) {
                   </span>
                 )}
                 {prospect.obligation_beges && (
-                  <span className="inline-flex items-center rounded-full border border-orange-200 bg-orange-50 px-3 py-1 text-sm font-medium text-orange-700 dark:border-orange-800 dark:bg-orange-950/40 dark:text-orange-400">
+                  <span className="inline-flex items-center rounded-full bg-orange-500/15 px-3 py-1 text-sm font-medium text-orange-200 ring-1 ring-orange-500/25">
                     Obligation BEGES
                   </span>
                 )}
               </div>
 
               {prospect.beges_derniere_publication && (
-                <p className="text-sm text-gray-600 dark:text-gray-400">
+                <p className="text-sm text-gray-300">
                   Dernière publication :{' '}
-                  <span className="font-medium text-gray-900 dark:text-white">
+                  <span className="font-medium text-white">
                     {formatDate(prospect.beges_derniere_publication, { dateStyle: 'long' })}
                   </span>
                 </p>
@@ -450,7 +450,7 @@ export default async function ProspectDetailPage({ params }: PageProps) {
                   href={begesUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1.5 text-sm font-medium text-green-600 transition-colors hover:text-green-700 dark:text-green-400 dark:hover:text-green-300"
+                  className="inline-flex items-center gap-1.5 text-sm font-medium text-green-400 transition-colors hover:text-green-300"
                   aria-label={`Voir le BEGES de ${prospect.raison_sociale} sur bilans-ges.ademe.fr (ouvre dans un nouvel onglet)`}
                 >
                   Voir le BEGES sur bilans-ges.ademe.fr
@@ -462,7 +462,7 @@ export default async function ProspectDetailPage({ params }: PageProps) {
                 </a>
               )}
 
-              <p className="text-sm leading-relaxed text-gray-500 dark:text-gray-400">
+              <p className="text-sm leading-relaxed text-gray-300">
                 {prospect.obligation_beges
                   ? "Cette entreprise est soumise à l'obligation de publier son BEGES (bilan de gaz à effet de serre) en raison de son effectif ou de sa nature juridique."
                   : "Cette entreprise n'est pas soumise à l'obligation réglementaire, mais une démarche volontaire de bilan carbone reste possible et valorisante."}
@@ -487,38 +487,38 @@ export default async function ProspectDetailPage({ params }: PageProps) {
       <SectionCard title="Métadonnées">
         <dl className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           <div>
-            <dt className="text-xs font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">
+            <dt className="font-mono text-[10px] uppercase tracking-[0.18em] text-cyan-400/80">
               Créé le
             </dt>
-            <dd className="mt-1 text-sm font-medium text-gray-900 dark:text-white">
+            <dd className="mt-1 text-sm font-medium text-white">
               {formatDate(prospect.created_at, { dateStyle: 'long' }) ?? '—'}
             </dd>
           </div>
           {prospect.enriched_at && (
             <div>
-              <dt className="text-xs font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">
+              <dt className="font-mono text-[10px] uppercase tracking-[0.18em] text-amber-400/80">
                 Enrichi le
               </dt>
-              <dd className="mt-1 text-sm font-medium text-gray-900 dark:text-white">
+              <dd className="mt-1 text-sm font-medium text-white">
                 {formatDate(prospect.enriched_at, { dateStyle: 'long' }) ?? '—'}
               </dd>
             </div>
           )}
           {prospect.archived_at && (
             <div>
-              <dt className="text-xs font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">
+              <dt className="font-mono text-[10px] uppercase tracking-[0.18em] text-orange-400/80">
                 Archivé le
               </dt>
-              <dd className="mt-1 text-sm font-medium text-gray-900 dark:text-white">
+              <dd className="mt-1 text-sm font-medium text-white">
                 {formatDate(prospect.archived_at, { dateStyle: 'long' }) ?? '—'}
               </dd>
             </div>
           )}
           <div>
-            <dt className="text-xs font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">
+            <dt className="font-mono text-[10px] uppercase tracking-[0.18em] text-cyan-400/80">
               Dernière mise à jour
             </dt>
-            <dd className="mt-1 text-sm font-medium text-gray-900 dark:text-white">
+            <dd className="mt-1 text-sm font-medium text-white">
               {formatDate(prospect.updated_at, { dateStyle: 'long' }) ?? '—'}
             </dd>
           </div>

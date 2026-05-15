@@ -2,11 +2,35 @@ import { describe, expect, it, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
 
 // Mock next/image → simple <img> (jsdom-friendly, pas d'optimization).
+// On strip les props non-DOM (priority, onError, etc.) avant forward.
 vi.mock('next/image', () => ({
-  default: ({ src, alt, ...rest }: { src: string; alt: string; [k: string]: unknown }) => {
-    // Rend un <img> normal pour le test (drop refs/handlers non-DOM).
-    // eslint-disable-next-line @next/next/no-img-element
-    return <img src={src} alt={alt} data-testid="glan-portrait-img" {...rest} />
+  default: ({
+    src,
+    alt,
+    width,
+    height,
+    className,
+    style,
+  }: {
+    src: string
+    alt: string
+    width?: number
+    height?: number
+    className?: string
+    style?: React.CSSProperties
+  }) => {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        src={src}
+        alt={alt}
+        width={width}
+        height={height}
+        className={className}
+        style={style}
+        data-testid="glan-portrait-img"
+      />
+    )
   },
 }))
 
@@ -59,5 +83,45 @@ describe('GlanPortrait', () => {
     // 1 wrapper role=img + image décorative + pastille bottom-right
     // On vérifie que le wrapper contient bien un <img> + des spans aria-hidden
     expect(container.querySelectorAll('[aria-hidden="true"]').length).toBeGreaterThan(2)
+  })
+
+  // ── Animations avancées (LOT post-pivot 2026-05-15) ─────────────────── //
+
+  it('affiche le clignement (eyelid overlay) sauf en error', () => {
+    const { rerender } = render(<GlanPortrait state="dormant" />)
+    expect(screen.queryByTestId('glan-portrait-eyelid')).toBeInTheDocument()
+
+    rerender(<GlanPortrait state="working" />)
+    expect(screen.queryByTestId('glan-portrait-eyelid')).toBeInTheDocument()
+
+    rerender(<GlanPortrait state="done" />)
+    expect(screen.queryByTestId('glan-portrait-eyelid')).toBeInTheDocument()
+
+    rerender(<GlanPortrait state="error" />)
+    // En error, sourcils froncés → pas de clignement.
+    expect(screen.queryByTestId('glan-portrait-eyelid')).not.toBeInTheDocument()
+  })
+
+  it('affiche les speech-dots uniquement en working', () => {
+    const { rerender } = render(<GlanPortrait state="dormant" />)
+    expect(screen.queryByTestId('glan-portrait-speech-dots')).not.toBeInTheDocument()
+
+    rerender(<GlanPortrait state="working" />)
+    expect(screen.queryByTestId('glan-portrait-speech-dots')).toBeInTheDocument()
+
+    rerender(<GlanPortrait state="done" />)
+    expect(screen.queryByTestId('glan-portrait-speech-dots')).not.toBeInTheDocument()
+
+    rerender(<GlanPortrait state="error" />)
+    expect(screen.queryByTestId('glan-portrait-speech-dots')).not.toBeInTheDocument()
+  })
+
+  it('déclenche un sparkles burst à l\'entrée dans `done`', () => {
+    const { rerender } = render(<GlanPortrait state="working" />)
+    expect(screen.queryByTestId('glan-portrait-sparkles')).not.toBeInTheDocument()
+
+    // Transition working → done déclenche le burst transitoire.
+    rerender(<GlanPortrait state="done" />)
+    expect(screen.queryByTestId('glan-portrait-sparkles')).toBeInTheDocument()
   })
 })
