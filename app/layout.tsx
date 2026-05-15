@@ -27,6 +27,7 @@ export default function RootLayout({
           attribute="class"
           defaultTheme="dark"
           enableSystem={false}
+          forcedTheme="dark"
           disableTransitionOnChange
         >
           <MotionProvider>

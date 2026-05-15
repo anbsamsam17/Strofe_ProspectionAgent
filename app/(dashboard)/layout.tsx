@@ -17,8 +17,6 @@ async function getAgentRun(userId: string): Promise<AgentRun | null> {
     .select('*')
     .eq('user_id', userId)
     .order('started_at', { ascending: false })
-    // .maybeSingle() au lieu de .single() : retourne null proprement
-    // si aucun run n'existe encore pour cet utilisateur.
     .maybeSingle()
 
   return data as AgentRun | null
@@ -39,15 +37,12 @@ export default async function DashboardLayout({
     redirect('/login')
   }
 
-  // TypeScript ne comprend pas que redirect() est noreturn — cast explicite
   const authenticatedUser = user as NonNullable<typeof user>
 
   const { data: profile } = await supabase
     .from('profiles')
     .select('full_name, email')
     .eq('id', authenticatedUser.id)
-    // .single() est correct ici : le profil est créé automatiquement par trigger
-    // dès l'inscription. Si absent (état incohérent), on gère null proprement.
     .maybeSingle()
 
   const profileData = profile as { full_name: string | null; email: string } | null
@@ -58,18 +53,17 @@ export default async function DashboardLayout({
     profileData?.full_name ?? profileData?.email ?? authenticatedUser.email ?? 'Utilisateur'
 
   return (
-    <div className="flex h-screen overflow-hidden bg-gray-50 dark:bg-gray-950">
-      {/* Sidebar desktop */}
+    // Pas de fond solide — on laisse passer le mesh + grille tech globaux
+    // définis dans app/globals.css via body::before / body::after.
+    <div className="relative flex h-screen overflow-hidden">
       <Sidebar />
 
-      {/* Zone principale */}
       <div className="flex flex-1 flex-col overflow-hidden lg:ml-64">
         <DashboardHeader
           userName={userName ?? 'Utilisateur'}
           agentRun={agentRun}
         />
 
-        {/* Contenu de la page */}
         <main className="flex-1 overflow-y-auto">
           <div className="p-4 pb-24 sm:p-6 lg:pb-8">
             {children}
