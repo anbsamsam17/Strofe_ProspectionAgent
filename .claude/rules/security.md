@@ -55,6 +55,8 @@
   - `api.pappers.fr`
   - `api.hunter.io`
   - `api.resend.com`
+  - `bodacc-datadila.opendatasoft.com`
+  - `registre-national-entreprises.inpi.fr`
 - **Jamais** d'URL user-controlled passée à `fetch()`. Pas de `fetch(req.body.url)`.
 - Pas de proxy générique sortant.
 

@@ -1,0 +1,55 @@
+{
+  "total_count": 5,
+  "results": [
+    {
+      "registre": ["123456789"],
+      "dateparution": "2026-05-10",
+      "typeavis_lib": "Modification",
+      "personnes": "{\"personne\":{\"denomination\":\"ACME SA\",\"siren\":\"123456789\"}}",
+      "modifications": "{\"modification\":{\"administration\":\"Président : MARTIN Jean, en remplacement de DUPONT Pierre\"}}",
+      "personne_nom": "MARTIN",
+      "personne_prenom": "Jean",
+      "personne_fonction": "Président"
+    },
+    {
+      "registre": ["987654321"],
+      "dateparution": "2026-05-08",
+      "typeavis_lib": "Modification",
+      "personnes": "{\"personne\":{\"denomination\":\"BETA SARL\",\"siren\":\"987654321\"}}",
+      "modifications": "{\"modification\":{\"administration\":\"Gérant : DURAND Marie\"}}",
+      "personne_nom": "DURAND",
+      "personne_prenom": "Marie",
+      "personne_fonction": "Gérant"
+    },
+    {
+      "registre": ["555666777"],
+      "dateparution": "2026-05-09",
+      "typeavis_lib": "Nomination",
+      "personnes": "{\"personne\":{\"denomination\":\"GAMMA SAS\",\"siren\":\"555666777\"}}",
+      "modifications": null,
+      "personne_nom": "BERNARD",
+      "personne_prenom": "Sophie",
+      "personne_fonction": "Directeur général"
+    },
+    {
+      "registre": ["111222333"],
+      "dateparution": "2026-05-07",
+      "typeavis_lib": "Modification",
+      "personnes": "{\"personne\":{\"denomination\":\"DELTA SA\",\"siren\":\"111222333\"}}",
+      "modifications": "{\"modification\":{\"capital\":\"Augmentation de capital\"}}",
+      "personne_nom": null,
+      "personne_prenom": null,
+      "personne_fonction": "Capital"
+    },
+    {
+      "registre": ["444555666"],
+      "dateparution": "2026-05-06",
+      "typeavis_lib": "Modification",
+      "personnes": "{\"personne\":{\"denomination\":\"EPSILON SARL\",\"siren\":\"444555666\"}}",
+      "modifications": "{\"modification\":{\"adresse\":\"Nouvelle adresse\"}}",
+      "personne_nom": null,
+      "personne_prenom": null,
+      "personne_fonction": "Adresse"
+    }
+  ]
+}

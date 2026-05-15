@@ -1,0 +1,20 @@
+{
+  "siren": "552120999",
+  "updatedAt": "2026-02-04T10:00:00.000Z",
+  "formality": {
+    "content": {
+      "personneMorale": {
+        "identite": {
+          "entreprise": {
+            "denomination": "SOCIETE SANS MANDATAIRES SAS",
+            "dateMaj": "2026-02-04"
+          }
+        },
+        "composition": {
+          "pouvoirs": []
+        },
+        "beneficiairesEffectifs": []
+      }
+    }
+  }
+}

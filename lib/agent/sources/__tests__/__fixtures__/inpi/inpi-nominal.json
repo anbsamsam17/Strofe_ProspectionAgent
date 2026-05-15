@@ -1,0 +1,81 @@
+{
+  "siren": "552120222",
+  "updatedAt": "2026-03-12T08:14:03.123Z",
+  "formality": {
+    "content": {
+      "personneMorale": {
+        "identite": {
+          "entreprise": {
+            "denomination": "EXEMPLE SAS",
+            "dateMaj": "2026-03-12"
+          }
+        },
+        "composition": {
+          "pouvoirs": [
+            {
+              "typeDePersonne": "INDIVIDU",
+              "individu": {
+                "descriptionPersonne": {
+                  "role": "5300",
+                  "qualite": "Président",
+                  "nom": "DUPONT",
+                  "prenoms": ["Jean", "Pierre"],
+                  "dateDeNaissance": "1972-04-18",
+                  "dateNaissance": {
+                    "dateNaissancePartielle": "1972-04"
+                  }
+                }
+              }
+            },
+            {
+              "typeDePersonne": "INDIVIDU",
+              "individu": {
+                "descriptionPersonne": {
+                  "role": "5310",
+                  "qualite": "Directeur général",
+                  "nom": "MARTIN",
+                  "prenoms": ["Sophie"],
+                  "dateDeNaissance": "1980-11-02",
+                  "dateNaissance": {
+                    "dateNaissancePartielle": "1980-11"
+                  }
+                }
+              }
+            },
+            {
+              "typeDePersonne": "INDIVIDU",
+              "individu": {
+                "descriptionPersonne": {
+                  "role": "5400",
+                  "qualite": "Administrateur",
+                  "nom": "BERNARD",
+                  "prenoms": ["Lucas"],
+                  "dateDeNaissance": "1965-07-23",
+                  "dateNaissance": {
+                    "dateNaissancePartielle": "1965-07"
+                  }
+                }
+              }
+            }
+          ]
+        },
+        "beneficiairesEffectifs": [
+          {
+            "beneficiaire": {
+              "descriptionPersonne": {
+                "nom": "DUPONT",
+                "prenoms": ["Jean"],
+                "dateDeNaissance": "1972-04-18",
+                "adresseDomicile": {
+                  "voie": "12 RUE DE LA PAIX",
+                  "codePostal": "75002",
+                  "commune": "PARIS"
+                }
+              }
+            }
+          }
+        ]
+      }
+    }
+  }
+}

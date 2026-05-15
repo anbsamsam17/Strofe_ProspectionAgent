@@ -1,0 +1,16 @@
+{
+  "results": [
+    {
+      "siren": "123456789",
+      "nom_complet": "SOCIETE SANS DIRIGEANT",
+      "nom_raison_sociale": "SOCIETE SANS DIRIGEANT",
+      "siege": {
+        "adresse": "1 PLACE DU MARCHE",
+        "code_postal": "31000",
+        "libelle_commune": "TOULOUSE"
+      },
+      "dirigeants": []
+    }
+  ],
+  "total_results": 1
+}

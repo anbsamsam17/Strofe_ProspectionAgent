@@ -1,0 +1,41 @@
+{
+  "results": [
+    {
+      "siren": "552032534",
+      "nom_complet": "ACME INDUSTRIES",
+      "nom_raison_sociale": "ACME INDUSTRIES",
+      "siege": {
+        "adresse": "12 RUE DE LA PAIX",
+        "code_postal": "75002",
+        "libelle_commune": "PARIS"
+      },
+      "dirigeants": [
+        {
+          "nom": "MARTIN",
+          "prenoms": "Jean Marc",
+          "qualite": "Administrateur",
+          "type_dirigeant": "personne physique"
+        },
+        {
+          "nom": "DUPONT",
+          "prenoms": "Sophie",
+          "qualite": "Président du conseil d'administration",
+          "type_dirigeant": "personne physique"
+        },
+        {
+          "nom": "DURAND",
+          "prenoms": "Pierre",
+          "qualite": "Directeur Général",
+          "type_dirigeant": "personne physique"
+        },
+        {
+          "nom": "HOLDING INVEST",
+          "prenoms": "",
+          "qualite": "Membre du conseil",
+          "type_dirigeant": "personne morale"
+        }
+      ]
+    }
+  ],
+  "total_results": 1
+}
