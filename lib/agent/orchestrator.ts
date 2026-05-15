@@ -198,7 +198,7 @@ async function phaseLoadSettings(
   const settings = data.settings as unknown as ProfileSettings
 
   log(run, 'load_settings', 'Paramètres chargés', 'info', {
-    daily_call_target: settings.daily_call_target,
+    sourcing_target_per_run: settings.sourcing_target_per_run,
     target_sectors: settings.target_sectors,
     target_city: settings.target_city,
   })

@@ -3,7 +3,7 @@
 // ------------------------------------------------------------
 // Couvre :
 //   - Rendu initial avec defaults 30 / 30 / 40 (scoring_weights).
-//   - Le champ legacy "daily_call_target" n'apparaît pas dans le formulaire
+//   - Le champ legacy "sourcing_target_per_run" n'apparaît pas dans le formulaire
 //     principal (planqué dans la section Avancé fermée par défaut).
 //   - Modification d'un slider, somme recalculée + warning si != 100.
 //   - Bouton "Normaliser" re-projette à 100.
@@ -26,7 +26,7 @@ import { DEFAULT_SCORING_WEIGHTS, type ProfileSettings } from '@/lib/types'
 
 function baseSettings(overrides: Partial<ProfileSettings> = {}): ProfileSettings {
   return {
-    daily_call_target: 15,
+    sourcing_target_per_run: 15,
     target_sectors: [],
     target_postal_codes: [],
     target_city: '',
@@ -71,21 +71,21 @@ describe('SettingsForm — rendu initial', () => {
     expect(screen.getByText(/Total: 100 %/)).toBeInTheDocument()
   })
 
-  it('ne montre pas le slider "appels par jour" dans le formulaire principal', () => {
+  it('ne montre pas le slider "sourcing_target_per_run" dans le formulaire principal', () => {
     render(<SettingsForm initialSettings={baseSettings()} />)
 
-    // Le label/aria du daily_call_target ne doit pas être visible avant ouverture
+    // Le label/aria du sourcing_target_per_run ne doit pas être visible avant ouverture
     // de la section Avancé (collapsable, fermée par défaut).
-    expect(screen.queryByLabelText(/Objectif d'appels par jour/i)).not.toBeInTheDocument()
+    expect(screen.queryByLabelText(/Cible de sourcing par run/i)).not.toBeInTheDocument()
   })
 
-  it('expose le slider legacy dans la section Avancé une fois dépliée', () => {
+  it('expose le slider sourcing_target_per_run dans la section Avancé une fois dépliée', () => {
     render(<SettingsForm initialSettings={baseSettings()} />)
     const toggle = screen.getByRole('button', { name: /Avancé/i })
 
     fireEvent.click(toggle)
 
-    expect(screen.getByLabelText(/Objectif d'appels par jour/i)).toBeInTheDocument()
+    expect(screen.getByLabelText(/Cible de sourcing par run/i)).toBeInTheDocument()
   })
 })
 

@@ -1,9 +1,15 @@
 @import "tailwindcss";
 
+/* ==================================================================== */
+/* @theme — tokens consommables par Tailwind v4                          */
+/* ==================================================================== */
+
 @theme {
   --font-sans: 'Inter', system-ui, sans-serif;
   --font-mono: 'JetBrains Mono', monospace;
+  --font-display: 'Inter', system-ui, sans-serif;
 
+  /* Palette brand HEX (legacy, conservée pour compat) */
   --color-brand-50: #f0fdf4;
   --color-brand-100: #dcfce7;
   --color-brand-200: #bbf7d0;
@@ -15,18 +21,74 @@
   --color-brand-800: #166534;
   --color-brand-900: #14532d;
   --color-brand-950: #052e16;
+
+  /* Accents tech */
+  --color-alpha-amber: #FFB74D;
+  --color-alpha-gold: #F5C547;
 }
 
 @layer base {
   :root {
-    /* Entonnoir de conversion — dégradé vert clair → vert foncé.
-       Utilisé par components/pipeline/conversion-funnel.tsx via var(--funnel-N). */
+    /* Refonte 2026 — Tokens OKLCH */
+    --surface-base:     oklch(100% 0 0);
+    --surface-raised:   oklch(98% 0 0);
+    --surface-overlay:  oklch(96% 0 0);
+    --surface-glass:    oklch(100% 0 0 / 0.7);
+
+    --border-subtle:    oklch(92% 0 0);
+    --border-default:   oklch(88% 0 0);
+
+    --text-primary:     oklch(15% 0 0);
+    --text-secondary:   oklch(45% 0 0);
+    --text-muted:       oklch(65% 0 0);
+
+    --brand-400:        oklch(74% 0.18 152);
+    --brand-500:        oklch(69% 0.19 152);
+    --brand-600:        oklch(63% 0.19 152);
+    --brand-glow:       oklch(69% 0.19 152 / 0.3);
+
+    --accent-amber:     oklch(78% 0.15 75);
+    --accent-gold:      oklch(82% 0.13 88);
+    --accent-cyan:      oklch(70% 0.16 188);
+    --accent-violet:    oklch(70% 0.18 285);
+
+    --status-success:   oklch(65% 0.17 152);
+    --status-warning:   oklch(75% 0.13 75);
+    --status-danger:    oklch(62% 0.22 27);
+    --status-info:      oklch(64% 0.19 256);
+
+    --radius-sm:        0.375rem;
+    --radius-md:        0.75rem;
+    --radius-lg:        1rem;
+    --radius-xl:        1.25rem;
+    --radius-2xl:       1.5rem;
+
+    --shadow-sm:        0 1px 2px 0 oklch(0% 0 0 / 0.05);
+    --shadow-card:      0 1px 3px 0 oklch(0% 0 0 / 0.08), 0 1px 2px -1px oklch(0% 0 0 / 0.08);
+    --shadow-lift:      0 4px 16px -2px oklch(0% 0 0 / 0.12);
+    --shadow-glow-green: 0 0 24px -4px var(--brand-glow);
+    --shadow-glow-amber: 0 0 24px -4px oklch(78% 0.15 75 / 0.35);
+    --shadow-glow-gold:  0 0 24px -4px oklch(82% 0.13 88 / 0.4);
+
+    --duration-fast:    150ms;
+    --duration-base:    200ms;
+    --duration-slow:    300ms;
+    --duration-xslow:   500ms;
+    --duration-counter: 800ms;
+
+    --ease-default:     cubic-bezier(0.4, 0, 0.2, 1);
+    --ease-spring:      cubic-bezier(0.34, 1.56, 0.64, 1);
+    --ease-out:         cubic-bezier(0, 0, 0.2, 1);
+    --ease-in-out:      cubic-bezier(0.4, 0, 0.2, 1);
+
+    /* Entonnoir legacy */
     --funnel-1: #bbf7d0;
     --funnel-2: #86efac;
     --funnel-3: #4ade80;
     --funnel-4: #22c55e;
     --funnel-5: #15803d;
 
+    /* HSL legacy shadcn (conservées pour rétrocompat) */
     --background: 0 0% 100%;
     --foreground: 222.2 84% 4.9%;
     --card: 0 0% 100%;
@@ -50,6 +112,20 @@
   }
 
   .dark {
+    --surface-base:     oklch(15% 0.015 240);
+    --surface-raised:   oklch(18% 0.015 240);
+    --surface-overlay:  oklch(22% 0.015 240);
+    --surface-glass:    oklch(15% 0.01 240 / 0.7);
+
+    --border-subtle:    oklch(25% 0.01 240);
+    --border-default:   oklch(30% 0.01 240);
+
+    --text-primary:     oklch(96% 0 0);
+    --text-secondary:   oklch(65% 0 0);
+    --text-muted:       oklch(45% 0 0);
+
+    --brand-glow:       oklch(69% 0.19 152 / 0.4);
+
     --background: 222.2 84% 4.9%;
     --foreground: 210 40% 98%;
     --card: 222.2 84% 4.9%;
@@ -76,20 +152,79 @@
   * {
     border-color: hsl(var(--border));
   }
+  html {
+    color-scheme: dark light;
+  }
   body {
     background-color: hsl(var(--background));
     color: hsl(var(--foreground));
     font-feature-settings: "rlig" 1, "calt" 1;
+    position: relative;
+    min-height: 100vh;
+  }
+
+  /* ────────────────────────────────────────────────────────────────────
+     Fond global "Tech Cockpit IA" en dark mode (refonte 2026-05-14) :
+       - Navy profond
+       - Mesh gradient multi-couleurs (vert + cyan + violet + indigo)
+       - Grille technique animée (SVG)
+       - Scan line vertical lent (effet hologramme)
+       - Noise SVG pour grain
+     Tailwind v4 brut, zéro lib.
+     ──────────────────────────────────────────────────────────────────── */
+  .dark body {
+    background-color: oklch(11% 0.022 250);
+  }
+
+  /* Couche -3 : grille technique + mesh ambient multi-couleurs */
+  .dark body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    z-index: -3;
+    pointer-events: none;
+    background-image:
+      radial-gradient(ellipse 60% 50% at 12% 15%, oklch(35% 0.16 268 / 0.55) 0%, transparent 50%),
+      radial-gradient(ellipse 55% 45% at 88% 25%, oklch(32% 0.14 188 / 0.50) 0%, transparent 50%),
+      radial-gradient(ellipse 50% 40% at 78% 85%, oklch(30% 0.18 285 / 0.45) 0%, transparent 55%),
+      radial-gradient(ellipse 65% 55% at 25% 90%, oklch(28% 0.12 152 / 0.40) 0%, transparent 55%),
+      linear-gradient(oklch(100% 0 0 / 0.04) 1px, transparent 1px),
+      linear-gradient(90deg, oklch(100% 0 0 / 0.04) 1px, transparent 1px);
+    background-size: 100% 100%, 100% 100%, 100% 100%, 100% 100%, 48px 48px, 48px 48px;
+    background-attachment: fixed;
+    animation: tech-grid-pan 28s linear infinite;
+  }
+
+  /* Couche -2 : scan-line + noise grain */
+  .dark body::after {
+    content: '';
+    position: fixed;
+    inset: 0;
+    z-index: -2;
+    pointer-events: none;
+    background-image:
+      linear-gradient(
+        180deg,
+        transparent 0%,
+        transparent 48%,
+        oklch(85% 0.12 188 / 0.04) 50%,
+        transparent 52%,
+        transparent 100%
+      ),
+      url("data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 0.04 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+    background-size: 100% 200%, 240px 240px;
+    background-repeat: no-repeat, repeat;
+    animation: tech-scan 8s linear infinite;
   }
 }
 
-/* ------------------------------------------------------------------ */
-/* Animations globales                                                  */
-/* ------------------------------------------------------------------ */
+/* ==================================================================== */
+/* Animations globales                                                   */
+/* ==================================================================== */
 
 @keyframes gradient-shift {
   0%, 100% { background-position: 0% 50%; }
-  50%       { background-position: 100% 50%; }
+  50%      { background-position: 100% 50%; }
 }
 
 @keyframes fade-in-up {
@@ -105,20 +240,89 @@
 
 @keyframes float {
   0%, 100% { transform: translateY(0px); }
-  50%       { transform: translateY(-8px); }
+  50%      { transform: translateY(-8px); }
+}
+
+/* ── Glan avatar animations ───────────────────────────────────────── */
+@keyframes glan-breathe {
+  0%, 100% { transform: scale(1); opacity: 0.85; }
+  50%      { transform: scale(1.04); opacity: 1; }
+}
+@keyframes glan-pulse {
+  0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 var(--brand-glow); }
+  50%      { transform: scale(1.06); box-shadow: 0 0 32px 8px var(--brand-glow); }
+}
+@keyframes glan-spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+@keyframes glan-done-flash {
+  0%   { transform: scale(1); box-shadow: 0 0 0 0 oklch(82% 0.13 88 / 0.6); }
+  60%  { transform: scale(1.12); box-shadow: 0 0 48px 12px oklch(82% 0.13 88 / 0.5); }
+  100% { transform: scale(1); box-shadow: var(--shadow-glow-gold); }
+}
+
+/* ── Tech ambient animations ──────────────────────────────────────── */
+@keyframes tech-grid-pan {
+  0%   { background-position: 0% 0%, 0% 0%, 0% 0%, 0% 0%, 0 0, 0 0; }
+  100% { background-position: 0% 0%, 0% 0%, 0% 0%, 0% 0%, 48px 48px, 48px 48px; }
+}
+@keyframes tech-scan {
+  0%   { background-position: 0% -50%, 0 0; }
+  100% { background-position: 0% 150%, 0 0; }
+}
+@keyframes tech-particle-float {
+  0%   { transform: translate3d(0, 0, 0); opacity: 0; }
+  10%  { opacity: 0.5; }
+  50%  { opacity: 1; }
+  90%  { opacity: 0.4; }
+  100% { transform: translate3d(20px, -120vh, 0); opacity: 0; }
+}
+@keyframes tech-glow-pulse {
+  0%, 100% { box-shadow: 0 0 16px 0 var(--brand-glow); }
+  50%      { box-shadow: 0 0 32px 4px var(--brand-glow); }
+}
+@keyframes tech-border-beam {
+  0%   { background-position: 0% 50%; }
+  100% { background-position: 200% 50%; }
+}
+@keyframes tech-text-shimmer {
+  0%   { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+@keyframes border-beam {
+  0%   { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+@keyframes typewriter-blink {
+  0%, 50%   { opacity: 1; }
+  51%, 100% { opacity: 0; }
 }
 
 .animate-gradient {
   background-size: 200% 200%;
   animation: gradient-shift 4s ease infinite;
 }
-
 .animate-fade-in-up {
-  animation: fade-in-up 0.6s ease forwards;
+  animation: fade-in-up 0.6s var(--ease-spring) forwards;
 }
-
 .animate-float {
   animation: float 3s ease-in-out infinite;
+}
+.animate-glan-breathe {
+  animation: glan-breathe 4s ease-in-out infinite;
+}
+.animate-glan-pulse {
+  animation: glan-pulse 2s ease-in-out infinite;
+}
+.animate-glan-spin {
+  animation: glan-spin 12s linear infinite;
+}
+.animate-glan-done-flash {
+  animation: glan-done-flash 1.2s var(--ease-spring) forwards;
+}
+.animate-border-beam {
+  animation: border-beam 4s linear infinite;
 }
 
 /* Délais d'animation pour les éléments en séquence */
@@ -127,3 +331,18 @@
 .animation-delay-300 { animation-delay: 0.3s; }
 .animation-delay-400 { animation-delay: 0.4s; }
 .animation-delay-500 { animation-delay: 0.5s; }
+
+/* ==================================================================== */
+/* prefers-reduced-motion — désactivation globale                        */
+/* ==================================================================== */
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

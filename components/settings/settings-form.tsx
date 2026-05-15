@@ -152,7 +152,7 @@ export function SettingsForm({ initialSettings }: SettingsFormProps) {
           target_city: settings.target_city,
           target_postal_codes: settings.target_postal_codes,
           notification_email: settings.notification_email || undefined,
-          daily_call_target: settings.daily_call_target,
+          sourcing_target_per_run: settings.sourcing_target_per_run,
           scoring_weights: normalizedWeights,
         }),
       })
@@ -562,33 +562,32 @@ export function SettingsForm({ initialSettings }: SettingsFormProps) {
             className="border-t border-gray-100 px-6 py-5 dark:border-gray-800"
           >
             <label
-              htmlFor="daily_call_target"
+              htmlFor="sourcing_target_per_run"
               className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300"
             >
-              Objectif d&apos;appels par jour (legacy)
+              Cible de sourcing par run
               <span className="ml-2 text-sm font-semibold tabular-nums text-gray-900 dark:text-white">
-                {settings.daily_call_target}
+                {settings.sourcing_target_per_run}
               </span>
             </label>
             <input
-              id="daily_call_target"
+              id="sourcing_target_per_run"
               type="range"
               min={5}
               max={30}
               step={1}
-              value={settings.daily_call_target}
+              value={settings.sourcing_target_per_run}
               onChange={(e) =>
                 setSettings((prev) => ({
                   ...prev,
-                  daily_call_target: parseInt(e.target.value, 10),
+                  sourcing_target_per_run: parseInt(e.target.value, 10),
                 }))
               }
               className="w-full accent-green-600"
-              aria-label={`Objectif d'appels par jour : ${settings.daily_call_target}`}
+              aria-label={`Cible de sourcing par run : ${settings.sourcing_target_per_run}`}
             />
             <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
-              Hérité de l&apos;ancienne UX (Top 15). La nouvelle liste est triée par score, sans
-              limite stricte. Conservé pour rétrocompat.
+              Nombre cible de prospects sourcés par run nocturne (targetCandidates = max(N×3, 50)).
             </p>
           </div>
         )}

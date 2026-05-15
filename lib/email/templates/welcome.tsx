@@ -43,16 +43,16 @@ const STEPS = [
   {
     number: '2',
     icon: '🧠',
-    title: 'Il qualifie et prépare',
+    title: 'Il score sur 3 piliers',
     description:
-      "Score de priorité, signaux d'intention (offres d'emploi RSE, rapports manquants…), pitch sur-mesure et réponses aux objections — tout est généré automatiquement.",
+      "Chaque prospect reçoit un score 0-100 sur taille de l'entreprise, statut BEGES (publié, valide, échu), qualité du contact. Pondérations modifiables.",
   },
   {
     number: '3',
     icon: '📞',
-    title: 'Vous appelez',
+    title: 'Vous pilotez le pipeline',
     description:
-      "15 appels/jour, chacun avec le contexte complet. Vous n'avez plus qu'a decrocher le telephone et vous concentrer sur la conversation.",
+      "Pipeline Kanban 8 statuts, multi-contacts par prospect, journal d'échanges horodaté. L'agent prépare le terrain, vous appelez.",
   },
 ]
 

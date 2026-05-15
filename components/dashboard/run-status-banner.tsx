@@ -37,9 +37,9 @@ function formatPhaseLabel(phase: string | undefined): string {
   if (p.includes('scoring') || p.includes('score')) return 'Scoring...'
   if (p.includes('selection') || p.includes('sélection'))
     return 'Sélection des prospects...'
-  if (p.includes('pitch') || p.includes('gpt') || p.includes('openai'))
-    return 'Génération pitchs GPT-4o...'
-  if (p.includes('final') || p.includes('list') || p.includes('insert'))
+  // Phases legacy retirées du pipeline post-pivot — mapping conservé pour
+  // les runs historiques en base, mais l'orchestrator ne les exécute plus.
+  if (p.includes('final') || p.includes('insert'))
     return 'Finalisation...'
   return `Phase : ${phase}`
 }

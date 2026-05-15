@@ -27,7 +27,7 @@ export default async function SettingsPage() {
   const persistedSettings = (profile?.settings as Partial<ProfileSettings> | undefined) ?? {}
 
   const settings: ProfileSettings = {
-    daily_call_target: 15,
+    sourcing_target_per_run: 15,
     target_sectors: [],
     target_postal_codes: [],
     target_city: '',

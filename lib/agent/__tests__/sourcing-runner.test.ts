@@ -273,7 +273,7 @@ function makeFilters(overrides: Partial<ResolvedSourcingFilters> = {}): Resolved
 /** Settings utilisateur minimaliste. */
 function makeSettings(overrides: Partial<ProfileSettings> = {}): ProfileSettings {
   return {
-    daily_call_target: 15,
+    sourcing_target_per_run: 15,
     ...overrides,
   }
 }
@@ -1118,7 +1118,7 @@ describe('runPipelineSourcing — mode dégradé ADEME (Cat. F)', () => {
 
 describe('runPipelineSourcing — cible adaptative (Cat. G)', () => {
   /**
-   * Helper : exécute un run avec un daily_call_target donné, retourne le nombre
+   * Helper : exécute un run avec un sourcing_target_per_run donné, retourne le nombre
    * de pages effectivement demandées (utilisé pour déduire targetCandidates).
    * On simule un univers infini avec 1 etab par page, la boucle s'arrête à targetN.
    */
@@ -1148,7 +1148,7 @@ describe('runPipelineSourcing — cible adaptative (Cat. G)', () => {
       })
     })
 
-    const settings: ProfileSettings | null = dailyTarget === undefined ? null : makeSettings({ daily_call_target: dailyTarget })
+    const settings: ProfileSettings | null = dailyTarget === undefined ? null : makeSettings({ sourcing_target_per_run: dailyTarget })
     const { pushLog } = makePushLog()
     await runPipelineSourcing({
       userId: 'user-g',
@@ -1162,19 +1162,19 @@ describe('runPipelineSourcing — cible adaptative (Cat. G)', () => {
     return mockedSourcerEntreprises.mock.calls.length
   }
 
-  it('G1: daily_call_target=15 → targetN = max(45, 50) = 50', async () => {
+  it('G1: sourcing_target_per_run=15 → targetN = max(45, 50) = 50', async () => {
     const pages = await runWithTarget(15)
     // 5 etabs par page → 10 pages pour atteindre target=50.
     expect(pages).toBe(10)
   })
 
-  it('G2: daily_call_target=20 → targetN = max(60, 50) = 60', async () => {
+  it('G2: sourcing_target_per_run=20 → targetN = max(60, 50) = 60', async () => {
     const pages = await runWithTarget(20)
     // 5 etabs par page → 12 pages pour atteindre target=60.
     expect(pages).toBe(12)
   })
 
-  it('G3: daily_call_target=undefined (settings null) → targetN = max(45, 50) = 50 (défaut 15)', async () => {
+  it('G3: sourcing_target_per_run=undefined (settings null) → targetN = max(45, 50) = 50 (défaut 15)', async () => {
     const pages = await runWithTarget(undefined)
     // Settings null → daily_target default 15 → target = 50 → 10 pages.
     expect(pages).toBe(10)
@@ -1426,7 +1426,7 @@ describe('resolveSourcingFilters — résolution NAF (Cat. I)', () => {
     // l'ancien filtre regex le rejetait → fallback NAF_PRIORITAIRES_DEFAULT.
     const filters = resolveSourcingFilters(
       {}, // pas de params.targetSectors
-      { daily_call_target: 15, target_sectors: ['Industrie manufacturière'] },
+      { sourcing_target_per_run: 15, target_sectors: ['Industrie manufacturière'] },
     )
     // 'Industrie manufacturière' contient 17 codes (agro, chimie, verre,
     // sidérurgie, structures métalliques, moteurs, aéro)
@@ -1440,7 +1440,7 @@ describe('resolveSourcingFilters — résolution NAF (Cat. I)', () => {
     const filters = resolveSourcingFilters(
       {},
       {
-        daily_call_target: 15,
+        sourcing_target_per_run: 15,
         target_sectors: ['01.21Z', 'Hôtellerie et restauration'],
       },
     )
@@ -1458,7 +1458,7 @@ describe('resolveSourcingFilters — résolution NAF (Cat. I)', () => {
     const filters = resolveSourcingFilters(
       {},
       {
-        daily_call_target: 15,
+        sourcing_target_per_run: 15,
         target_sectors: ['Atlantide', 'Technologies'],
       },
     )
@@ -1483,14 +1483,14 @@ describe('resolveSourcingFilters — résolution NAF (Cat. I)', () => {
   it('I7: priorité params > settings > défauts', () => {
     const filtersParams = resolveSourcingFilters(
       { targetSectors: ['01.21Z'] },
-      { daily_call_target: 15, target_sectors: ['Transport et logistique'] },
+      { sourcing_target_per_run: 15, target_sectors: ['Transport et logistique'] },
     )
     expect(filtersParams.nafCodes).toEqual(['01.21Z'])
     expect(filtersParams.nafSource).toBe('params_request')
 
     const filtersSettings = resolveSourcingFilters(
       {},
-      { daily_call_target: 15, target_sectors: ['01.21Z'] },
+      { sourcing_target_per_run: 15, target_sectors: ['01.21Z'] },
     )
     expect(filtersSettings.nafCodes).toEqual(['01.21Z'])
     expect(filtersSettings.nafSource).toBe('settings_user')
@@ -1502,7 +1502,7 @@ describe('resolveSourcingFilters — résolution NAF (Cat. I)', () => {
   it('I8: params.targetSectors vide → fallback settings, puis défauts', () => {
     const filters = resolveSourcingFilters(
       { targetSectors: [] },
-      { daily_call_target: 15, target_sectors: ['Agriculture'] },
+      { sourcing_target_per_run: 15, target_sectors: ['Agriculture'] },
     )
     // 'Agriculture' → 01.21Z, 01.22Z (viticulture)
     expect(filters.nafCodes).toEqual(['01.21Z', '01.22Z'])

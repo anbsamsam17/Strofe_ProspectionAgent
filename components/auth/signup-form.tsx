@@ -16,8 +16,8 @@ const SignupSchema = z
       .max(100, 'Le nom complet est trop long.'),
     email: z
       .string()
-      .email('Format d\'email invalide.')
-      .max(255, 'L\'email est trop long.'),
+      .email("Format d'email invalide.")
+      .max(255, "L'email est trop long."),
     password: z
       .string()
       .min(8, 'Le mot de passe doit contenir au moins 8 caractères.')
@@ -43,15 +43,15 @@ function translateAuthError(message: string): string {
     'Email rate limit exceeded': 'Trop de tentatives. Attendez quelques minutes.',
     'Signup is disabled': 'Les inscriptions sont temporairement désactivées.',
     'Password should be at least 6 characters': 'Le mot de passe doit contenir au moins 6 caractères.',
-    'Unable to validate email address: invalid format': 'Format d\'email invalide.',
-    'over_email_send_rate_limit': 'Trop d\'emails envoyés. Attendez une minute.',
+    'Unable to validate email address: invalid format': "Format d'email invalide.",
+    'over_email_send_rate_limit': "Trop d'emails envoyés. Attendez une minute.",
   }
 
   for (const [key, translation] of Object.entries(errorMap)) {
     if (message.includes(key)) return translation
   }
 
-  return 'Une erreur est survenue lors de l\'inscription. Veuillez réessayer.'
+  return "Une erreur est survenue lors de l'inscription. Veuillez réessayer."
 }
 
 // ---------------------------------------------------------------
@@ -74,32 +74,80 @@ function SpinnerIcon() {
 
 function UserIcon() {
   return (
-    <svg className="h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+    <svg
+      className="h-4 w-4"
+      xmlns="http://www.w3.org/2000/svg"
+      fill="none"
+      viewBox="0 0 24 24"
+      stroke="currentColor"
+      aria-hidden="true"
+    >
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={1.5}
+        d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
+      />
     </svg>
   )
 }
 
 function MailIcon() {
   return (
-    <svg className="h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+    <svg
+      className="h-4 w-4"
+      xmlns="http://www.w3.org/2000/svg"
+      fill="none"
+      viewBox="0 0 24 24"
+      stroke="currentColor"
+      aria-hidden="true"
+    >
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={1.5}
+        d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"
+      />
     </svg>
   )
 }
 
 function LockIcon() {
   return (
-    <svg className="h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+    <svg
+      className="h-4 w-4"
+      xmlns="http://www.w3.org/2000/svg"
+      fill="none"
+      viewBox="0 0 24 24"
+      stroke="currentColor"
+      aria-hidden="true"
+    >
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={1.5}
+        d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"
+      />
     </svg>
   )
 }
 
 function CheckCircleIcon() {
   return (
-    <svg className="h-12 w-12 text-green-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+    <svg
+      className="h-12 w-12 text-green-400"
+      xmlns="http://www.w3.org/2000/svg"
+      fill="none"
+      viewBox="0 0 24 24"
+      stroke="currentColor"
+      aria-hidden="true"
+    >
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={1.5}
+        d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
+      />
     </svg>
   )
 }
@@ -119,7 +167,13 @@ function PasswordStrength({ password }: { password: string }) {
 
   const score = Object.values(checks).filter(Boolean).length
   const labels = ['Très faible', 'Faible', 'Moyen', 'Fort', 'Très fort']
-  const colors = ['bg-red-500', 'bg-orange-500', 'bg-yellow-500', 'bg-green-500', 'bg-green-600']
+  const barColors = [
+    'bg-red-500',
+    'bg-orange-500',
+    'bg-yellow-500',
+    'bg-green-400',
+    'bg-green-500',
+  ]
 
   return (
     <div className="mt-2 space-y-1.5">
@@ -128,13 +182,14 @@ function PasswordStrength({ password }: { password: string }) {
           <div
             key={i}
             className={`h-1 flex-1 rounded-full transition-colors ${
-              i < score ? colors[score - 1] : 'bg-gray-200'
+              i < score ? barColors[score - 1] : 'bg-white/10'
             }`}
           />
         ))}
       </div>
-      <p className="text-xs text-gray-500">
-        Force : <span className="font-medium">{labels[score]}</span>
+      <p className="text-[11px] text-gray-500">
+        Force :{' '}
+        <span className="font-medium text-gray-400">{labels[score]}</span>
       </p>
     </div>
   )
@@ -143,6 +198,21 @@ function PasswordStrength({ password }: { password: string }) {
 // ---------------------------------------------------------------
 // Composant de champ avec gestion d'erreur
 // ---------------------------------------------------------------
+interface InputFieldProps {
+  id: string
+  name: string
+  type: string
+  label: string
+  placeholder: string
+  value: string
+  onChange: (e: React.ChangeEvent<HTMLInputElement>) => void
+  error?: string
+  disabled: boolean
+  autoComplete?: string
+  icon: React.ReactNode
+  hint?: React.ReactNode
+}
+
 function InputField({
   id,
   name,
@@ -156,27 +226,21 @@ function InputField({
   autoComplete,
   icon,
   hint,
-}: {
-  id: string
-  name: string
-  type: string
-  label: string
-  placeholder: string
-  value: string
-  onChange: (e: React.ChangeEvent<HTMLInputElement>) => void
-  error?: string
-  disabled: boolean
-  autoComplete?: string
-  icon: React.ReactNode
-  hint?: React.ReactNode
-}) {
+}: InputFieldProps) {
   return (
     <div>
-      <label htmlFor={id} className="block text-sm font-medium text-gray-700 mb-1.5">
+      <label
+        htmlFor={id}
+        className="mb-1.5 block font-mono text-[10px] uppercase tracking-[0.15em] text-cyan-300/80"
+      >
         {label}
       </label>
       <div className="relative">
-        <div className={`pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 ${error ? 'text-red-400' : 'text-gray-400'}`}>
+        <div
+          className={`pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 ${
+            error ? 'text-red-400' : 'text-gray-500'
+          }`}
+        >
           {icon}
         </div>
         <input
@@ -191,17 +255,30 @@ function InputField({
           disabled={disabled}
           aria-invalid={error ? 'true' : 'false'}
           aria-describedby={error ? `${id}-error` : undefined}
-          className={`block w-full rounded-lg border py-2.5 pl-10 pr-3 text-sm text-gray-900 placeholder:text-gray-400 bg-white focus:outline-none focus:ring-2 disabled:opacity-50 transition-colors ${
+          className={`block w-full rounded-lg border py-2.5 pl-9 pr-3 text-sm text-white placeholder:text-gray-500 bg-white/[0.04] focus:outline-none focus:ring-1 disabled:opacity-50 transition-colors ${
             error
-              ? 'border-red-400 focus:border-red-500 focus:ring-red-500/20'
-              : 'border-gray-300 focus:border-green-500 focus:ring-green-500/20'
+              ? 'border-red-500/40 focus:border-red-500/60 focus:ring-red-500/20'
+              : 'border-white/10 focus:border-cyan-400/40 focus:ring-cyan-400/30'
           }`}
         />
       </div>
       {error && (
-        <p id={`${id}-error`} role="alert" className="mt-1.5 text-xs text-red-600 flex items-center gap-1">
-          <svg className="h-3.5 w-3.5 shrink-0" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
-            <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+        <p
+          id={`${id}-error`}
+          role="alert"
+          className="mt-1.5 flex items-center gap-1 text-xs text-red-400"
+        >
+          <svg
+            className="h-3.5 w-3.5 shrink-0"
+            fill="currentColor"
+            viewBox="0 0 20 20"
+            aria-hidden="true"
+          >
+            <path
+              fillRule="evenodd"
+              d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z"
+              clipRule="evenodd"
+            />
           </svg>
           {error}
         </p>
@@ -285,17 +362,17 @@ export function SignupForm() {
   // Écran de confirmation
   if (confirmationSent) {
     return (
-      <div className="text-center space-y-4">
+      <div className="space-y-5 text-center">
         <div className="flex justify-center">
-          <div className="rounded-full bg-green-50 p-4">
+          <div className="rounded-full border border-green-400/20 bg-green-400/10 p-4">
             <CheckCircleIcon />
           </div>
         </div>
         <div className="space-y-2">
-          <h2 className="text-lg font-semibold text-gray-900">Vérifiez votre email</h2>
-          <p className="text-sm text-gray-600">
+          <h2 className="text-lg font-semibold text-white">Vérifiez votre email</h2>
+          <p className="text-sm text-gray-400">
             Un email de confirmation a été envoyé à{' '}
-            <span className="font-medium text-gray-900">{form.email}</span>.
+            <span className="font-medium text-gray-200">{form.email}</span>.
           </p>
           <p className="text-sm text-gray-500">
             Cliquez sur le lien dans l&apos;email pour activer votre compte.
@@ -303,10 +380,10 @@ export function SignupForm() {
             Pensez à vérifier vos spams si vous ne le recevez pas.
           </p>
         </div>
-        <div className="pt-2">
+        <div className="pt-1">
           <Link
             href="/login"
-            className="inline-flex items-center justify-center rounded-lg border border-green-600 px-4 py-2 text-sm font-medium text-green-600 hover:bg-green-50 transition-colors"
+            className="inline-flex items-center justify-center rounded-lg border border-white/10 bg-white/[0.04] px-5 py-2.5 text-sm font-medium text-gray-300 transition-colors hover:bg-white/[0.08] hover:text-white"
           >
             Retour à la connexion
           </Link>
@@ -321,10 +398,19 @@ export function SignupForm() {
       {globalError && (
         <div
           role="alert"
-          className="flex items-start gap-2 rounded-md bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700"
+          className="flex items-start gap-2.5 rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300"
         >
-          <svg className="mt-0.5 h-4 w-4 shrink-0" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
-            <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+          <svg
+            className="mt-0.5 h-4 w-4 shrink-0 text-red-400"
+            fill="currentColor"
+            viewBox="0 0 20 20"
+            aria-hidden="true"
+          >
+            <path
+              fillRule="evenodd"
+              d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z"
+              clipRule="evenodd"
+            />
           </svg>
           <span>{globalError}</span>
         </div>
@@ -391,19 +477,16 @@ export function SignupForm() {
         <button
           type="submit"
           disabled={loading}
-          className="flex w-full items-center justify-center gap-2 rounded-lg bg-green-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-green-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-green-600 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
+          className="flex w-full items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-green-500 to-emerald-500 px-4 py-2.5 text-sm font-semibold text-white shadow-[0_0_20px_-4px_oklch(70%_0.19_152_/_0.5)] transition-all hover:shadow-[0_0_28px_-2px_oklch(70%_0.19_152_/_0.7)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-green-500 disabled:cursor-not-allowed disabled:opacity-50 active:scale-[0.98]"
         >
           {loading && <SpinnerIcon />}
           {loading ? 'Création en cours…' : 'Créer mon compte'}
         </button>
       </div>
 
-      <p className="text-center text-sm text-gray-600">
+      <p className="text-center text-sm text-gray-500">
         Déjà un compte ?{' '}
-        <Link
-          href="/login"
-          className="font-medium text-green-600 hover:text-green-700 transition-colors"
-        >
+        <Link href="/login" className="font-medium text-cyan-400 transition-colors hover:text-cyan-300">
           Se connecter
         </Link>
       </p>

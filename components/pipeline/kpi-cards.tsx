@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import type { PipelineRange } from '@/lib/pipeline/range'
 import { rangeStartISO } from '@/lib/pipeline/range'
+import { BentoCell } from '@/components/ui/bento-grid'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -11,10 +12,12 @@ interface ProspectRow {
   created_at: string
 }
 
-interface DailyListItemRow {
-  call_result: string | null
-  called_at: string | null
-  created_at: string
+// Post-pivot 2026-05-15 : daily_list_items droppée — source des appels
+// désormais = prospect_exchanges (type='appel').
+interface ExchangeRow {
+  type: string
+  result: string | null
+  occurred_at: string
 }
 
 interface AgentRunRow {
@@ -51,7 +54,7 @@ const MS_PER_SECOND = 1000
 
 export function computeKpis(
   prospects: ProspectRow[],
-  items: DailyListItemRow[],
+  exchanges: ExchangeRow[],
   runs: AgentRunRow[],
   windowStartISO: string | null,
 ): Kpis {
@@ -73,15 +76,16 @@ export function computeKpis(
   const qualifiedPlus = prospects.filter((p) => QUALIFIED_PLUS.has(p.statut)).length
   const qualifiedRate = total === 0 ? 0 : Math.round((qualifiedPlus / total) * 100)
 
-  // 3. Taux de contact réussi : items appelés avec resultat / items appelés
-  const calledInWindow = items.filter(
-    (it) => it.called_at !== null && inWindow(it.called_at),
+  // 3. Taux de contact réussi : appels (type='appel') avec résultat / appels totaux.
+  // Source : prospect_exchanges — daily_list_items droppée post-pivot 2026-05-15.
+  const appelsInWindow = exchanges.filter(
+    (ex) => ex.type === 'appel' && inWindow(ex.occurred_at),
   )
-  const withResult = calledInWindow.filter((it) => it.call_result !== null)
+  const appelsWithResult = appelsInWindow.filter((ex) => ex.result !== null)
   const contactSuccessRate =
-    calledInWindow.length === 0
+    appelsInWindow.length === 0
       ? 0
-      : Math.round((withResult.length / calledInWindow.length) * 100)
+      : Math.round((appelsWithResult.length / appelsInWindow.length) * 100)
 
   // 4. RDV pris dans la fenêtre (prospects statut rdv/converted créés dans la fenêtre)
   const rdvCount = prospects.filter(
@@ -142,37 +146,41 @@ export async function KpiCards({ range }: KpiCardsProps) {
     // RLS implicite — pas de filtre user_id.
     const [
       { data: prospectsRaw, error: pErr },
-      { data: itemsRaw, error: iErr },
+      { data: exchangesRaw, error: eErr },
       { data: runsRaw, error: rErr },
     ] = await Promise.all([
       supabase.from('prospects').select('statut, beges_publie, archived_at, created_at'),
-      supabase.from('daily_list_items').select('call_result, called_at, created_at'),
+      // Post-pivot : source des appels = prospect_exchanges (daily_list_items droppée)
+      supabase.from('prospect_exchanges').select('type, result, occurred_at'),
       supabase.from('agent_runs').select('status, started_at, completed_at'),
     ])
 
-    if (pErr || iErr || rErr) {
+    if (pErr || eErr || rErr) {
       console.error('[KpiCards] Supabase query error', {
         prospects_error: pErr?.message,
-        items_error: iErr?.message,
+        exchanges_error: eErr?.message,
         runs_error: rErr?.message,
       })
-      return <KpiCardsError reason={pErr?.message ?? iErr?.message ?? rErr?.message ?? 'unknown'} />
+      return <KpiCardsError reason={pErr?.message ?? eErr?.message ?? rErr?.message ?? 'unknown'} />
     }
 
     const prospects = (prospectsRaw ?? []) as unknown as ProspectRow[]
-    const items = (itemsRaw ?? []) as unknown as DailyListItemRow[]
+    const exchanges = (exchangesRaw ?? []) as unknown as ExchangeRow[]
     const runs = (runsRaw ?? []) as unknown as AgentRunRow[]
 
-    kpis = computeKpis(prospects, items, runs, windowStart)
+    kpis = computeKpis(prospects, exchanges, runs, windowStart)
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
     console.error('[KpiCards] Render error', { message: msg, stack: err instanceof Error ? err.stack : undefined })
     return <KpiCardsError reason={msg} />
   }
 
+  // Accents tournants : brand · cyan · violet · amber · brand · cyan
   return (
     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
       <KpiCard
+        index={1}
+        accent="brand"
         label="Prospects actifs"
         value={kpis.activeCount.toLocaleString('fr-FR')}
         sublabel={
@@ -186,24 +194,32 @@ export async function KpiCards({ range }: KpiCardsProps) {
         icon={<IconBriefcase />}
       />
       <KpiCard
+        index={2}
+        accent="cyan"
         label="Taux qualification"
         value={`${kpis.qualifiedRate}%`}
         sublabel="Statut qualified ou plus"
         icon={<IconTarget />}
       />
       <KpiCard
+        index={3}
+        accent="violet"
         label="Taux contact réussi"
         value={`${kpis.contactSuccessRate}%`}
         sublabel="Résultat saisi / appels passés"
         icon={<IconPhone />}
       />
       <KpiCard
+        index={4}
+        accent="amber"
         label="RDV pris"
         value={kpis.rdvCount.toLocaleString('fr-FR')}
         sublabel="Statut rdv ou converted"
         icon={<IconCalendar />}
       />
       <KpiCard
+        index={5}
+        accent="brand"
         label="Durée run moyenne"
         value={formatDuration(kpis.avgRunMs)}
         sublabel="Plus court = mieux"
@@ -211,6 +227,8 @@ export async function KpiCards({ range }: KpiCardsProps) {
         icon={<IconClock />}
       />
       <KpiCard
+        index={6}
+        accent="cyan"
         label="BEGES coverage"
         value={`${kpis.begesCoverage}%`}
         sublabel="Prospects avec bilan publié"
@@ -222,7 +240,30 @@ export async function KpiCards({ range }: KpiCardsProps) {
 
 // ── Sous-composant carte ──────────────────────────────────────────────────────
 
+const ACCENT_VALUE_GRADIENT: Record<string, string> = {
+  brand: 'bg-gradient-to-br from-white to-green-200 bg-clip-text text-transparent',
+  cyan: 'bg-gradient-to-br from-white to-cyan-200 bg-clip-text text-transparent',
+  violet: 'bg-gradient-to-br from-white to-violet-200 bg-clip-text text-transparent',
+  amber: 'bg-gradient-to-br from-white to-amber-200 bg-clip-text text-transparent',
+}
+
+const ACCENT_LABEL: Record<string, string> = {
+  brand: 'text-green-400/80',
+  cyan: 'text-cyan-400/80',
+  violet: 'text-violet-400/80',
+  amber: 'text-amber-400/80',
+}
+
+const ACCENT_ICON_BG: Record<string, string> = {
+  brand: 'bg-green-500/10 text-green-400',
+  cyan: 'bg-cyan-500/10 text-cyan-400',
+  violet: 'bg-violet-500/10 text-violet-400',
+  amber: 'bg-amber-500/10 text-amber-400',
+}
+
 interface KpiCardProps {
+  index: number
+  accent: 'brand' | 'cyan' | 'violet' | 'amber'
   label: string
   value: string
   sublabel: string
@@ -231,21 +272,22 @@ interface KpiCardProps {
   inverted?: boolean
 }
 
-function KpiCard({ label, value, sublabel, icon, deltaPositive, inverted }: KpiCardProps) {
+function KpiCard({ index, accent, label, value, sublabel, icon, deltaPositive, inverted }: KpiCardProps) {
+  const paddedIndex = String(index).padStart(2, '0')
   return (
-    <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-gray-800 dark:bg-gray-900">
+    <BentoCell accent={accent} className="p-4">
       <div className="flex items-start justify-between">
-        <p className="text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
-          {label}
-        </p>
+        <span className={`font-mono text-[10px] uppercase tracking-[0.18em] ${ACCENT_LABEL[accent]}`}>
+          [{paddedIndex}] {label}
+        </span>
         <span
           aria-hidden="true"
-          className="flex h-8 w-8 items-center justify-center rounded-lg bg-green-50 text-green-600 dark:bg-green-950/60 dark:text-green-400"
+          className={`flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg ${ACCENT_ICON_BG[accent]}`}
         >
           {icon}
         </span>
       </div>
-      <p className="mt-2 text-2xl font-bold tabular-nums text-gray-900 dark:text-white">
+      <p className={`mt-3 text-4xl font-bold tracking-tight tabular-nums ${ACCENT_VALUE_GRADIENT[accent]}`}>
         {value}
       </p>
       <p
@@ -253,15 +295,15 @@ function KpiCard({ label, value, sublabel, icon, deltaPositive, inverted }: KpiC
           deltaPositive !== undefined
             ? deltaPositive
               ? inverted
-                ? 'mt-1 text-xs font-medium text-red-600 dark:text-red-400'
-                : 'mt-1 text-xs font-medium text-green-600 dark:text-green-400'
-              : 'mt-1 text-xs text-gray-500 dark:text-gray-400'
-            : 'mt-1 text-xs text-gray-500 dark:text-gray-400'
+                ? 'mt-1.5 font-mono text-[11px] text-red-400'
+                : 'mt-1.5 font-mono text-[11px] text-green-400'
+              : 'mt-1.5 font-mono text-[11px] text-gray-500'
+            : 'mt-1.5 font-mono text-[11px] text-gray-500'
         }
       >
         {sublabel}
       </p>
-    </div>
+    </BentoCell>
   )
 }
 
@@ -271,21 +313,21 @@ function KpiCardsError({ reason }: { reason: string }) {
   return (
     <div
       role="alert"
-      className="grid grid-cols-1 gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 dark:border-amber-900/40 dark:bg-amber-950/30 sm:grid-cols-2"
+      className="grid grid-cols-1 gap-3 rounded-2xl border border-amber-500/20 bg-amber-500/5 p-4 sm:grid-cols-2"
     >
       <div>
-        <p className="text-xs font-semibold uppercase tracking-wider text-amber-700 dark:text-amber-400">
+        <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-amber-400">
           KPI indisponibles
         </p>
-        <p className="mt-1 text-sm text-amber-700 dark:text-amber-400">
+        <p className="mt-1 text-sm text-amber-400/80">
           Le calcul des indicateurs a échoué côté serveur. Le pipeline reste utilisable.
         </p>
       </div>
       <div>
-        <p className="text-xs font-semibold uppercase tracking-wider text-amber-700 dark:text-amber-400">
+        <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-amber-400">
           Diagnostic
         </p>
-        <p className="mt-1 break-words font-mono text-xs text-amber-700 dark:text-amber-400">
+        <p className="mt-1 break-words font-mono text-xs text-amber-500/60">
           {reason}
         </p>
       </div>
@@ -305,7 +347,7 @@ export function KpiCardsSkeleton() {
       {Array.from({ length: 6 }).map((_, i) => (
         <div
           key={i}
-          className="h-[104px] animate-pulse rounded-xl border border-gray-200 bg-gray-50 dark:border-gray-800 dark:bg-gray-900/50"
+          className="h-[116px] animate-pulse rounded-2xl border border-white/[0.06] bg-white/[0.02]"
         />
       ))}
     </div>
@@ -316,7 +358,7 @@ export function KpiCardsSkeleton() {
 
 function IconBriefcase() {
   return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
       <rect x="2" y="7" width="20" height="14" rx="2" ry="2" />
       <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16" />
     </svg>
@@ -325,7 +367,7 @@ function IconBriefcase() {
 
 function IconTarget() {
   return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
       <circle cx="12" cy="12" r="10" />
       <circle cx="12" cy="12" r="6" />
       <circle cx="12" cy="12" r="2" />
@@ -335,7 +377,7 @@ function IconTarget() {
 
 function IconPhone() {
   return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
       <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12a19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 3.5 1h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 8.91a16 16 0 0 0 5.27 5.27l1.17-1.17a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 21.28 15l.64 1.92z" />
     </svg>
   )
@@ -343,7 +385,7 @@ function IconPhone() {
 
 function IconCalendar() {
   return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
       <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
       <line x1="16" y1="2" x2="16" y2="6" />
       <line x1="8" y1="2" x2="8" y2="6" />
@@ -354,7 +396,7 @@ function IconCalendar() {
 
 function IconClock() {
   return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
       <circle cx="12" cy="12" r="10" />
       <polyline points="12 6 12 12 16 14" />
     </svg>
@@ -363,7 +405,7 @@ function IconClock() {
 
 function IconLeaf() {
   return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
       <path d="M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.48 19.2 2.96c.66 5.95.7 9.97-3.1 13.78A7 7 0 0 1 11 20z" />
       <path d="M2 21c0-3 1.85-5.36 5.08-6" />
     </svg>
