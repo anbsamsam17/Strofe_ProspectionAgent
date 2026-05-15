@@ -22,6 +22,8 @@ import type {
   ProfileSettings,
 } from '@/lib/types'
 import { enrichirContact, getCreditsUsed } from './contact-enrichment'
+import { isProfessionalEmail } from './email-is-pro'
+import { filterOptedOutSirens } from './opt-out-checker'
 import {
   isGeminiAvailable,
   scoreLeadAvecGemini,
@@ -287,11 +289,20 @@ async function phaseSourcingAdaptive(
 // ------------------------------------------------------------
 
 /**
- * Enrichit les contacts des prospects avec score > 70 qui n'ont pas encore
- * d'email OU de téléphone, via Pappers + Hunter.io.
+ * Enrichissement contacts v2 — stratégie HOT/COLD pour optimiser les quotas
+ * free tier (Pappers 100/mois, Hunter 25/mois).
  *
- * Contraintes :
- * - Max 10 prospects par run (quota API gratuits)
+ * - "HOT" = obligation BEGES + non publié OU expiré (cible commerciale chaude)
+ *   → ces prospects passent en PRIORITÉ dans la cascade payante (Pappers+Hunter)
+ * - "COLD" = autres prospects sans contact complet
+ *   → enrichis via sources gratuites illimitées uniquement (côté enrichirContact)
+ *
+ * Pré-filtres :
+ * - Opt-out : les SIREN/emails dans `opt_out` ne sont JAMAIS enrichis (RGPD)
+ * - Email is_pro : un email perso (gmail, hotmail…) n'écrase JAMAIS le primary
+ *
+ * Limites :
+ * - Max 150 prospects par run (vs 10 auparavant)
  * - Appels séquentiels (pas de parallélisme) pour préserver les crédits
  * - Phase NON-FATALE : une erreur ici ne bloque pas le pipeline
  */
@@ -300,36 +311,86 @@ async function phaseContactEnrichment(
   supabase: SupabaseServerClient,
 ): Promise<void> {
   run.phase = 'contact_enrichment'
-  log(run, 'contact_enrichment', 'Démarrage enrichissement contacts (prospects score > 70)', 'info')
+  log(run, 'contact_enrichment', 'Démarrage enrichissement v2 (HOT first)', 'info')
 
-  // Charger les prospects avec score > 70 et contact incomplet
-  const { data: prospects, error } = await supabase
+  // Charger jusqu'à 150 prospects sans contact complet (vs 10 + score>70 avant).
+  // On récupère aussi obligation_beges/beges_publie/beges_valide pour computer le tier.
+  // Cast `as unknown as ProspectRow[]` : beges_valide (migration 004) n'est pas
+  // encore dans database.types.ts régénéré. À nettoyer après `npx supabase gen types`.
+  type ProspectRow = {
+    id: string
+    siren: string | null
+    raison_sociale: string | null
+    contact_email: string | null
+    contact_telephone: string | null
+    contact_nom: string | null
+    contact_prenom: string | null
+    contact_poste: string | null
+    contact_linkedin: string | null
+    obligation_beges: boolean | null
+    beges_publie: boolean | null
+    beges_valide: boolean | null
+    score_priorite: number | null
+  }
+
+  const { data: prospectsRaw, error } = await supabase
     .from('prospects')
-    .select('id, siren, raison_sociale, contact_email, contact_telephone, contact_nom, contact_prenom, contact_poste, contact_linkedin')
+    .select('id, siren, raison_sociale, contact_email, contact_telephone, contact_nom, contact_prenom, contact_poste, contact_linkedin, obligation_beges, beges_publie, beges_valide, score_priorite')
     .eq('user_id', run.user_id)
-    .gt('score_priorite', 70)
     .or('contact_email.is.null,contact_telephone.is.null')
     .order('score_priorite', { ascending: false })
-    .limit(10)
+    .limit(150)
+
+  const prospects = (prospectsRaw ?? []) as unknown as ProspectRow[]
 
   if (error) {
-    log(run, 'contact_enrichment', 'Impossible de charger les prospects prioritaires', 'warn', {
+    log(run, 'contact_enrichment', 'Impossible de charger les prospects à enrichir', 'warn', {
       error: error.message,
     })
     return
   }
 
   if (!prospects || prospects.length === 0) {
-    log(run, 'contact_enrichment', 'Aucun prospect prioritaire à enrichir (score > 70 avec contact complet ou aucun)', 'info')
+    log(run, 'contact_enrichment', 'Aucun prospect à enrichir (tous complets)', 'info')
     return
   }
 
-  log(run, 'contact_enrichment', `${prospects.length} prospects prioritaires à enrichir`, 'info')
+  // Filtre opt-out : exclure les SIREN refusant la prospection (RGPD).
+  const sirensInBatch = prospects.map((p) => p.siren).filter((s): s is string => Boolean(s))
+  const allowedSirens = await filterOptedOutSirens(supabase, run.user_id, sirensInBatch)
+  const allowedSet = new Set(allowedSirens)
+  const optedOutCount = sirensInBatch.length - allowedSirens.length
+  const filtered = prospects.filter((p) => p.siren && allowedSet.has(p.siren))
+
+  if (optedOutCount > 0) {
+    log(run, 'contact_enrichment', `${optedOutCount} prospects exclus (opt-out)`, 'info')
+  }
+
+  // Tri HOT first : obligation_beges=true + (beges_publie=false OU beges_valide=false)
+  // arrive en tête pour consommer les quotas Pappers/Hunter en priorité.
+  const isHot = (p: { obligation_beges: boolean | null; beges_publie: boolean | null; beges_valide: boolean | null }) =>
+    p.obligation_beges === true && (p.beges_publie === false || p.beges_valide === false)
+
+  const sorted = filtered.slice().sort((a, b) => {
+    const aH = isHot(a) ? 1 : 0
+    const bH = isHot(b) ? 1 : 0
+    if (aH !== bH) return bH - aH
+    return (b.score_priorite ?? 0) - (a.score_priorite ?? 0)
+  })
+
+  const hotCount = sorted.filter(isHot).length
+  log(
+    run,
+    'contact_enrichment',
+    `${sorted.length} prospects à enrichir (${hotCount} HOT, ${sorted.length - hotCount} COLD)`,
+    'info',
+  )
 
   let enrichis = 0
+  let emailsPersoSkippes = 0
 
   // Appels séquentiels — pas de batch parallèle pour préserver les quotas gratuits
-  for (const prospect of prospects) {
+  for (const prospect of sorted) {
     const existingContact = {
       contact_nom:       prospect.contact_nom ?? undefined,
       contact_prenom:    prospect.contact_prenom ?? undefined,
@@ -338,6 +399,10 @@ async function phaseContactEnrichment(
       contact_email:     prospect.contact_email ?? undefined,
       contact_linkedin:  prospect.contact_linkedin ?? undefined,
     }
+
+    // Garde défensive : siren null exclu de l'enrichissement (impossible en pratique
+    // post-sourcing mais le type le permet désormais — cf. select avec ProspectRow).
+    if (!prospect.siren) continue
 
     let nouveauxChamps: Partial<typeof existingContact>
     try {
@@ -363,6 +428,18 @@ async function phaseContactEnrichment(
 
     // Rien de nouveau trouvé → passer au suivant
     if (Object.keys(nouveauxChamps).length === 0) continue
+
+    // Filtre RGPD email_is_pro : un email perso (gmail, hotmail, etc.) ne doit
+    // JAMAIS écraser le primary `contact_email` (non envoyable en prospection B2B).
+    // On le retire du payload mais on garde le log pour audit.
+    if (nouveauxChamps.contact_email && !isProfessionalEmail(nouveauxChamps.contact_email)) {
+      log(run, 'contact_enrichment', `Email perso ignoré pour SIREN ${prospect.siren}`, 'info', {
+        siren: prospect.siren,
+      })
+      delete nouveauxChamps.contact_email
+      emailsPersoSkippes += 1
+      if (Object.keys(nouveauxChamps).length === 0) continue
+    }
 
     // Construire le payload de mise à jour (null explicite pour Supabase)
     const updatePayload: Record<string, string | null> = {}
@@ -393,7 +470,11 @@ async function phaseContactEnrichment(
   const credits = getCreditsUsed()
   log(run, 'contact_enrichment', `Enrichissement terminé`, 'info', {
     prospects_enrichis: enrichis,
-    prospects_analyses: prospects.length,
+    prospects_analyses: sorted.length,
+    prospects_hot: hotCount,
+    prospects_cold: sorted.length - hotCount,
+    emails_perso_skippes: emailsPersoSkippes,
+    opt_out_excluded: optedOutCount,
     credits_pappers: credits.pappers,
     credits_hunter: credits.hunter,
   })
