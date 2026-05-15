@@ -21,10 +21,10 @@ export default function ProspectNotFound() {
           <line x1="21" y1="21" x2="16.65" y2="16.65" />
         </svg>
       </div>
-      <h1 className="text-xl font-semibold text-gray-900 dark:text-white">
+      <h1 className="text-xl font-semibold text-white">
         Prospect introuvable
       </h1>
-      <p className="text-sm text-gray-500 dark:text-gray-400">
+      <p className="text-sm text-gray-400">
         Ce prospect n&apos;existe pas, ou il ne fait pas partie de votre
         portefeuille.
       </p>

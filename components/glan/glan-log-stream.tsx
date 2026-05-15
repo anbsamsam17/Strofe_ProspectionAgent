@@ -99,7 +99,7 @@ export function GlanLogStream({
           key={`${log.timestamp}-${idx}`}
           className="flex gap-2 py-0.5 animate-fade-in-up"
         >
-          <span className="flex-shrink-0 select-none text-gray-500 tabular-nums">
+          <span className="flex-shrink-0 select-none text-gray-400 tabular-nums">
             {formatTime(log.timestamp)}
           </span>
           <span

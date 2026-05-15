@@ -141,7 +141,7 @@ export function GlanTimeline({ run, className = '' }: GlanTimelineProps) {
               <p className="text-sm font-semibold text-white">
                 {p.label}
               </p>
-              <span className="font-mono text-[11px] tabular-nums text-gray-500">
+              <span className="font-mono text-[11px] tabular-nums text-gray-400">
                 {formatTime(p.startedAt)}
                 {p.durationMs !== null && (
                   <span className="ml-1.5">· {formatDuration(p.durationMs)}</span>
@@ -152,7 +152,7 @@ export function GlanTimeline({ run, className = '' }: GlanTimelineProps) {
               <span className="sr-only">État : </span>
               {STATE_LABEL[p.state]}
               {p.message && (
-                <span className="ml-1.5 text-gray-500">
+                <span className="ml-1.5 text-gray-400">
                   · {p.message}
                 </span>
               )}

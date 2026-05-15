@@ -150,7 +150,7 @@ export function EmptyState({
       <p className="text-sm font-medium text-gray-200">
         {finalTitle}
       </p>
-      <p className="max-w-sm text-xs text-gray-500">
+      <p className="max-w-sm text-xs text-gray-400">
         {finalDescription}
       </p>
       {action && <div className="mt-2">{action}</div>}

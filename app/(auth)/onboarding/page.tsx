@@ -207,7 +207,7 @@ function ChecklistStep({
       {!done && (
         <span
           aria-label="En attente"
-          className="mt-1 font-mono text-[9px] uppercase tracking-[0.14em] text-gray-600 shrink-0 dark:text-gray-400"
+          className="mt-1 font-mono text-[9px] uppercase tracking-[0.14em] text-gray-400 shrink-0"
         >
           À faire
         </span>

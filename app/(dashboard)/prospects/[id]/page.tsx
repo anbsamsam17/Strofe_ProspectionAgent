@@ -84,7 +84,7 @@ function ScoreRow({
     <div className="flex items-center justify-between gap-3">
       <dt className="flex items-center gap-2 text-sm text-gray-300">
         <span>{label}</span>
-        <span className="text-xs text-gray-500">(pondération {weight}%)</span>
+        <span className="text-xs text-gray-400">(pondération {weight}%)</span>
       </dt>
       <dd className="text-sm font-semibold tabular-nums text-white">
         {contribution} / {weight} pts
@@ -295,7 +295,7 @@ export default async function ProspectDetailPage({ params }: PageProps) {
                     <span>
                       {prospect.secteur_naf}
                       {prospect.secteur_libelle && (
-                        <span className="ml-1 text-gray-500 dark:text-gray-400">
+                        <span className="ml-1 text-gray-400">
                           — {prospect.secteur_libelle}
                         </span>
                       )}
@@ -335,7 +335,7 @@ export default async function ProspectDetailPage({ params }: PageProps) {
                 <span className="text-sm text-gray-400">Score global</span>
                 <span className="text-2xl font-bold tabular-nums text-white">
                   {prospect.score_priorite}
-                  <span className="ml-1 text-sm font-normal text-gray-500">/100</span>
+                  <span className="ml-1 text-sm font-normal text-gray-400">/100</span>
                 </span>
               </div>
               <div

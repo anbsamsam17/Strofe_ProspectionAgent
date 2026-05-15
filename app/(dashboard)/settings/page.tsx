@@ -42,10 +42,10 @@ export default async function SettingsPage() {
 
       {/* ── En-tête ──────────────────────────────────────────── */}
       <div>
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
+        <h1 className="text-2xl font-bold text-white">
           Paramètres
         </h1>
-        <p className="mt-0.5 text-sm text-gray-500 dark:text-gray-400">
+        <p className="mt-0.5 text-sm text-gray-400">
           Configurez les critères de prospection utilisés par l&apos;agent IA.
         </p>
       </div>
@@ -78,7 +78,7 @@ export default async function SettingsPage() {
                   <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-400">
                     Nom
                   </p>
-                  <p className="mt-0.5 text-sm font-medium text-gray-900 dark:text-white">
+                  <p className="mt-0.5 text-sm font-medium text-white">
                     {profile.full_name}
                   </p>
                 </div>
@@ -87,7 +87,7 @@ export default async function SettingsPage() {
                 <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-400">
                   Email
                 </p>
-                <p className="mt-0.5 text-sm text-gray-700 dark:text-gray-300">
+                <p className="mt-0.5 text-sm text-gray-200">
                   {profile?.email ?? user.email}
                 </p>
               </div>
@@ -96,7 +96,7 @@ export default async function SettingsPage() {
                   <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-400">
                     Entreprise
                   </p>
-                  <p className="mt-0.5 text-sm text-gray-700 dark:text-gray-300">
+                  <p className="mt-0.5 text-sm text-gray-200">
                     {profile.company_name}
                   </p>
                 </div>

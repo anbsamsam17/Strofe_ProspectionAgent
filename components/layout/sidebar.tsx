@@ -131,7 +131,7 @@ export function Sidebar() {
                     aria-hidden="true"
                   />
                 )}
-                <span className={`transition-colors ${active ? 'text-green-400' : 'text-gray-500 group-hover:text-gray-300'}`}>
+                <span className={`transition-colors ${active ? 'text-green-400' : 'text-gray-400 group-hover:text-white'}`}>
                   {item.icon}
                 </span>
                 {item.label}
@@ -163,7 +163,7 @@ export function Sidebar() {
                     aria-hidden="true"
                   />
                 )}
-                <span className={`transition-colors ${settingsActive ? 'text-green-400' : 'text-gray-500 group-hover:text-gray-300'}`}>
+                <span className={`transition-colors ${settingsActive ? 'text-green-400' : 'text-gray-400 group-hover:text-white'}`}>
                   {SETTINGS_NAV_ITEM.icon}
                 </span>
                 {SETTINGS_NAV_ITEM.label}
@@ -176,7 +176,7 @@ export function Sidebar() {
             aria-label="Se déconnecter"
             className="group flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-gray-400 transition-all duration-200 hover:bg-red-500/10 hover:text-red-300"
           >
-            <span className="text-gray-500 transition-colors group-hover:text-red-400">
+            <span className="text-gray-400 transition-colors group-hover:text-red-400">
               <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                 <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
                 <polyline points="16 17 21 12 16 7" />
@@ -204,7 +204,7 @@ export function Sidebar() {
               className={`relative flex flex-1 flex-col items-center gap-1.5 py-3 text-[10px] font-medium transition-colors ${
                 active
                   ? 'text-green-600 dark:text-green-400'
-                  : 'text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300'
+                  : 'text-gray-400 hover:text-white'
               }`}
             >
               {active && (

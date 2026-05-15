@@ -548,7 +548,7 @@ export default async function ProspectsPage({
                       className="group relative border-b border-white/[0.04] transition-all duration-200 last:border-0 hover:bg-gradient-to-r hover:from-green-500/[0.04] hover:via-cyan-500/[0.03] hover:to-transparent hover:shadow-[inset_2px_0_0_0_oklch(70%_0.18_152_/_0.55)]"
                     >
                       {/* 1. Rang */}
-                      <td className="px-4 py-3.5 font-mono text-xs tabular-nums text-gray-500">
+                      <td className="px-4 py-3.5 font-mono text-xs tabular-nums text-gray-400">
                         {rank}
                       </td>
 
@@ -564,7 +564,7 @@ export default async function ProspectsPage({
                             {prospect.raison_sociale}
                           </p>
                           {prospect.siren && (
-                            <p className="mt-0.5 font-mono text-[10px] text-gray-500">
+                            <p className="mt-0.5 font-mono text-[10px] text-gray-400">
                               {prospect.siren}
                             </p>
                           )}
@@ -580,7 +580,7 @@ export default async function ProspectsPage({
                         ) : prospect.effectif_min ? (
                           <span>+{prospect.effectif_min}</span>
                         ) : (
-                          <span className="text-gray-500">—</span>
+                          <span className="text-gray-400">—</span>
                         )}
                       </td>
 
@@ -590,13 +590,13 @@ export default async function ProspectsPage({
                           <span>
                             {prospect.ville}
                             {prospect.code_postal && (
-                              <span className="ml-1 font-mono text-[10px] text-gray-500">
+                              <span className="ml-1 font-mono text-[10px] text-gray-400">
                                 {prospect.code_postal}
                               </span>
                             )}
                           </span>
                         ) : (
-                          <span className="text-gray-500">—</span>
+                          <span className="text-gray-400">—</span>
                         )}
                       </td>
 
@@ -619,12 +619,12 @@ export default async function ProspectsPage({
                       </td>
 
                       {/* 8. Dernière action */}
-                      <td className="hidden px-4 py-3.5 font-mono text-xs tabular-nums text-gray-500 xl:table-cell">
+                      <td className="hidden px-4 py-3.5 font-mono text-xs tabular-nums text-gray-400 xl:table-cell">
                         {dateFmt.format(new Date(prospect.updated_at))}
                       </td>
 
                       {/* 9. Ajouté le */}
-                      <td className="hidden px-4 py-3.5 font-mono text-xs tabular-nums text-gray-500 xl:table-cell">
+                      <td className="hidden px-4 py-3.5 font-mono text-xs tabular-nums text-gray-400 xl:table-cell">
                         {dateFmt.format(new Date(prospect.created_at))}
                       </td>
 
@@ -658,7 +658,7 @@ export default async function ProspectsPage({
                           strokeWidth="1.5"
                           strokeLinecap="round"
                           strokeLinejoin="round"
-                          className="text-gray-500"
+                          className="text-gray-400"
                           aria-hidden="true"
                         >
                           <circle cx="11" cy="11" r="8" />
@@ -668,7 +668,7 @@ export default async function ProspectsPage({
                       <p className="text-sm font-semibold text-gray-200">
                         Aucun prospect trouvé
                       </p>
-                      <p className="text-xs text-gray-500">
+                      <p className="text-xs text-gray-400">
                         {hasActiveFilters
                           ? 'Modifiez ou réinitialisez vos filtres.'
                           : 'La prochaine campagne nocturne remplira cette liste.'}
@@ -707,7 +707,7 @@ export default async function ProspectsPage({
         {/* ── Pagination — style translucide ───────────────────────────── */}
         {totalPages > 1 && (
           <div className="flex items-center justify-between border-t border-white/[0.06] px-5 py-3.5">
-            <p className="font-mono text-xs text-gray-500">
+            <p className="font-mono text-xs text-gray-400">
               p.{' '}
               <span className="tabular-nums text-gray-300">
                 {page}
@@ -746,7 +746,7 @@ export default async function ProspectsPage({
                   Préc.
                 </Link>
               ) : (
-                <span className="inline-flex cursor-not-allowed items-center gap-1.5 rounded-lg border border-white/[0.05] bg-white/[0.02] px-3 py-1.5 font-mono text-xs text-gray-500">
+                <span className="inline-flex cursor-not-allowed items-center gap-1.5 rounded-lg border border-white/[0.05] bg-white/[0.02] px-3 py-1.5 font-mono text-xs text-gray-400">
                   <svg
                     xmlns="http://www.w3.org/2000/svg"
                     width="12"
@@ -792,7 +792,7 @@ export default async function ProspectsPage({
                   </svg>
                 </Link>
               ) : (
-                <span className="inline-flex cursor-not-allowed items-center gap-1.5 rounded-lg border border-white/[0.05] bg-white/[0.02] px-3 py-1.5 font-mono text-xs text-gray-500">
+                <span className="inline-flex cursor-not-allowed items-center gap-1.5 rounded-lg border border-white/[0.05] bg-white/[0.02] px-3 py-1.5 font-mono text-xs text-gray-400">
                   Suiv.
                   <svg
                     xmlns="http://www.w3.org/2000/svg"

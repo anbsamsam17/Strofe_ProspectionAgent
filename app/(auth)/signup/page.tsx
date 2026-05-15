@@ -29,7 +29,7 @@ export default function SignupPage() {
       </div>
 
       {/* Pied : lien connexion */}
-      <p className="text-center text-sm text-gray-500">
+      <p className="text-center text-sm text-gray-400">
         Déjà inscrit ?{" "}
         <Link
           href="/login"

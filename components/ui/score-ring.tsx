@@ -78,7 +78,7 @@ export function ScoreRing({
         />
       </svg>
       <span
-        className="absolute font-mono text-lg font-bold tabular-nums text-gray-900 dark:text-white"
+        className="absolute font-mono text-lg font-bold tabular-nums text-white"
         style={{ fontSize: size * 0.28 }}
       >
         {clampedScore}

@@ -201,10 +201,10 @@ export default async function PipelinePage({ searchParams }: PipelinePageProps) 
       {/* Header sticky */}
       <header className="sticky top-0 z-20 -mx-4 flex flex-wrap items-end justify-between gap-3 border-b border-white/[0.08] bg-white/[0.03] px-4 py-4 backdrop-blur-md supports-[backdrop-filter]:bg-white/[0.04] sm:-mx-6 sm:px-6">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-gray-900 dark:text-white">
+          <h1 className="text-2xl font-bold tracking-tight text-white">
             Pipeline
           </h1>
-          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+          <p className="mt-1 text-sm text-gray-400">
             Vue d&apos;ensemble du pipeline CRM et de l&apos;activité agent
           </p>
         </div>
@@ -299,10 +299,10 @@ function PipelinePageFallback({
     <div className="space-y-6">
       <header className="sticky top-0 z-20 -mx-4 flex flex-wrap items-end justify-between gap-3 border-b border-white/[0.08] bg-white/[0.03] px-4 py-4 backdrop-blur-md supports-[backdrop-filter]:bg-white/[0.04] sm:-mx-6 sm:px-6">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-gray-900 dark:text-white">
+          <h1 className="text-2xl font-bold tracking-tight text-white">
             Pipeline
           </h1>
-          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+          <p className="mt-1 text-sm text-gray-400">
             Vue d&apos;ensemble du pipeline CRM et de l&apos;activité agent
           </p>
         </div>

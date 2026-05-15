@@ -71,7 +71,7 @@ export function Timeline({ items, className = '' }: TimelineProps) {
             </span>
             <div className="flex-1">
               <div className="flex items-baseline justify-between gap-3">
-                <p className="text-sm font-semibold text-gray-900 dark:text-white">
+                <p className="text-sm font-semibold text-white">
                   {item.title}
                 </p>
                 <span className="font-mono text-[11px] text-gray-400 tabular-nums dark:text-gray-400">
@@ -79,7 +79,7 @@ export function Timeline({ items, className = '' }: TimelineProps) {
                 </span>
               </div>
               {item.description && (
-                <p className="mt-0.5 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
+                <p className="mt-0.5 text-xs leading-relaxed text-gray-400">
                   {item.description}
                 </p>
               )}

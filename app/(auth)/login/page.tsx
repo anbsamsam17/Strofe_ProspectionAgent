@@ -31,7 +31,7 @@ export default function LoginPage() {
       </div>
 
       {/* Pied : lien inscription */}
-      <p className="text-center text-sm text-gray-500">
+      <p className="text-center text-sm text-gray-400">
         Pas encore de compte ?{" "}
         <Link
           href="/signup"

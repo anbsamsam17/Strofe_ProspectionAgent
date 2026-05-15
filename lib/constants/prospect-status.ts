@@ -69,39 +69,39 @@ export interface StatusStyle {
  */
 export const STATUS_STYLES_SOLID: Record<ProspectStatus, StatusStyle> = {
   sourced: {
-    badge: 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300',
+    badge: 'bg-gray-800/60 text-gray-300',
     dot: 'bg-gray-400',
   },
   qualified: {
-    badge: 'bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-400',
+    badge: 'bg-blue-950 text-blue-400',
     dot: 'bg-blue-500',
   },
   contacted: {
-    badge: 'bg-yellow-100 text-yellow-700 dark:bg-yellow-950 dark:text-yellow-400',
+    badge: 'bg-yellow-950 text-yellow-400',
     dot: 'bg-yellow-500',
   },
   interested: {
-    badge: 'bg-green-100 text-green-700 dark:bg-green-950 dark:text-green-400',
+    badge: 'bg-green-950 text-green-400',
     dot: 'bg-green-500',
   },
   rdv: {
-    badge: 'bg-purple-100 text-purple-700 dark:bg-purple-950 dark:text-purple-400',
+    badge: 'bg-purple-950 text-purple-400',
     dot: 'bg-purple-500',
   },
   offer_sent: {
-    badge: 'bg-indigo-100 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-400',
+    badge: 'bg-indigo-950 text-indigo-400',
     dot: 'bg-indigo-500',
   },
   converted: {
-    badge: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-400',
+    badge: 'bg-emerald-950 text-emerald-400',
     dot: 'bg-emerald-500',
   },
   rejected: {
-    badge: 'bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-400',
+    badge: 'bg-red-950 text-red-400',
     dot: 'bg-red-500',
   },
   on_hold: {
-    badge: 'bg-orange-100 text-orange-700 dark:bg-orange-950 dark:text-orange-400',
+    badge: 'bg-orange-950 text-orange-400',
     dot: 'bg-orange-500',
   },
 }
@@ -112,39 +112,39 @@ export const STATUS_STYLES_SOLID: Record<ProspectStatus, StatusStyle> = {
  */
 export const STATUS_STYLES_SOFT: Record<ProspectStatus, StatusStyle> = {
   sourced: {
-    badge: 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400',
+    badge: 'bg-gray-800/60 text-gray-400',
     dot: 'bg-gray-400',
   },
   qualified: {
-    badge: 'bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-400',
+    badge: 'bg-blue-950 text-blue-400',
     dot: 'bg-blue-500',
   },
   contacted: {
-    badge: 'bg-yellow-50 text-yellow-700 dark:bg-yellow-950 dark:text-yellow-400',
+    badge: 'bg-yellow-950 text-yellow-400',
     dot: 'bg-yellow-500',
   },
   interested: {
-    badge: 'bg-green-50 text-green-700 dark:bg-green-950 dark:text-green-400',
+    badge: 'bg-green-950 text-green-400',
     dot: 'bg-green-500',
   },
   rdv: {
-    badge: 'bg-green-50 text-green-700 dark:bg-green-950 dark:text-green-400',
+    badge: 'bg-green-950 text-green-400',
     dot: 'bg-green-500',
   },
   offer_sent: {
-    badge: 'bg-indigo-50 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-400',
+    badge: 'bg-indigo-950 text-indigo-400',
     dot: 'bg-indigo-500',
   },
   converted: {
-    badge: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-400',
+    badge: 'bg-emerald-950 text-emerald-400',
     dot: 'bg-emerald-500',
   },
   rejected: {
-    badge: 'bg-red-50 text-red-700 dark:bg-red-950 dark:text-red-400',
+    badge: 'bg-red-950 text-red-400',
     dot: 'bg-red-500',
   },
   on_hold: {
-    badge: 'bg-orange-50 text-orange-700 dark:bg-orange-950 dark:text-orange-400',
+    badge: 'bg-orange-950 text-orange-400',
     dot: 'bg-orange-500',
   },
 }

@@ -162,9 +162,9 @@ export function CommandPalette({ open: openProp, onOpenChange }: CommandPaletteP
               value={search}
               onValueChange={setSearch}
               placeholder="Rechercher un prospect ou une action…"
-              className="flex-1 bg-transparent py-3 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none dark:text-white"
+              className="flex-1 bg-transparent py-3 text-sm text-white placeholder:text-gray-400 focus:outline-none"
             />
-            <kbd className="hidden rounded border border-white/[0.08] px-1.5 py-0.5 font-mono text-[10px] text-gray-400 dark:border-gray-700 dark:text-gray-500 sm:inline">
+            <kbd className="hidden rounded border border-white/[0.08] px-1.5 py-0.5 font-mono text-[10px] text-gray-400 sm:inline">
               Esc
             </kbd>
           </div>
@@ -193,7 +193,7 @@ export function CommandPalette({ open: openProp, onOpenChange }: CommandPaletteP
                     className="flex cursor-pointer items-center gap-3 px-4 py-2 text-sm aria-selected:bg-green-50 aria-selected:text-green-700 dark:aria-selected:bg-green-950/40 dark:aria-selected:text-green-400"
                   >
                     <span className="flex-1">
-                      <span className="font-medium text-gray-900 dark:text-white">
+                      <span className="font-medium text-white">
                         {hit.raison_sociale}
                       </span>
                       <span className="ml-2 font-mono text-[11px] text-gray-400">
