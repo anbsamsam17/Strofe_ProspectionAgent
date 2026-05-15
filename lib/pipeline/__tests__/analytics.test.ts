@@ -84,49 +84,68 @@ describe('buildFunnel', () => {
       'rdv',
       'converted',
     ])
-    expect(stages.map((s) => s.count)).toEqual([100, 50, 25, 5, 2])
+    // Logique cumulative (fix 2026-05-15) : chaque étage = soi + tous les étages aval
+    // sourced = 100 + 50 + 25 + 5 + 2 = 182
+    // qualified = 50 + 25 + 5 + 2 = 82
+    // contacted = 25 + 5 + 2 = 32
+    // rdv = 5 + 2 = 7
+    // converted = 2
+    expect(stages.map((s) => s.count)).toEqual([182, 82, 32, 7, 2])
   })
 
-  it('fusionne interested dans qualified', () => {
+  it('fusionne interested dans le funnel cumulatif (compté dans qualified, contacted, rdv)', () => {
     const counts = emptyCounts()
     counts.sourced = 100
     counts.qualified = 30
-    counts.interested = 20 // doit s'ajouter à qualified
+    counts.interested = 20
 
     const stages = buildFunnel(counts)
     const qualified = stages.find((s) => s.step === 'qualified')
 
+    // qualified cumulatif = qualified(30) + interested(20) + contacted(0) + offer_sent(0) + rdv(0) + converted(0) = 50
     expect(qualified?.count).toBe(50)
   })
 
-  it('calcule stepConversionPct correctement (count[i] / count[i-1] * 100)', () => {
+  it('calcule stepConversionPct sur les counts cumulatifs', () => {
     const counts = emptyCounts()
     counts.sourced = 100
-    counts.qualified = 50 // 50% de sourced
-    counts.contacted = 25 // 50% de qualified
-    counts.rdv = 10        // 40% de contacted
+    counts.qualified = 50
+    counts.contacted = 25
+    counts.rdv = 10
 
+    // Cumulatif :
+    // sourced = 100+50+25+0+0+10+0 = 185
+    // qualified = 50+25+0+0+10+0 = 85
+    // contacted = 25+0+0+10+0 = 35
+    // rdv = 0+0+10+0 = 10
+    // converted = 0
     const stages = buildFunnel(counts)
 
     expect(stages[0].stepConversionPct).toBe(100) // sourced = base
-    expect(stages[1].stepConversionPct).toBe(50)
-    expect(stages[2].stepConversionPct).toBe(50)
-    expect(stages[3].stepConversionPct).toBe(40)
+    expect(stages[1].stepConversionPct).toBeCloseTo((85 / 185) * 100, 5) // ≈ 45.95%
+    expect(stages[2].stepConversionPct).toBeCloseTo((35 / 85) * 100, 5) // ≈ 41.18%
+    expect(stages[3].stepConversionPct).toBeCloseTo((10 / 35) * 100, 5) // ≈ 28.57%
   })
 
-  it('calcule cumulativePct depuis sourced (count[i] / count[0] * 100)', () => {
+  it('calcule cumulativePct depuis sourced cumulatif (count[i] / count[0] * 100)', () => {
     const counts = emptyCounts()
     counts.sourced = 200
-    counts.qualified = 50  // 25% cumulé
-    counts.contacted = 20  // 10% cumulé
-    counts.converted = 2   // 1% cumulé
+    counts.qualified = 50
+    counts.contacted = 20
+    counts.converted = 2
 
+    // Cumulatif :
+    // sourced = 200+50+20+0+0+0+2 = 272
+    // qualified = 50+20+0+0+0+2 = 72
+    // contacted = 20+0+0+0+2 = 22
+    // rdv = 0+0+0+2 = 2
+    // converted = 2
     const stages = buildFunnel(counts)
 
     expect(stages[0].cumulativePct).toBe(100)
-    expect(stages[1].cumulativePct).toBe(25)
-    expect(stages[2].cumulativePct).toBe(10)
-    expect(stages[4].cumulativePct).toBe(1)
+    expect(stages[1].cumulativePct).toBeCloseTo((72 / 272) * 100, 5)
+    expect(stages[2].cumulativePct).toBeCloseTo((22 / 272) * 100, 5)
+    expect(stages[4].cumulativePct).toBeCloseTo((2 / 272) * 100, 5)
   })
 
   it('gère le cas vide sans division par zéro', () => {

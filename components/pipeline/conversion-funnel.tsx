@@ -26,13 +26,18 @@ export function ConversionFunnel({ countsByStatus }: ConversionFunnelProps) {
   return (
     <section
       aria-label="Entonnoir de conversion du pipeline"
-      className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-800 dark:bg-gray-900"
+      className="relative overflow-hidden rounded-2xl border border-white/[0.08] bg-white/[0.03] p-5 backdrop-blur-md"
     >
+      {/* Accent border top */}
+      <span
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-x-4 top-0 h-px bg-gradient-to-r from-transparent via-green-400/60 to-transparent"
+      />
       <header className="mb-4 flex items-baseline justify-between gap-3">
-        <h2 className="text-sm font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
-          Entonnoir de conversion
+        <h2 className="font-mono text-[10px] uppercase tracking-[0.18em] text-green-400/80">
+          {'// Entonnoir de conversion'}
         </h2>
-        <p className="text-xs text-gray-400 dark:text-gray-600">
+        <p className="font-mono text-[10px] text-gray-500">
           du sourcing à la conversion
         </p>
       </header>
@@ -119,27 +124,25 @@ function FunnelLegend({ stages }: { stages: FunnelStage[] }) {
       {stages.map((stage, idx) => (
         <li
           key={stage.step}
-          className="flex items-center gap-3 rounded-lg px-2 py-1.5 transition-colors hover:bg-gray-50 dark:hover:bg-gray-800/40"
+          className="flex items-center gap-3 rounded-lg px-2 py-1.5 transition-colors hover:bg-white/[0.04]"
         >
           <span
-            className="h-3 w-3 flex-shrink-0 rounded-sm"
-            style={{ backgroundColor: `var(--funnel-${idx + 1})` }}
+            className="h-3 w-3 flex-shrink-0 rounded-sm shadow-[0_0_8px_var(--funnel-color)]"
+            style={{ backgroundColor: `var(--funnel-${idx + 1})`, ['--funnel-color' as never]: `var(--funnel-${idx + 1})` }}
             aria-hidden="true"
           />
           <div className="min-w-0 flex-1">
             <p className="flex items-baseline justify-between gap-2">
-              <span className="font-medium text-gray-900 dark:text-white">{stage.label}</span>
-              <span className="tabular-nums text-gray-700 dark:text-gray-300">
-                {stage.count}
-              </span>
+              <span className="font-medium text-white">{stage.label}</span>
+              <span className="tabular-nums text-gray-200">{stage.count}</span>
             </p>
-            <p className="flex items-baseline justify-between gap-2 text-xs text-gray-500 dark:text-gray-400">
+            <p className="flex items-baseline justify-between gap-2 font-mono text-[10px] text-gray-500">
               {idx === 0 ? (
                 <span>100 % du sourcing</span>
               ) : (
                 <>
                   <span className="tabular-nums">
-                    {formatPct(stage.stepConversionPct)} vs étape préc.
+                    {formatPct(stage.stepConversionPct)} vs préc.
                   </span>
                   <span className="tabular-nums">
                     {formatPct(stage.cumulativePct)} cumul.

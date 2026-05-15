@@ -46,30 +46,58 @@ const FUNNEL_LABELS: Record<FunnelStep, string> = {
 /**
  * Construit les étages du funnel à partir des counts par statut.
  *
- * `interested` est fusionné dans `qualified` (décision produit).
+ * **Logique cumulative** (fix 2026-05-15) : chaque étage compte tous les prospects
+ * ayant ATTEINT AU MOINS cette étape. Donc :
+ *   - sourced = tous les prospects actifs (rejected/on_hold exclus)
+ *   - qualified = qualified + interested + contacted + offer_sent + rdv + converted
+ *   - contacted = contacted + interested + offer_sent + rdv + converted
+ *   - rdv = interested + rdv + offer_sent + converted (étage "intéressé/avancé")
+ *   - converted = converted seul
+ *
+ * `interested` est traité comme "qualified+" et compte dans tous les étages
+ * jusqu'au rdv. `rejected` et `on_hold` sont exclus du funnel (archive).
  */
 export function buildFunnel(
   countsByStatus: Record<ProspectStatus, number>,
 ): FunnelStage[] {
-  // Défensif : `?? 0` sur chaque accès — si l'appelant construit un Record partiel
-  // (oubli d'un statut, ex. `offer_sent` ajouté plus tard), `undefined + n` produit
-  // NaN qui se propage dans tous les calculs et casse le SVG du funnel (polygon
-  // avec `points="NaN,NaN …"` → crash SSR render observé prod digest 245842919).
-  const fused: Record<FunnelStep, number> = {
-    sourced: countsByStatus.sourced ?? 0,
-    qualified: (countsByStatus.qualified ?? 0) + (countsByStatus.interested ?? 0),
-    contacted: countsByStatus.contacted ?? 0,
-    rdv: countsByStatus.rdv ?? 0,
-    converted: countsByStatus.converted ?? 0,
+  // Défensif : `?? 0` sur chaque accès — `undefined + n` produit NaN qui crash le SVG.
+  const sourcedRaw = countsByStatus.sourced ?? 0
+  const qualifiedRaw = countsByStatus.qualified ?? 0
+  const contactedRaw = countsByStatus.contacted ?? 0
+  const interestedRaw = countsByStatus.interested ?? 0
+  const offerSentRaw = countsByStatus.offer_sent ?? 0
+  const rdvRaw = countsByStatus.rdv ?? 0
+  const convertedRaw = countsByStatus.converted ?? 0
+
+  // Cumulatif : chaque étage = soi + tous les étages aval
+  const cumulative: Record<FunnelStep, number> = {
+    sourced:
+      sourcedRaw +
+      qualifiedRaw +
+      contactedRaw +
+      interestedRaw +
+      offerSentRaw +
+      rdvRaw +
+      convertedRaw,
+    qualified:
+      qualifiedRaw +
+      contactedRaw +
+      interestedRaw +
+      offerSentRaw +
+      rdvRaw +
+      convertedRaw,
+    contacted: contactedRaw + interestedRaw + offerSentRaw + rdvRaw + convertedRaw,
+    rdv: interestedRaw + offerSentRaw + rdvRaw + convertedRaw,
+    converted: convertedRaw,
   }
 
-  const sourced = fused.sourced || 0
+  const total = cumulative.sourced || 0
 
   return FUNNEL_STEPS.map((step, idx) => {
-    const count = fused[step]
-    const prev = idx === 0 ? count : fused[FUNNEL_STEPS[idx - 1]]
+    const count = cumulative[step]
+    const prev = idx === 0 ? count : cumulative[FUNNEL_STEPS[idx - 1]]
     const stepConversionPct = idx === 0 ? 100 : prev > 0 ? (count / prev) * 100 : 0
-    const cumulativePct = sourced > 0 ? (count / sourced) * 100 : 0
+    const cumulativePct = total > 0 ? (count / total) * 100 : 0
     return {
       step,
       label: FUNNEL_LABELS[step],
