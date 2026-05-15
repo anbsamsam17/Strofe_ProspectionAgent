@@ -12,11 +12,11 @@ export default function DashboardLoading() {
       {/* Titre placeholder */}
       <div className="space-y-2">
         <div
-          className="h-7 w-48 animate-pulse rounded-md bg-gray-200 dark:bg-gray-800"
+          className="h-7 w-48 animate-pulse rounded-md bg-white/[0.08] dark:bg-gray-800"
           aria-hidden="true"
         />
         <div
-          className="h-4 w-72 animate-pulse rounded-md bg-gray-200 dark:bg-gray-800"
+          className="h-4 w-72 animate-pulse rounded-md bg-white/[0.08] dark:bg-gray-800"
           aria-hidden="true"
         />
       </div>
@@ -26,23 +26,23 @@ export default function DashboardLoading() {
         {Array.from({ length: 4 }).map((_, i) => (
           <div
             key={i}
-            className="h-28 animate-pulse rounded-2xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900"
+            className="h-28 animate-pulse rounded-2xl border border-white/[0.08] bg-white dark:border-gray-800 dark:bg-gray-900"
             aria-hidden="true"
           />
         ))}
       </div>
 
       {/* Liste placeholder */}
-      <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900">
-        <div className="divide-y divide-gray-100 dark:divide-gray-800">
+      <div className="overflow-hidden rounded-2xl border border-white/[0.08] bg-white dark:border-gray-800 dark:bg-gray-900">
+        <div className="divide-y divide-white/[0.06] dark:divide-gray-800">
           {Array.from({ length: 6 }).map((_, i) => (
             <div key={i} className="flex items-center gap-4 p-4">
-              <div className="h-10 w-10 animate-pulse rounded-full bg-gray-200 dark:bg-gray-800" />
+              <div className="h-10 w-10 animate-pulse rounded-full bg-white/[0.08] dark:bg-gray-800" />
               <div className="flex-1 space-y-2">
-                <div className="h-3 w-3/5 animate-pulse rounded bg-gray-200 dark:bg-gray-800" />
-                <div className="h-3 w-2/5 animate-pulse rounded bg-gray-200 dark:bg-gray-800" />
+                <div className="h-3 w-3/5 animate-pulse rounded bg-white/[0.08] dark:bg-gray-800" />
+                <div className="h-3 w-2/5 animate-pulse rounded bg-white/[0.08] dark:bg-gray-800" />
               </div>
-              <div className="h-6 w-20 animate-pulse rounded-full bg-gray-200 dark:bg-gray-800" />
+              <div className="h-6 w-20 animate-pulse rounded-full bg-white/[0.08] dark:bg-gray-800" />
             </div>
           ))}
         </div>

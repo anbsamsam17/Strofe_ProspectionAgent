@@ -69,7 +69,7 @@ export function MagicCard({
   const card = (
     <div
       ref={innerRef}
-      className={`rounded-2xl border border-gray-200 bg-white p-5 shadow-sm transition-[transform,box-shadow] duration-200 will-change-transform hover:shadow-md dark:border-gray-800 dark:bg-gray-900 ${className}`}
+      className={`rounded-2xl border border-white/[0.08] bg-white/[0.03] backdrop-blur-md p-5 shadow-sm transition-[transform,box-shadow] duration-200 will-change-transform hover:shadow-md dark:border-gray-800 dark:bg-gray-900 ${className}`}
       style={{ transformStyle: 'preserve-3d' }}
       {...rest}
     >

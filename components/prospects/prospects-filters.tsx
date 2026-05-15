@@ -185,7 +185,7 @@ export function ProspectsFilters({
 
   return (
     <div
-      className={`rounded-2xl border border-gray-200 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-900 transition-opacity ${isPending ? 'opacity-60' : ''}`}
+      className={`rounded-2xl border border-white/[0.08] bg-white/[0.03] backdrop-blur-md shadow-sm dark:border-gray-800 dark:bg-gray-900 transition-opacity ${isPending ? 'opacity-60' : ''}`}
       aria-label="Filtres des prospects"
     >
       {/* Barre de filtres principale */}
@@ -208,7 +208,7 @@ export function ProspectsFilters({
                     className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition-all duration-150 ${
                       isActive
                         ? 'border-green-500 bg-green-50 text-green-700 shadow-sm dark:border-green-600 dark:bg-green-950/50 dark:text-green-400'
-                        : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300 hover:bg-gray-50 dark:border-gray-700 dark:bg-transparent dark:text-gray-400 dark:hover:border-gray-600 dark:hover:bg-gray-800/50'
+                        : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300 hover:bg-white/[0.06] dark:border-gray-700 dark:bg-transparent dark:text-gray-400 dark:hover:border-gray-600 dark:hover:bg-gray-800/50'
                     }`}
                   >
                     <span
@@ -224,7 +224,7 @@ export function ProspectsFilters({
         </div>
 
         {/* Séparateur vertical — masqué sur mobile */}
-        <div className="hidden h-auto w-px self-stretch bg-gray-100 dark:bg-gray-800 sm:block" aria-hidden="true" />
+        <div className="hidden h-auto w-px self-stretch bg-white/[0.05] dark:bg-gray-800 sm:block" aria-hidden="true" />
 
         {/* Colonne droite : recherche + score + filtres complémentaires */}
         <div className="flex flex-col gap-3 sm:w-64">
@@ -261,7 +261,7 @@ export function ProspectsFilters({
                 onKeyDown={handleSecteurKeyDown}
                 onBlur={() => applyFilters(statuts, secteur, scoreMin, archived, contactTypes, begesFilter)}
                 placeholder="ex : Transport..."
-                className="w-full rounded-lg border border-gray-200 bg-white py-2 pl-9 pr-3 text-sm text-gray-900 placeholder-gray-400 transition focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-500/20 dark:border-gray-700 dark:bg-gray-800 dark:text-white dark:placeholder-gray-600"
+                className="w-full rounded-lg border border-white/[0.08] bg-white py-2 pl-9 pr-3 text-sm text-gray-900 placeholder-gray-400 transition focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-500/20 dark:border-gray-700 dark:bg-gray-800 dark:text-white dark:placeholder-gray-600"
               />
               {isPending && (
                 <svg
@@ -297,7 +297,7 @@ export function ProspectsFilters({
               </span>
             </div>
             {/* Track visuel du slider */}
-            <div className="relative h-2 w-full rounded-full bg-gray-100 dark:bg-gray-800">
+            <div className="relative h-2 w-full rounded-full bg-white/[0.05] dark:bg-gray-800">
               <div
                 className="absolute left-0 top-0 h-2 rounded-full bg-green-500 transition-all"
                 style={{ width: `${scorePercent}%` }}
@@ -342,7 +342,7 @@ export function ProspectsFilters({
                     className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition-all duration-150 ${
                       isActive
                         ? 'border-green-500 bg-green-50 text-green-700 shadow-sm dark:border-green-600 dark:bg-green-950/50 dark:text-green-400'
-                        : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300 hover:bg-gray-50 dark:border-gray-700 dark:bg-transparent dark:text-gray-400 dark:hover:border-gray-600 dark:hover:bg-gray-800/50'
+                        : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300 hover:bg-white/[0.06] dark:border-gray-700 dark:bg-transparent dark:text-gray-400 dark:hover:border-gray-600 dark:hover:bg-gray-800/50'
                     }`}
                   >
                     {label}
@@ -362,7 +362,7 @@ export function ProspectsFilters({
               className={`inline-flex w-full items-center justify-between rounded-lg border px-3 py-2 text-xs font-medium transition-colors ${
                 begesFilter === 'missing'
                   ? 'border-red-300 bg-red-50 text-red-700 dark:border-red-700 dark:bg-red-950/40 dark:text-red-400'
-                  : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300 hover:bg-gray-50 dark:border-gray-700 dark:bg-transparent dark:text-gray-400 dark:hover:bg-gray-800/50'
+                  : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300 hover:bg-white/[0.06] dark:border-gray-700 dark:bg-transparent dark:text-gray-400 dark:hover:bg-gray-800/50'
               }`}
             >
               <span className="inline-flex items-center gap-2">
@@ -391,7 +391,7 @@ export function ProspectsFilters({
                 aria-hidden="true"
               >
                 <span
-                  className={`absolute top-0.5 h-3 w-3 rounded-full bg-white shadow-sm transition-transform ${
+                  className={`absolute top-0.5 h-3 w-3 rounded-full bg-white/[0.03] backdrop-blur-md shadow-sm transition-transform ${
                     begesFilter === 'missing' ? 'translate-x-3.5' : 'translate-x-0.5'
                   }`}
                 />
@@ -408,7 +408,7 @@ export function ProspectsFilters({
               className={`inline-flex w-full items-center justify-between rounded-lg border px-3 py-2 text-xs font-medium transition-colors ${
                 archived
                   ? 'border-orange-300 bg-orange-50 text-orange-700 dark:border-orange-700 dark:bg-orange-950/40 dark:text-orange-400'
-                  : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300 hover:bg-gray-50 dark:border-gray-700 dark:bg-transparent dark:text-gray-400 dark:hover:bg-gray-800/50'
+                  : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300 hover:bg-white/[0.06] dark:border-gray-700 dark:bg-transparent dark:text-gray-400 dark:hover:bg-gray-800/50'
               }`}
             >
               <span className="inline-flex items-center gap-2">
@@ -437,7 +437,7 @@ export function ProspectsFilters({
                 aria-hidden="true"
               >
                 <span
-                  className={`absolute top-0.5 h-3 w-3 rounded-full bg-white shadow-sm transition-transform ${
+                  className={`absolute top-0.5 h-3 w-3 rounded-full bg-white/[0.03] backdrop-blur-md shadow-sm transition-transform ${
                     archived ? 'translate-x-3.5' : 'translate-x-0.5'
                   }`}
                 />
@@ -449,7 +449,7 @@ export function ProspectsFilters({
 
       {/* Pied de barre — actions */}
       {hasFilters && (
-        <div className="flex items-center justify-between border-t border-gray-100 px-4 py-2.5 dark:border-gray-800">
+        <div className="flex items-center justify-between border-t border-white/[0.06] px-4 py-2.5 dark:border-gray-800">
           <p className="text-xs text-gray-500 dark:text-gray-400">
             {[
               statuts.length > 0 && `${statuts.length} statut${statuts.length > 1 ? 's' : ''}`,
@@ -469,7 +469,7 @@ export function ProspectsFilters({
             type="button"
             onClick={handleReset}
             aria-label="Réinitialiser tous les filtres"
-            className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-700 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-200"
+            className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium text-gray-500 transition-colors hover:bg-white/[0.06] hover:text-gray-700 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-200"
           >
             <svg
               xmlns="http://www.w3.org/2000/svg"

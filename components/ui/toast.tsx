@@ -139,7 +139,7 @@ function ToastViewport({
               type="button"
               onClick={() => onDismiss(t.id)}
               aria-label="Fermer la notification"
-              className={`flex-shrink-0 rounded-md p-1 transition-colors hover:bg-black/5 dark:hover:bg-white/10 ${classes.text}`}
+              className={`flex-shrink-0 rounded-md p-1 transition-colors hover:bg-black/5 dark:hover:bg-white/[0.06]/10 ${classes.text}`}
             >
               <svg
                 xmlns="http://www.w3.org/2000/svg"

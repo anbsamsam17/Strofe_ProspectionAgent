@@ -1,4 +1,4 @@
-﻿// ============================================================
+// ============================================================
 // Timeline — composant vertical générique
 //
 // Sert d'ossature pour les pages "détail prospect" (échanges) ou tout
@@ -57,7 +57,7 @@ export function Timeline({ items, className = '' }: TimelineProps) {
     <ol className={`relative space-y-5 ${className}`}>
       <span
         aria-hidden="true"
-        className="absolute left-[7px] top-2 bottom-2 w-px bg-gray-200 dark:bg-gray-800"
+        className="absolute left-[7px] top-2 bottom-2 w-px bg-white/[0.08] dark:bg-gray-800"
       />
       {items.map((item) => {
         const tone = item.tone ?? 'default'

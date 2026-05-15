@@ -560,7 +560,7 @@ function CtaSection() {
               {/* Bouton ghost glass */}
               <Link
                 href="/login"
-                className="inline-flex items-center justify-center rounded-xl border border-white/10 bg-white/[0.05] px-7 py-3.5 font-semibold text-gray-200 backdrop-blur transition-all duration-200 hover:-translate-y-0.5 hover:border-white/20 hover:bg-white/[0.10]"
+                className="inline-flex items-center justify-center rounded-xl border border-white/10 bg-white/[0.05] px-7 py-3.5 font-semibold text-gray-200 backdrop-blur transition-all duration-200 hover:-translate-y-0.5 hover:border-white/20 hover:bg-white/[0.06]/[0.10]"
               >
                 Se connecter
               </Link>

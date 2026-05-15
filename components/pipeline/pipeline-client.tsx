@@ -379,7 +379,7 @@ function DroppableColumn({
 
       <div className="flex flex-col gap-2">
         {items.length === 0 ? (
-          <div className="flex flex-col items-center gap-2 rounded-2xl border-2 border-dashed border-gray-200 px-4 py-8 text-center dark:border-gray-800">
+          <div className="flex flex-col items-center gap-2 rounded-2xl border-2 border-dashed border-white/[0.08] px-4 py-8 text-center dark:border-gray-800">
             <svg
               xmlns="http://www.w3.org/2000/svg"
               width="20"
@@ -463,7 +463,7 @@ function DraggableCard({
       }}
       aria-labelledby={labelId}
       aria-roledescription="Carte prospect déplaçable"
-      className={`group w-full cursor-grab touch-none rounded-2xl border bg-white p-4 text-left shadow-sm transition-all duration-150 outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-1 active:cursor-grabbing dark:bg-gray-900 dark:focus-visible:ring-offset-gray-950 ${styles.card} ${styles.cardHover} hover:-translate-y-0.5 hover:shadow-md ${
+      className={`group w-full cursor-grab touch-none rounded-2xl border bg-white/[0.03] backdrop-blur-md p-4 text-left shadow-sm transition-all duration-150 outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-1 active:cursor-grabbing dark:bg-gray-900 dark:focus-visible:ring-offset-gray-950 ${styles.card} ${styles.cardHover} hover:-translate-y-0.5 hover:shadow-md ${
         isBeingDragged ? 'opacity-30' : 'opacity-100'
       }`}
     >
@@ -475,7 +475,7 @@ function DraggableCard({
       </p>
 
       {prospect.secteur_libelle && (
-        <span className="mt-2 inline-block max-w-full truncate rounded-md bg-gray-100 px-2 py-0.5 text-xs text-gray-500 dark:bg-gray-800 dark:text-gray-400">
+        <span className="mt-2 inline-block max-w-full truncate rounded-md bg-white/[0.05] px-2 py-0.5 text-xs text-gray-500 dark:bg-gray-800 dark:text-gray-400">
           {prospect.secteur_libelle}
         </span>
       )}
@@ -506,14 +506,14 @@ function DraggableCard({
 function ProspectCardPreview({ prospect }: { prospect: Prospect }) {
   return (
     <div
-      className="pointer-events-none w-[280px] rotate-2 rounded-2xl border border-gray-200 bg-white p-4 shadow-2xl ring-1 ring-black/5 dark:border-gray-700 dark:bg-gray-900 dark:ring-white/10 sm:w-[300px]"
+      className="pointer-events-none w-[280px] rotate-2 rounded-2xl border border-white/[0.08] bg-white/[0.03] backdrop-blur-md p-4 shadow-2xl ring-1 ring-black/5 dark:border-gray-700 dark:bg-gray-900 dark:ring-white/10 sm:w-[300px]"
       aria-hidden="true"
     >
       <p className="font-semibold leading-tight text-gray-900 line-clamp-1 dark:text-white">
         {prospect.raison_sociale}
       </p>
       {prospect.secteur_libelle && (
-        <span className="mt-2 inline-block max-w-full truncate rounded-md bg-gray-100 px-2 py-0.5 text-xs text-gray-500 dark:bg-gray-800 dark:text-gray-400">
+        <span className="mt-2 inline-block max-w-full truncate rounded-md bg-white/[0.05] px-2 py-0.5 text-xs text-gray-500 dark:bg-gray-800 dark:text-gray-400">
           {prospect.secteur_libelle}
         </span>
       )}

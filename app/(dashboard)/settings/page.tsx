@@ -53,9 +53,9 @@ export default async function SettingsPage() {
       {/* ── Infos compte ─────────────────────────────────────── */}
       <section
         aria-labelledby="account-title"
-        className="rounded-xl border border-gray-100 bg-white shadow-sm dark:border-gray-800/60 dark:bg-gray-900"
+        className="rounded-xl border border-white/[0.06] bg-white/[0.03] backdrop-blur-md shadow-sm dark:border-gray-800/60 dark:bg-gray-900"
       >
-        <div className="border-b border-gray-100 px-6 py-4 dark:border-gray-800/60">
+        <div className="border-b border-white/[0.06] px-6 py-4 dark:border-gray-800/60">
           <h2
             id="account-title"
             className="text-xs font-semibold uppercase tracking-widest text-gray-400 dark:text-gray-600"

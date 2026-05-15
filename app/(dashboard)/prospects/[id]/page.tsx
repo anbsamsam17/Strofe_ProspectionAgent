@@ -48,8 +48,8 @@ function SectionCard({
   children: React.ReactNode
 }) {
   return (
-    <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-900">
-      <div className="flex items-center justify-between gap-3 border-b border-gray-100 px-6 py-4 dark:border-gray-800">
+    <div className="overflow-hidden rounded-2xl border border-white/[0.08] bg-white/[0.03] backdrop-blur-md shadow-sm dark:border-gray-800 dark:bg-gray-900">
+      <div className="flex items-center justify-between gap-3 border-b border-white/[0.06] px-6 py-4 dark:border-gray-800">
         <h2 className="text-sm font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
           {title}
         </h2>
@@ -317,7 +317,7 @@ export default async function ProspectDetailPage({ params }: PageProps) {
               <InfoRow
                 label="Source"
                 value={
-                  <span className="inline-flex items-center rounded-md bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-600 dark:bg-gray-800 dark:text-gray-400">
+                  <span className="inline-flex items-center rounded-md bg-white/[0.05] px-2 py-0.5 text-xs font-medium text-gray-600 dark:bg-gray-800 dark:text-gray-400">
                     {prospect.source}
                   </span>
                 }
@@ -339,7 +339,7 @@ export default async function ProspectDetailPage({ params }: PageProps) {
                 </span>
               </div>
               <div
-                className="h-3 overflow-hidden rounded-full bg-gray-200 dark:bg-gray-700"
+                className="h-3 overflow-hidden rounded-full bg-white/[0.08] dark:bg-gray-700"
                 role="progressbar"
                 aria-valuenow={prospect.score_priorite}
                 aria-valuemin={0}
@@ -366,7 +366,7 @@ export default async function ProspectDetailPage({ params }: PageProps) {
                 </dl>
 
                 {(scoreDetails.deja_contacte_penalty > 0 || scoreDetails.rejete_penalty > 0) && (
-                  <dl className="mt-3 space-y-1.5 border-t border-gray-100 pt-3 dark:border-gray-800">
+                  <dl className="mt-3 space-y-1.5 border-t border-white/[0.06] pt-3 dark:border-gray-800">
                     {scoreDetails.deja_contacte_penalty > 0 && (
                       <PenaltyRow label="Déjà contacté" value={scoreDetails.deja_contacte_penalty} />
                     )}

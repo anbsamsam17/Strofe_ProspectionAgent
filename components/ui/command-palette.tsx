@@ -137,10 +137,10 @@ export function CommandPalette({ open: openProp, onOpenChange }: CommandPaletteP
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-xl overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-2xl dark:border-gray-800 dark:bg-gray-900"
+        className="w-full max-w-xl overflow-hidden rounded-2xl border border-white/[0.08] bg-white/[0.03] backdrop-blur-md shadow-2xl dark:border-gray-800 dark:bg-gray-900"
       >
         <Command label="Recherche" shouldFilter={false}>
-          <div className="flex items-center gap-2 border-b border-gray-100 px-4 dark:border-gray-800">
+          <div className="flex items-center gap-2 border-b border-white/[0.06] px-4 dark:border-gray-800">
             <svg
               xmlns="http://www.w3.org/2000/svg"
               width="16"
@@ -164,7 +164,7 @@ export function CommandPalette({ open: openProp, onOpenChange }: CommandPaletteP
               placeholder="Rechercher un prospect ou une action…"
               className="flex-1 bg-transparent py-3 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none dark:text-white"
             />
-            <kbd className="hidden rounded border border-gray-200 px-1.5 py-0.5 font-mono text-[10px] text-gray-400 dark:border-gray-700 dark:text-gray-500 sm:inline">
+            <kbd className="hidden rounded border border-white/[0.08] px-1.5 py-0.5 font-mono text-[10px] text-gray-400 dark:border-gray-700 dark:text-gray-500 sm:inline">
               Esc
             </kbd>
           </div>
@@ -222,7 +222,7 @@ export function CommandPalette({ open: openProp, onOpenChange }: CommandPaletteP
                   className="flex cursor-pointer items-center justify-between gap-3 px-4 py-2 text-sm aria-selected:bg-green-50 aria-selected:text-green-700 dark:aria-selected:bg-green-950/40 dark:aria-selected:text-green-400"
                 >
                   <span>{a.label}</span>
-                  <kbd className="rounded border border-gray-200 px-1.5 py-0.5 font-mono text-[10px] text-gray-400 dark:border-gray-700">
+                  <kbd className="rounded border border-white/[0.08] px-1.5 py-0.5 font-mono text-[10px] text-gray-400 dark:border-gray-700">
                     {a.shortcut}
                   </kbd>
                 </Command.Item>

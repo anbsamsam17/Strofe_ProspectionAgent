@@ -3,7 +3,7 @@ import Link from 'next/link'
 export default function ProspectNotFound() {
   return (
     <div className="mx-auto max-w-2xl space-y-4 py-16 text-center">
-      <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-gray-100 dark:bg-gray-800">
+      <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-white/[0.05] dark:bg-gray-800">
         <svg
           xmlns="http://www.w3.org/2000/svg"
           width="24"

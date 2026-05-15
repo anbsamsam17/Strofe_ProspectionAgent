@@ -101,7 +101,7 @@ export async function AgentStats({ range }: AgentStatsProps) {
   return (
     <section
       aria-label="Statistiques de l'agent de sourcing"
-      className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-800 dark:bg-gray-900"
+      className="rounded-2xl border border-white/[0.08] bg-white/[0.03] backdrop-blur-md p-5 shadow-sm dark:border-gray-800 dark:bg-gray-900"
     >
       <header className="mb-4 flex items-baseline justify-between gap-3">
         <h2 className="text-sm font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
@@ -128,7 +128,7 @@ export async function AgentStats({ range }: AgentStatsProps) {
 function RunsTimeSeries({ runs }: { runs: RunStat[] }) {
   if (runs.length === 0) {
     return (
-      <div className="flex items-center justify-center rounded-lg border border-dashed border-gray-200 bg-gray-50 py-8 text-xs text-gray-400 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-500">
+      <div className="flex items-center justify-center rounded-lg border border-dashed border-white/[0.08] bg-white/[0.02] py-8 text-xs text-gray-400 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-500">
         Aucun run agent encore enregistré sur cette période.
       </div>
     )
@@ -247,7 +247,7 @@ function SourcingMixBar({ sirene, recherche, sirenePct }: SourcingMixBarProps) {
   const total = sirene + recherche
   if (total === 0) {
     return (
-      <div className="flex items-center justify-center rounded-lg border border-dashed border-gray-200 bg-gray-50 py-3 text-xs text-gray-400 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-500">
+      <div className="flex items-center justify-center rounded-lg border border-dashed border-white/[0.08] bg-white/[0.02] py-3 text-xs text-gray-400 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-500">
         Source des prospects inconnue (aucun run avec métadonnée détectée).
       </div>
     )
@@ -264,7 +264,7 @@ function SourcingMixBar({ sirene, recherche, sirenePct }: SourcingMixBarProps) {
         </p>
       </div>
       <div
-        className="flex h-2.5 w-full overflow-hidden rounded-full bg-gray-100 dark:bg-gray-800"
+        className="flex h-2.5 w-full overflow-hidden rounded-full bg-white/[0.05] dark:bg-gray-800"
         role="img"
         aria-label={`${Math.round(sirenePct)} % via Sirene, ${Math.round(rechercheePct)} % via Recherche Entreprises`}
       >
@@ -288,7 +288,7 @@ function SourcingMixBar({ sirene, recherche, sirenePct }: SourcingMixBarProps) {
 function TopSectors({ sectors }: { sectors: SectorStat[] }) {
   if (sectors.length === 0) {
     return (
-      <div className="flex items-center justify-center rounded-lg border border-dashed border-gray-200 bg-gray-50 py-3 text-xs text-gray-400 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-500">
+      <div className="flex items-center justify-center rounded-lg border border-dashed border-white/[0.08] bg-white/[0.02] py-3 text-xs text-gray-400 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-500">
         Aucun secteur identifié pour l&apos;instant.
       </div>
     )
@@ -307,7 +307,7 @@ function TopSectors({ sectors }: { sectors: SectorStat[] }) {
             >
               {s.label}
             </span>
-            <div className="h-1.5 w-24 overflow-hidden rounded-full bg-gray-100 dark:bg-gray-800">
+            <div className="h-1.5 w-24 overflow-hidden rounded-full bg-white/[0.05] dark:bg-gray-800">
               <div
                 className="h-full bg-green-500"
                 style={{ width: `${Math.max(2, s.sharePct)}%` }}
@@ -350,7 +350,7 @@ function AgentStatsError({ reason }: { reason: string }) {
 export function AgentStatsSkeleton() {
   return (
     <div
-      className="h-[280px] animate-pulse rounded-2xl border border-gray-200 bg-gray-50 dark:border-gray-800 dark:bg-gray-900/50"
+      className="h-[280px] animate-pulse rounded-2xl border border-white/[0.08] bg-white/[0.02] dark:border-gray-800 dark:bg-gray-900/50"
       aria-busy="true"
       aria-label="Chargement des stats agent"
     />

@@ -122,7 +122,7 @@ export function Sidebar() {
                 className={`group relative flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200 ${
                   active
                     ? 'bg-gradient-to-r from-green-500/15 via-green-500/5 to-transparent text-green-300 shadow-[inset_0_0_0_1px_oklch(70%_0.18_152_/_0.25)]'
-                    : 'text-gray-400 hover:bg-white/[0.04] hover:text-gray-100'
+                    : 'text-gray-400 hover:bg-white/[0.06] hover:text-gray-100'
                 }`}
               >
                 {active && (
@@ -154,7 +154,7 @@ export function Sidebar() {
                 className={`group relative flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200 ${
                   settingsActive
                     ? 'bg-gradient-to-r from-green-500/15 via-green-500/5 to-transparent text-green-300'
-                    : 'text-gray-400 hover:bg-white/[0.04] hover:text-gray-100'
+                    : 'text-gray-400 hover:bg-white/[0.06] hover:text-gray-100'
                 }`}
               >
                 {settingsActive && (

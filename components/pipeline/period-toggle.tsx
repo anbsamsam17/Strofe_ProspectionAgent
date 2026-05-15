@@ -55,7 +55,7 @@ export function PeriodToggle({ current }: PeriodToggleProps) {
     <div
       role="group"
       aria-label="Filtrer la période d'analyse"
-      className="inline-flex items-center rounded-lg border border-gray-200 bg-white p-0.5 shadow-sm dark:border-gray-700 dark:bg-gray-900"
+      className="inline-flex items-center rounded-lg border border-white/[0.08] bg-white/[0.03] backdrop-blur-md p-0.5 shadow-sm dark:border-gray-700 dark:bg-gray-900"
     >
       {PIPELINE_RANGES.map((range) => {
         const active = range === current
@@ -68,7 +68,7 @@ export function PeriodToggle({ current }: PeriodToggleProps) {
             className={
               active
                 ? 'rounded-md bg-green-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-gray-900'
-                : 'rounded-md px-3 py-1.5 text-xs font-medium text-gray-600 transition-colors hover:bg-gray-100 hover:text-gray-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-white dark:focus-visible:ring-offset-gray-900'
+                : 'rounded-md px-3 py-1.5 text-xs font-medium text-gray-600 transition-colors hover:bg-white/[0.06] hover:text-gray-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-white dark:focus-visible:ring-offset-gray-900'
             }
           >
             {RANGE_LABELS[range]}

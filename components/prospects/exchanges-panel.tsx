@@ -169,8 +169,8 @@ export function ExchangesPanel({ prospectId, exchanges, calls }: ExchangesPanelP
   ].sort((a, b) => (a.occurred_at < b.occurred_at ? 1 : -1))
 
   return (
-    <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-900">
-      <div className="flex items-center justify-between gap-3 border-b border-gray-100 px-6 py-4 dark:border-gray-800">
+    <div className="overflow-hidden rounded-2xl border border-white/[0.08] bg-white/[0.03] backdrop-blur-md shadow-sm dark:border-gray-800 dark:bg-gray-900">
+      <div className="flex items-center justify-between gap-3 border-b border-white/[0.06] px-6 py-4 dark:border-gray-800">
         <h2 className="text-sm font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
           Historique des échanges{timeline.length > 0 ? ` (${timeline.length})` : ''}
         </h2>
@@ -179,7 +179,7 @@ export function ExchangesPanel({ prospectId, exchanges, calls }: ExchangesPanelP
       <div className="px-6 py-5">
         {timeline.length > 0 ? (
           <ul
-            className="divide-y divide-gray-100 dark:divide-gray-800"
+            className="divide-y divide-white/[0.06] dark:divide-gray-800"
             aria-label="Historique des échanges avec ce prospect"
           >
             {timeline.map((item) => {

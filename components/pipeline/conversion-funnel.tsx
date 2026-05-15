@@ -124,7 +124,7 @@ function FunnelLegend({ stages }: { stages: FunnelStage[] }) {
       {stages.map((stage, idx) => (
         <li
           key={stage.step}
-          className="flex items-center gap-3 rounded-lg px-2 py-1.5 transition-colors hover:bg-white/[0.04]"
+          className="flex items-center gap-3 rounded-lg px-2 py-1.5 transition-colors hover:bg-white/[0.06]"
         >
           <span
             className="h-3 w-3 flex-shrink-0 rounded-sm shadow-[0_0_8px_var(--funnel-color)]"

@@ -368,11 +368,11 @@ export function SourcingModal({ isOpen, onClose }: SourcingModalProps) {
           aria-modal="true"
           aria-labelledby="sourcing-modal-title"
           aria-describedby="sourcing-modal-description"
-          className="relative flex w-full max-w-md flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-xl dark:border-gray-700 dark:bg-gray-900"
+          className="relative flex w-full max-w-md flex-col overflow-hidden rounded-2xl border border-white/[0.08] bg-white/[0.03] backdrop-blur-md shadow-xl dark:border-gray-700 dark:bg-gray-900"
           style={{ maxHeight: 'calc(100vh - 4rem)' }}
         >
           {/* En-tête */}
-          <div className="border-b border-gray-100 px-6 py-5 dark:border-gray-800">
+          <div className="border-b border-white/[0.06] px-6 py-5 dark:border-gray-800">
             <div className="flex items-start justify-between gap-3">
               <div className="flex items-center gap-3">
                 <span className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-green-100 text-green-600 dark:bg-green-950/60 dark:text-green-400">
@@ -422,7 +422,7 @@ export function SourcingModal({ isOpen, onClose }: SourcingModalProps) {
                 onClick={handleClose}
                 disabled={isLoading}
                 aria-label="Fermer la modal"
-                className="flex-shrink-0 rounded-lg p-1.5 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600 focus:outline-none focus:ring-2 focus:ring-green-500 disabled:cursor-not-allowed dark:hover:bg-gray-800 dark:hover:text-gray-300"
+                className="flex-shrink-0 rounded-lg p-1.5 text-gray-400 transition-colors hover:bg-white/[0.06] hover:text-gray-600 focus:outline-none focus:ring-2 focus:ring-green-500 disabled:cursor-not-allowed dark:hover:bg-gray-800 dark:hover:text-gray-300"
               >
                 <svg
                   xmlns="http://www.w3.org/2000/svg"
@@ -603,11 +603,11 @@ export function SourcingModal({ isOpen, onClose }: SourcingModalProps) {
               </div>
 
               {/* Actions résultats */}
-              <div className="flex flex-col-reverse justify-end gap-2 border-t border-gray-100 px-6 py-4 sm:flex-row sm:gap-3 dark:border-gray-800">
+              <div className="flex flex-col-reverse justify-end gap-2 border-t border-white/[0.06] px-6 py-4 sm:flex-row sm:gap-3 dark:border-gray-800">
                 <button
                   type="button"
                   onClick={resetToForm}
-                  className="rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-gray-400 focus:ring-offset-2 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700 dark:focus:ring-offset-gray-900"
+                  className="rounded-lg border border-white/[0.08] bg-white px-4 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-white/[0.06] focus:outline-none focus:ring-2 focus:ring-gray-400 focus:ring-offset-2 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700 dark:focus:ring-offset-gray-900"
                 >
                   Nouveau run
                 </button>
@@ -649,7 +649,7 @@ export function SourcingModal({ isOpen, onClose }: SourcingModalProps) {
                             setFormData((prev) => ({ ...prev, effectifMin: e.target.value }))
                           }
                           disabled={isLoading}
-                          className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 placeholder-gray-400 transition-colors focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-500/20 disabled:cursor-not-allowed disabled:opacity-60 dark:border-gray-700 dark:bg-gray-800 dark:text-white dark:placeholder-gray-600 dark:focus:border-green-500"
+                          className="w-full rounded-lg border border-white/[0.08] bg-white px-3 py-2 text-sm text-gray-900 placeholder-gray-400 transition-colors focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-500/20 disabled:cursor-not-allowed disabled:opacity-60 dark:border-gray-700 dark:bg-gray-800 dark:text-white dark:placeholder-gray-600 dark:focus:border-green-500"
                           required
                           aria-describedby="effectif-hint"
                         />
@@ -671,7 +671,7 @@ export function SourcingModal({ isOpen, onClose }: SourcingModalProps) {
                             setFormData((prev) => ({ ...prev, effectifMax: e.target.value }))
                           }
                           disabled={isLoading}
-                          className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 placeholder-gray-400 transition-colors focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-500/20 disabled:cursor-not-allowed disabled:opacity-60 dark:border-gray-700 dark:bg-gray-800 dark:text-white dark:placeholder-gray-600 dark:focus:border-green-500"
+                          className="w-full rounded-lg border border-white/[0.08] bg-white px-3 py-2 text-sm text-gray-900 placeholder-gray-400 transition-colors focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-500/20 disabled:cursor-not-allowed disabled:opacity-60 dark:border-gray-700 dark:bg-gray-800 dark:text-white dark:placeholder-gray-600 dark:focus:border-green-500"
                           required
                         />
                       </div>
@@ -700,7 +700,7 @@ export function SourcingModal({ isOpen, onClose }: SourcingModalProps) {
                             className={`flex cursor-pointer items-center gap-2.5 rounded-lg border px-3 py-2 text-sm transition-colors ${
                               isChecked
                                 ? 'border-green-300 bg-green-50 text-green-800 dark:border-green-700 dark:bg-green-950/40 dark:text-green-300'
-                                : 'border-gray-200 bg-white text-gray-700 hover:border-gray-300 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700'
+                                : 'border-gray-200 bg-white text-gray-700 hover:border-gray-300 hover:bg-white/[0.06] dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700'
                             } ${isLoading ? 'cursor-not-allowed opacity-60' : ''}`}
                           >
                             <input
@@ -739,7 +739,7 @@ export function SourcingModal({ isOpen, onClose }: SourcingModalProps) {
                       }
                       disabled={isLoading}
                       placeholder="Ex : France, IDF, 75, Nouvelle-Aquitaine (vide = France entière)"
-                      className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 placeholder-gray-400 transition-colors focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-500/20 disabled:cursor-not-allowed disabled:opacity-60 dark:border-gray-700 dark:bg-gray-800 dark:text-white dark:placeholder-gray-600 dark:focus:border-green-500"
+                      className="w-full rounded-lg border border-white/[0.08] bg-white px-3 py-2 text-sm text-gray-900 placeholder-gray-400 transition-colors focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-500/20 disabled:cursor-not-allowed disabled:opacity-60 dark:border-gray-700 dark:bg-gray-800 dark:text-white dark:placeholder-gray-600 dark:focus:border-green-500"
                       maxLength={30}
                       aria-describedby="region-hint"
                     />
@@ -779,12 +779,12 @@ export function SourcingModal({ isOpen, onClose }: SourcingModalProps) {
               </div>
 
               {/* Actions */}
-              <div className="flex justify-end gap-3 border-t border-gray-100 px-6 py-4 dark:border-gray-800">
+              <div className="flex justify-end gap-3 border-t border-white/[0.06] px-6 py-4 dark:border-gray-800">
                 <button
                   type="button"
                   onClick={onClose}
                   disabled={isLoading}
-                  className="rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-gray-400 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700 dark:focus:ring-offset-gray-900"
+                  className="rounded-lg border border-white/[0.08] bg-white px-4 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-white/[0.06] focus:outline-none focus:ring-2 focus:ring-gray-400 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700 dark:focus:ring-offset-gray-900"
                 >
                   Annuler
                 </button>
@@ -834,7 +834,7 @@ function StatCard({ label, value, tone = 'neutral' }: StatCardProps) {
       ? 'text-green-700 dark:text-green-400'
       : 'text-gray-900 dark:text-white'
   return (
-    <div className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2.5 dark:border-gray-700 dark:bg-gray-800/60">
+    <div className="rounded-lg border border-white/[0.08] bg-white/[0.02] px-3 py-2.5 dark:border-gray-700 dark:bg-gray-800/60">
       <p className="text-xs text-gray-500 dark:text-gray-400">{label}</p>
       <p className={`mt-0.5 text-lg font-semibold tabular-nums ${valueClass}`}>{value}</p>
     </div>

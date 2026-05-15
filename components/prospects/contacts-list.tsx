@@ -73,8 +73,8 @@ export function ContactsList({ prospect, contacts }: ContactsListProps) {
       : ([fallbackFromProspect(prospect)].filter(Boolean) as ProspectContact[])
 
   return (
-    <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-900">
-      <div className="flex items-center justify-between gap-3 border-b border-gray-100 px-6 py-4 dark:border-gray-800">
+    <div className="overflow-hidden rounded-2xl border border-white/[0.08] bg-white/[0.03] backdrop-blur-md shadow-sm dark:border-gray-800 dark:bg-gray-900">
+      <div className="flex items-center justify-between gap-3 border-b border-white/[0.06] px-6 py-4 dark:border-gray-800">
         <h2 className="text-sm font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
           Contacts identifiés{displayed.length > 0 ? ` (${displayed.length})` : ''}
         </h2>
@@ -106,7 +106,7 @@ function ContactCard({ contact }: { contact: ProspectContact }) {
   const hasIdentity = fullName.length > 0 || Boolean(contact.poste)
 
   return (
-    <div className="rounded-xl border border-gray-100 bg-gray-50/50 px-4 py-3 dark:border-gray-800 dark:bg-gray-800/30">
+    <div className="rounded-xl border border-white/[0.06] bg-gray-50/50 px-4 py-3 dark:border-gray-800 dark:bg-gray-800/30">
       {hasIdentity && (
         <div className="flex flex-wrap items-center gap-2">
           {fullName && (

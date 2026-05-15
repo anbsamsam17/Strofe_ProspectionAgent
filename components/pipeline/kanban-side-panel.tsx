@@ -128,7 +128,7 @@ function CopySirenButton({ siren }: { siren: string }) {
       type="button"
       onClick={handleCopy}
       aria-label={copied ? 'SIREN copié' : `Copier le SIREN ${siren}`}
-      className="inline-flex items-center gap-1.5 rounded-md border border-gray-200 bg-gray-50 px-2 py-1 font-mono text-xs text-gray-700 transition-colors hover:border-gray-300 hover:bg-gray-100 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300 dark:hover:border-gray-600 dark:hover:bg-gray-700"
+      className="inline-flex items-center gap-1.5 rounded-md border border-white/[0.08] bg-white/[0.02] px-2 py-1 font-mono text-xs text-gray-700 transition-colors hover:border-gray-300 hover:bg-white/[0.06] dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300 dark:hover:border-gray-600 dark:hover:bg-gray-700"
     >
       {siren}
       {copied ? (
@@ -170,7 +170,7 @@ function CopySirenButton({ siren }: { siren: string }) {
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <section className="border-b border-gray-100 px-5 py-4 dark:border-gray-800">
+    <section className="border-b border-white/[0.06] px-5 py-4 dark:border-gray-800">
       <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
         {title}
       </h3>
@@ -251,7 +251,7 @@ function StatusInlineDropdown({
         aria-haspopup="listbox"
         aria-expanded={open}
         aria-label={`Changer le statut (actuel : ${currentLabel})`}
-        className="inline-flex w-full items-center justify-between gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-900 transition-colors hover:border-gray-300 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-700 dark:bg-gray-900 dark:text-white dark:hover:border-gray-600"
+        className="inline-flex w-full items-center justify-between gap-2 rounded-lg border border-white/[0.08] bg-white px-3 py-2 text-sm font-medium text-gray-900 transition-colors hover:border-gray-300 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-700 dark:bg-gray-900 dark:text-white dark:hover:border-gray-600"
       >
         <span className="flex items-center gap-2">
           <span className={`h-2 w-2 rounded-full ${currentStyle.dot}`} aria-hidden="true" />
@@ -278,7 +278,7 @@ function StatusInlineDropdown({
         <ul
           role="listbox"
           aria-label="Statuts disponibles"
-          className="absolute left-0 right-0 top-full z-10 mt-1 max-h-60 overflow-auto rounded-lg border border-gray-200 bg-white py-1 shadow-lg dark:border-gray-700 dark:bg-gray-900"
+          className="absolute left-0 right-0 top-full z-10 mt-1 max-h-60 overflow-auto rounded-lg border border-white/[0.08] bg-white py-1 shadow-lg dark:border-gray-700 dark:bg-gray-900"
         >
           {STATUS_OPTIONS.map((opt) => {
             const optLabel = STATUS_LABELS[opt]
@@ -293,7 +293,7 @@ function StatusInlineDropdown({
                   aria-selected={isCurrent}
                   disabled={isPending}
                   onClick={() => select(opt)}
-                  className={`flex w-full items-center justify-between gap-2 px-3 py-1.5 text-left text-sm transition-colors hover:bg-gray-50 disabled:opacity-50 dark:hover:bg-gray-800 ${
+                  className={`flex w-full items-center justify-between gap-2 px-3 py-1.5 text-left text-sm transition-colors hover:bg-white/[0.06] disabled:opacity-50 dark:hover:bg-gray-800 ${
                     isCurrent
                       ? 'font-semibold text-green-700 dark:text-green-400'
                       : 'text-gray-700 dark:text-gray-200'
@@ -346,7 +346,7 @@ function PriorityInlineDropdown({ priorite }: { priorite: Priority }) {
   const current = PRIORITY_LABELS[priorite]
   return (
     <div className="space-y-1">
-      <div className="flex w-full items-center justify-between gap-2 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm font-medium text-gray-900 dark:border-gray-700 dark:bg-gray-900/50 dark:text-white">
+      <div className="flex w-full items-center justify-between gap-2 rounded-lg border border-white/[0.08] bg-white/[0.02] px-3 py-2 text-sm font-medium text-gray-900 dark:border-gray-700 dark:bg-gray-900/50 dark:text-white">
         <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs ${current.badge}`}>
           {current.label}
         </span>
@@ -387,7 +387,7 @@ function ScoreSection({ prospect }: { prospect: Prospect }) {
         <span className="text-2xl font-bold tabular-nums text-gray-900 dark:text-white">
           {score}
         </span>
-        <div className="h-2 flex-1 overflow-hidden rounded-full bg-gray-200 dark:bg-gray-700">
+        <div className="h-2 flex-1 overflow-hidden rounded-full bg-white/[0.08] dark:bg-gray-700">
           <div
             className="h-2 rounded-full bg-green-500"
             style={{ width: `${Math.min(100, Math.max(0, score))}%` }}
@@ -693,12 +693,12 @@ export function KanbanSidePanel({
       {/* Panneau */}
       <aside
         data-testid="kanban-side-panel"
-        className={`pointer-events-auto absolute inset-y-0 right-0 flex w-full max-w-md flex-col bg-white shadow-2xl ring-1 ring-black/5 transition-transform duration-300 ease-out dark:bg-gray-950 dark:ring-white/10 sm:w-96 ${
+        className={`pointer-events-auto absolute inset-y-0 right-0 flex w-full max-w-md flex-col bg-white/[0.03] backdrop-blur-md shadow-2xl ring-1 ring-black/5 transition-transform duration-300 ease-out dark:bg-gray-950 dark:ring-white/10 sm:w-96 ${
           open ? 'translate-x-0' : 'translate-x-full'
         }`}
       >
         {/* Header */}
-        <header className="flex items-start justify-between gap-3 border-b border-gray-200 px-5 py-4 dark:border-gray-800">
+        <header className="flex items-start justify-between gap-3 border-b border-white/[0.08] px-5 py-4 dark:border-gray-800">
           <div className="min-w-0 flex-1">
             <h2
               id="side-panel-title"
@@ -722,7 +722,7 @@ export function KanbanSidePanel({
             type="button"
             onClick={onClose}
             aria-label="Fermer le panneau"
-            className="flex-shrink-0 rounded-lg p-1.5 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-800 dark:hover:text-gray-200"
+            className="flex-shrink-0 rounded-lg p-1.5 text-gray-400 transition-colors hover:bg-white/[0.06] hover:text-gray-700 dark:hover:bg-gray-800 dark:hover:text-gray-200"
           >
             <svg
               xmlns="http://www.w3.org/2000/svg"
@@ -781,7 +781,7 @@ export function KanbanSidePanel({
         </div>
 
         {/* Footer fixe — CTA primaire vers la fiche complète. */}
-        <footer className="border-t border-gray-200 bg-gray-50 px-5 py-3 dark:border-gray-800 dark:bg-gray-900/50">
+        <footer className="border-t border-white/[0.08] bg-white/[0.02] px-5 py-3 dark:border-gray-800 dark:bg-gray-900/50">
           <Link
             href={`/prospects/${prospect.id}`}
             aria-label={`Voir le détail complet de ${prospect.raison_sociale}`}

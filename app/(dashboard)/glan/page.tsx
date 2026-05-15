@@ -1,4 +1,4 @@
-﻿// ============================================================
+// ============================================================
 // /alpha — Page dédiée à l'agent Alpha
 //
 // Contenu :
@@ -73,7 +73,7 @@ export default async function GlanPage() {
   return (
     <div className="mx-auto max-w-5xl space-y-6">
       {/* En-tête */}
-      <header className="flex flex-col items-center gap-4 rounded-2xl border border-gray-200 bg-white p-8 text-center shadow-sm dark:border-gray-800 dark:bg-gray-900 sm:flex-row sm:text-left">
+      <header className="flex flex-col items-center gap-4 rounded-2xl border border-white/[0.08] bg-white/[0.03] backdrop-blur-md p-8 text-center shadow-sm dark:border-gray-800 dark:bg-gray-900 sm:flex-row sm:text-left">
         <GlanAvatar
           state={
             lastRun?.status === 'running'
@@ -183,7 +183,7 @@ export default async function GlanPage() {
               return (
                 <li
                   key={run.id}
-                  className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-gray-200 bg-white px-4 py-3 dark:border-gray-800 dark:bg-gray-900"
+                  className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-white/[0.08] bg-white px-4 py-3 dark:border-gray-800 dark:bg-gray-900"
                 >
                   <div className="flex items-baseline gap-3">
                     <p className="font-mono text-sm tabular-nums text-gray-900 dark:text-white">

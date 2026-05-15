@@ -185,9 +185,9 @@ export function SettingsForm({ initialSettings }: SettingsFormProps) {
       {/* ── Section : Ciblage commercial — Secteurs ────────────────────────── */}
       <section
         aria-labelledby="sectors-title"
-        className="rounded-2xl border border-gray-200 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-900"
+        className="rounded-2xl border border-white/[0.08] bg-white/[0.03] backdrop-blur-md shadow-sm dark:border-gray-800 dark:bg-gray-900"
       >
-        <header className="border-b border-gray-100 px-6 py-5 dark:border-gray-800">
+        <header className="border-b border-white/[0.06] px-6 py-5 dark:border-gray-800">
           <h2
             id="sectors-title"
             className="text-sm font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400"
@@ -216,9 +216,9 @@ export function SettingsForm({ initialSettings }: SettingsFormProps) {
       {/* ── Section : Zone géographique ─────────────────────────────────────── */}
       <section
         aria-labelledby="geo-title"
-        className="rounded-2xl border border-gray-200 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-900"
+        className="rounded-2xl border border-white/[0.08] bg-white/[0.03] backdrop-blur-md shadow-sm dark:border-gray-800 dark:bg-gray-900"
       >
-        <header className="border-b border-gray-100 px-6 py-5 dark:border-gray-800">
+        <header className="border-b border-white/[0.06] px-6 py-5 dark:border-gray-800">
           <h2
             id="geo-title"
             className="text-sm font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400"
@@ -245,7 +245,7 @@ export function SettingsForm({ initialSettings }: SettingsFormProps) {
                 setSettings((prev) => ({ ...prev, target_city: e.target.value }))
               }
               placeholder="Ex : Lyon, Île-de-France, Rhône-Alpes..."
-              className="w-full rounded-lg border border-gray-200 bg-white px-4 py-2.5 text-sm text-gray-900 placeholder-gray-400 transition focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-500/20 dark:border-gray-700 dark:bg-gray-800 dark:text-white dark:placeholder-gray-600"
+              className="w-full rounded-lg border border-white/[0.08] bg-white px-4 py-2.5 text-sm text-gray-900 placeholder-gray-400 transition focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-500/20 dark:border-gray-700 dark:bg-gray-800 dark:text-white dark:placeholder-gray-600"
             />
           </div>
 
@@ -275,13 +275,13 @@ export function SettingsForm({ initialSettings }: SettingsFormProps) {
                   }
                 }}
                 placeholder="69001"
-                className="flex-1 rounded-lg border border-gray-200 bg-white px-4 py-2.5 text-sm tabular-nums text-gray-900 placeholder-gray-400 transition focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-500/20 dark:border-gray-700 dark:bg-gray-800 dark:text-white dark:placeholder-gray-600"
+                className="flex-1 rounded-lg border border-white/[0.08] bg-white px-4 py-2.5 text-sm tabular-nums text-gray-900 placeholder-gray-400 transition focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-500/20 dark:border-gray-700 dark:bg-gray-800 dark:text-white dark:placeholder-gray-600"
                 aria-describedby={postalCodeError ? 'postal-code-error' : undefined}
               />
               <button
                 type="button"
                 onClick={addPostalCode}
-                className="rounded-lg border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm font-medium text-gray-700 transition hover:border-gray-300 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-green-500/20 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
+                className="rounded-lg border border-white/[0.08] bg-white/[0.02] px-4 py-2.5 text-sm font-medium text-gray-700 transition hover:border-gray-300 hover:bg-white/[0.06] focus:outline-none focus:ring-2 focus:ring-green-500/20 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
               >
                 Ajouter
               </button>
@@ -300,7 +300,7 @@ export function SettingsForm({ initialSettings }: SettingsFormProps) {
                 {postalCodes.map((code) => (
                   <li
                     key={code}
-                    className="inline-flex items-center gap-1.5 rounded-full bg-gray-100 px-3 py-1 text-xs font-medium tabular-nums text-gray-700 dark:bg-gray-800 dark:text-gray-300"
+                    className="inline-flex items-center gap-1.5 rounded-full bg-white/[0.05] px-3 py-1 text-xs font-medium tabular-nums text-gray-700 dark:bg-gray-800 dark:text-gray-300"
                   >
                     {code}
                     <button
@@ -336,9 +336,9 @@ export function SettingsForm({ initialSettings }: SettingsFormProps) {
       {/* ── Section : Pondération du scoring (NEW) ──────────────────────────── */}
       <section
         aria-labelledby="scoring-title"
-        className="rounded-2xl border border-gray-200 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-900"
+        className="rounded-2xl border border-white/[0.08] bg-white/[0.03] backdrop-blur-md shadow-sm dark:border-gray-800 dark:bg-gray-900"
       >
-        <header className="border-b border-gray-100 px-6 py-5 dark:border-gray-800">
+        <header className="border-b border-white/[0.06] px-6 py-5 dark:border-gray-800">
           <h2
             id="scoring-title"
             className="text-sm font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400"
@@ -419,14 +419,14 @@ export function SettingsForm({ initialSettings }: SettingsFormProps) {
                 type="button"
                 onClick={normalizeWeights}
                 disabled={isWeightsBalanced}
-                className="rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 transition hover:border-gray-300 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-green-500/20 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
+                className="rounded-lg border border-white/[0.08] bg-white px-3 py-1.5 text-xs font-medium text-gray-700 transition hover:border-gray-300 hover:bg-white/[0.06] focus:outline-none focus:ring-2 focus:ring-green-500/20 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
               >
                 Normaliser
               </button>
               <button
                 type="button"
                 onClick={resetWeights}
-                className="rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 transition hover:border-gray-300 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-green-500/20 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
+                className="rounded-lg border border-white/[0.08] bg-white px-3 py-1.5 text-xs font-medium text-gray-700 transition hover:border-gray-300 hover:bg-white/[0.06] focus:outline-none focus:ring-2 focus:ring-green-500/20 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
               >
                 Réinitialiser aux défauts (30 / 30 / 40)
               </button>
@@ -438,9 +438,9 @@ export function SettingsForm({ initialSettings }: SettingsFormProps) {
       {/* ── Section : Notifications ─────────────────────────────────────────── */}
       <section
         aria-labelledby="notifications-title"
-        className="rounded-2xl border border-gray-200 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-900"
+        className="rounded-2xl border border-white/[0.08] bg-white/[0.03] backdrop-blur-md shadow-sm dark:border-gray-800 dark:bg-gray-900"
       >
-        <header className="border-b border-gray-100 px-6 py-5 dark:border-gray-800">
+        <header className="border-b border-white/[0.06] px-6 py-5 dark:border-gray-800">
           <h2
             id="notifications-title"
             className="text-sm font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400"
@@ -466,7 +466,7 @@ export function SettingsForm({ initialSettings }: SettingsFormProps) {
               setSettings((prev) => ({ ...prev, notification_email: e.target.value }))
             }
             placeholder="prenom.nom@exemple.com"
-            className="w-full rounded-lg border border-gray-200 bg-white px-4 py-2.5 text-sm text-gray-900 placeholder-gray-400 transition focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-500/20 dark:border-gray-700 dark:bg-gray-800 dark:text-white dark:placeholder-gray-600"
+            className="w-full rounded-lg border border-white/[0.08] bg-white px-4 py-2.5 text-sm text-gray-900 placeholder-gray-400 transition focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-500/20 dark:border-gray-700 dark:bg-gray-800 dark:text-white dark:placeholder-gray-600"
           />
         </div>
       </section>
@@ -474,9 +474,9 @@ export function SettingsForm({ initialSettings }: SettingsFormProps) {
       {/* ── Section : Offre commerciale ─────────────────────────────────────── */}
       <section
         aria-labelledby="offer-title"
-        className="rounded-2xl border border-gray-200 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-900"
+        className="rounded-2xl border border-white/[0.08] bg-white/[0.03] backdrop-blur-md shadow-sm dark:border-gray-800 dark:bg-gray-900"
       >
-        <header className="border-b border-gray-100 px-6 py-5 dark:border-gray-800">
+        <header className="border-b border-white/[0.06] px-6 py-5 dark:border-gray-800">
           <h2
             id="offer-title"
             className="text-sm font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400"
@@ -501,7 +501,7 @@ export function SettingsForm({ initialSettings }: SettingsFormProps) {
               placeholder="Ex : Nous accompagnons les ETI dans la réalisation de leur bilan carbone réglementaire (BEGES Scope 1+2+3) et dans la construction de leur plan de décarbonation..."
               rows={6}
               maxLength={2000}
-              className="w-full resize-none rounded-lg border border-gray-200 bg-white px-4 py-3 text-sm text-gray-900 placeholder-gray-400 transition focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-500/20 dark:border-gray-700 dark:bg-gray-800 dark:text-white dark:placeholder-gray-600"
+              className="w-full resize-none rounded-lg border border-white/[0.08] bg-white px-4 py-3 text-sm text-gray-900 placeholder-gray-400 transition focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-500/20 dark:border-gray-700 dark:bg-gray-800 dark:text-white dark:placeholder-gray-600"
             />
             <span
               className={`absolute bottom-3 right-3 text-xs tabular-nums ${
@@ -517,14 +517,14 @@ export function SettingsForm({ initialSettings }: SettingsFormProps) {
       {/* ── Section : Avancé (legacy daily_call_target) ─────────────────────── */}
       <section
         aria-labelledby="advanced-title"
-        className="rounded-2xl border border-gray-200 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-900"
+        className="rounded-2xl border border-white/[0.08] bg-white/[0.03] backdrop-blur-md shadow-sm dark:border-gray-800 dark:bg-gray-900"
       >
         <button
           type="button"
           onClick={() => setIsAdvancedOpen((v) => !v)}
           aria-expanded={isAdvancedOpen}
           aria-controls="advanced-content"
-          className="flex w-full items-center justify-between px-6 py-5 text-left transition hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-green-500/20 dark:hover:bg-gray-800/50"
+          className="flex w-full items-center justify-between px-6 py-5 text-left transition hover:bg-white/[0.06] focus:outline-none focus:ring-2 focus:ring-green-500/20 dark:hover:bg-gray-800/50"
         >
           <div>
             <h2
@@ -559,7 +559,7 @@ export function SettingsForm({ initialSettings }: SettingsFormProps) {
         {isAdvancedOpen && (
           <div
             id="advanced-content"
-            className="border-t border-gray-100 px-6 py-5 dark:border-gray-800"
+            className="border-t border-white/[0.06] px-6 py-5 dark:border-gray-800"
           >
             <label
               htmlFor="sourcing_target_per_run"

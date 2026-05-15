@@ -1,4 +1,4 @@
-﻿'use client'
+'use client'
 
 // ============================================================
 // GlanLogStream — flux de logs Alpha en mono avec effet typewriter
@@ -75,7 +75,7 @@ export function GlanLogStream({
   if (logs.length === 0) {
     return (
       <div
-        className={`rounded-xl border border-gray-200 bg-gray-50 px-4 py-6 text-center text-sm text-gray-500 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-400 ${className}`}
+        className={`rounded-xl border border-white/[0.08] bg-white/[0.02] px-4 py-6 text-center text-sm text-gray-500 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-400 ${className}`}
         role="status"
       >
         <p className="font-mono text-xs">En attente du premier log…</p>
@@ -88,7 +88,7 @@ export function GlanLogStream({
       ref={scrollRef}
       onScroll={handleScroll}
       style={{ maxHeight }}
-      className={`overflow-y-auto rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 font-mono text-xs leading-relaxed dark:border-gray-800 dark:bg-gray-950 ${className}`}
+      className={`overflow-y-auto rounded-xl border border-white/[0.08] bg-white/[0.02] px-3 py-2 font-mono text-xs leading-relaxed dark:border-gray-800 dark:bg-gray-950 ${className}`}
       role="log"
       aria-live="polite"
       aria-relevant="additions"

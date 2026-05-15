@@ -171,7 +171,7 @@ function ChecklistStep({
 }) {
   return (
     <li
-      className={`relative flex items-start gap-4 rounded-xl border bg-white/[0.03] p-4 backdrop-blur-sm transition-all hover:bg-white/[0.05] ${STEP_ACCENT_BORDER[accent]}`}
+      className={`relative flex items-start gap-4 rounded-xl border bg-white/[0.03] p-4 backdrop-blur-sm transition-all hover:bg-white/[0.06]/[0.05] ${STEP_ACCENT_BORDER[accent]}`}
     >
       {/* Badge numéro / check */}
       <span

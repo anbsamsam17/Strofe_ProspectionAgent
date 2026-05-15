@@ -24,7 +24,7 @@ const VARIANT_CLASSES: Record<NonNullable<GlassCardProps['variant']>, string> = 
   elevated:
     'bg-white/80 backdrop-blur-md border border-gray-200/60 shadow-lg shadow-black/5 dark:bg-white/5 dark:border-white/10 dark:shadow-black/40',
   outlined:
-    'bg-transparent backdrop-blur-sm border border-gray-200 dark:border-white/10',
+    'bg-transparent backdrop-blur-sm border border-white/[0.08] dark:border-white/10',
 }
 
 export function GlassCard({

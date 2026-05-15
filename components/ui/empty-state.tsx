@@ -1,4 +1,4 @@
-﻿// ============================================================
+// ============================================================
 // EmptyState — composant générique pour les états vides
 //
 // Variantes :
@@ -144,7 +144,7 @@ export function EmptyState({
     <div
       className={`flex flex-col items-center gap-3 py-12 text-center ${className}`}
     >
-      <div className="flex h-12 w-12 items-center justify-center rounded-full bg-gray-100 text-gray-400 dark:bg-gray-800 dark:text-gray-600">
+      <div className="flex h-12 w-12 items-center justify-center rounded-full bg-white/[0.05] text-gray-400 dark:bg-gray-800 dark:text-gray-600">
         {preset.icon}
       </div>
       <p className="text-sm font-medium text-gray-700 dark:text-gray-300">

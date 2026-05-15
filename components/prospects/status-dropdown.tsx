@@ -181,7 +181,7 @@ export function StatusDropdown({ prospectId, currentStatut }: StatusDropdownProp
         <div
           role="listbox"
           aria-label="Sélectionner un statut CRM"
-          className="absolute right-0 z-30 mt-1 w-56 origin-top-right overflow-hidden rounded-xl border border-gray-200 bg-white py-1 shadow-lg dark:border-gray-700 dark:bg-gray-900"
+          className="absolute right-0 z-30 mt-1 w-56 origin-top-right overflow-hidden rounded-xl border border-white/[0.08] bg-white py-1 shadow-lg dark:border-gray-700 dark:bg-gray-900"
         >
           {STATUS_OPTIONS.map((opt) => {
             const isCurrent = opt.value === statut
@@ -193,7 +193,7 @@ export function StatusDropdown({ prospectId, currentStatut }: StatusDropdownProp
                 aria-selected={isCurrent}
                 disabled={pending}
                 onClick={() => handleSelect(opt.value)}
-                className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-gray-700 transition-colors hover:bg-gray-50 disabled:opacity-50 dark:text-gray-200 dark:hover:bg-gray-800"
+                className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-gray-700 transition-colors hover:bg-white/[0.06] disabled:opacity-50 dark:text-gray-200 dark:hover:bg-gray-800"
               >
                 <span className={`h-1.5 w-1.5 flex-shrink-0 rounded-full ${opt.dot}`} aria-hidden="true" />
                 <span className="flex-1">{opt.label}</span>
