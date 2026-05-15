@@ -354,8 +354,8 @@ function KpiCard({
               ? inverted
                 ? 'mt-1.5 font-mono text-[11px] text-red-400'
                 : 'mt-1.5 font-mono text-[11px] text-green-400'
-              : 'mt-1.5 font-mono text-[11px] text-gray-500'
-            : 'mt-1.5 font-mono text-[11px] text-gray-500'
+              : 'mt-1.5 font-mono text-[11px] text-gray-400'
+            : 'mt-1.5 font-mono text-[11px] text-gray-400'
         }
       >
         {sublabel}

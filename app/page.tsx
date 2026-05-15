@@ -3,10 +3,15 @@ import Link from 'next/link'
 import { GlanHeroLoader } from '@/components/marketing/glan-hero-loader'
 import { BorderBeam } from '@/components/ui/border-beam'
 import { ScrollReveal } from '@/components/ui/scroll-reveal'
+import {
+  StaggerChildren,
+  StaggerItem,
+} from '@/components/ui/stagger-children'
 
-// GlanHero contient un canvas React Three Fiber. Next.js 15 interdit
-// `ssr: false` dans un Server Component → le dynamic import est encapsulé
-// dans <GlanHeroLoader> (Client Component dédié).
+// Refonte 2026-05-15 : <GlanHeroLoader> est un Client Component qui rend
+// <GlanHero> (PNG portrait + Framer Motion). Plus de R3F = bundle initial
+// allégé, animations plus prédictibles, H1 garanti lisible (text-white +
+// gradient lumineux sur navy).
 
 // Page publique marketing — opt-in à l'indexation (override du noindex global
 // défini dans app/layout.tsx, qui s'applique aux routes dashboard/auth).
@@ -311,9 +316,12 @@ function HowItWorksSection() {
             aria-hidden="true"
           />
 
-          <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+          <StaggerChildren
+            staggerDelay={0.12}
+            className="grid grid-cols-1 gap-6 lg:grid-cols-3"
+          >
             {HOW_STEPS.map((item) => (
-              <div
+              <StaggerItem
                 key={item.step}
                 className={`group relative flex flex-col items-center rounded-2xl border border-white/[0.08] bg-white/[0.025] p-8 text-center backdrop-blur-md transition-all duration-300 hover:-translate-y-1 hover:border-white/15 ${item.accentGlow} before:absolute before:inset-x-4 before:top-0 before:h-px ${item.accentTop}`}
               >
@@ -350,9 +358,9 @@ function HowItWorksSection() {
                 >
                   {item.tag}
                 </span>
-              </div>
+              </StaggerItem>
             ))}
-          </div>
+          </StaggerChildren>
         </div>
       </div>
     </section>
@@ -431,9 +439,12 @@ function FeaturesSection() {
           </h2>
         </div>
 
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <StaggerChildren
+          staggerDelay={0.1}
+          className="grid grid-cols-1 gap-4 sm:grid-cols-2"
+        >
           {FEATURES.map((feature) => (
-            <div
+            <StaggerItem
               key={feature.title}
               className={`group relative cursor-default rounded-2xl border border-white/[0.08] bg-white/[0.025] p-7 backdrop-blur-md transition-all duration-300 hover:-translate-y-0.5 hover:border-white/15 ${feature.accentGlow} before:absolute before:inset-x-4 before:top-0 before:h-px ${feature.accentTop}`}
             >
@@ -457,9 +468,9 @@ function FeaturesSection() {
               <p className="mt-2 text-sm leading-relaxed text-gray-300">
                 {feature.description}
               </p>
-            </div>
+            </StaggerItem>
           ))}
-        </div>
+        </StaggerChildren>
       </div>
     </section>
   )
@@ -570,7 +581,7 @@ function CtaSection() {
               </Link>
             </div>
 
-            <p className="mt-6 font-mono text-[11px] text-gray-500">— Glan</p>
+            <p className="mt-6 font-mono text-[11px] text-gray-400">— Glan</p>
           </div>
         </div>
       </div>
@@ -606,13 +617,13 @@ function Footer() {
           <span className="bg-gradient-to-r from-green-400 to-emerald-300 bg-clip-text text-sm font-bold text-transparent">
             Glan
           </span>
-          <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-gray-600 dark:text-gray-400">
+          <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-gray-400">
             by STROFE
           </span>
         </div>
 
         {/* Copyright */}
-        <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-gray-600 dark:text-gray-400">
+        <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-gray-400">
           &copy; 2026 STROFE
         </p>
 
@@ -620,13 +631,13 @@ function Footer() {
         <nav className="flex gap-5" aria-label="Liens pied de page">
           <Link
             href="/login"
-            className="text-xs text-gray-500 transition-colors duration-150 hover:text-gray-300"
+            className="text-xs text-gray-400 transition-colors duration-150 hover:text-white"
           >
             Connexion
           </Link>
           <Link
             href="/signup"
-            className="text-xs text-gray-500 transition-colors duration-150 hover:text-gray-300"
+            className="text-xs text-gray-400 transition-colors duration-150 hover:text-white"
           >
             Inscription
           </Link>

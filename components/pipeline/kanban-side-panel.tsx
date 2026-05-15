@@ -129,7 +129,7 @@ function CopySirenButton({ siren }: { siren: string }) {
       type="button"
       onClick={handleCopy}
       aria-label={copied ? 'SIREN copié' : `Copier le SIREN ${siren}`}
-      className="inline-flex items-center gap-1.5 rounded-md border border-white/[0.08] bg-white/[0.02] px-2 py-1 font-mono text-xs text-gray-700 transition-colors hover:border-gray-300 hover:bg-white/[0.06] dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300 dark:hover:border-gray-600 dark:hover:bg-gray-700"
+      className="inline-flex items-center gap-1.5 rounded-md border border-white/[0.08] bg-white/[0.02] px-2 py-1 font-mono text-xs text-gray-200 transition-colors hover:border-white/20 hover:bg-white/[0.06]"
     >
       {siren}
       {copied ? (
@@ -172,7 +172,7 @@ function CopySirenButton({ siren }: { siren: string }) {
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <section className="border-b border-white/[0.06] px-5 py-4 dark:border-gray-800">
-      <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
+      <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-gray-300">
         {title}
       </h3>
       {children}
@@ -252,7 +252,7 @@ function StatusInlineDropdown({
         aria-haspopup="listbox"
         aria-expanded={open}
         aria-label={`Changer le statut (actuel : ${currentLabel})`}
-        className="inline-flex w-full items-center justify-between gap-2 rounded-lg border border-white/[0.08] bg-white/[0.04] backdrop-blur-md px-3 py-2 text-sm font-medium text-gray-900 transition-colors hover:border-gray-300 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-700 dark:bg-gray-900 dark:text-white dark:hover:border-gray-600"
+        className="inline-flex w-full items-center justify-between gap-2 rounded-lg border border-white/[0.08] bg-white/[0.04] backdrop-blur-md px-3 py-2 text-sm font-medium text-white transition-colors hover:border-white/20 disabled:cursor-not-allowed disabled:opacity-50"
       >
         <span className="flex items-center gap-2">
           <span className={`h-2 w-2 rounded-full ${currentStyle.dot}`} aria-hidden="true" />
@@ -297,7 +297,7 @@ function StatusInlineDropdown({
                   className={`flex w-full items-center justify-between gap-2 px-3 py-1.5 text-left text-sm transition-colors hover:bg-white/[0.06] disabled:opacity-50 dark:hover:bg-gray-800 ${
                     isCurrent
                       ? 'font-semibold text-green-700 dark:text-green-400'
-                      : 'text-gray-700 dark:text-gray-200'
+                      : 'text-gray-200'
                   }`}
                 >
                   <span className="flex items-center gap-2">
@@ -347,11 +347,11 @@ function PriorityInlineDropdown({ priorite }: { priorite: Priority }) {
   const current = PRIORITY_LABELS[priorite]
   return (
     <div className="space-y-1">
-      <div className="flex w-full items-center justify-between gap-2 rounded-lg border border-white/[0.08] bg-white/[0.02] px-3 py-2 text-sm font-medium text-gray-900 dark:border-gray-700 dark:bg-gray-900/50 dark:text-white">
+      <div className="flex w-full items-center justify-between gap-2 rounded-lg border border-white/[0.08] bg-white/[0.02] px-3 py-2 text-sm font-medium text-white">
         <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs ${current.badge}`}>
           {current.label}
         </span>
-        <span className="text-[10px] uppercase tracking-wide text-gray-400 dark:text-gray-400">
+        <span className="text-[10px] uppercase tracking-wide text-gray-400">
           dérivée du score
         </span>
       </div>
@@ -385,7 +385,7 @@ function ScoreSection({ prospect }: { prospect: Prospect }) {
   return (
     <Section title="Score">
       <div className="flex items-center gap-3">
-        <span className="text-2xl font-bold tabular-nums text-gray-900 dark:text-white">
+        <span className="text-2xl font-bold tabular-nums text-white">
           {score}
         </span>
         <div className="h-2 flex-1 overflow-hidden rounded-full bg-white/[0.08] dark:bg-gray-700">
@@ -401,7 +401,7 @@ function ScoreSection({ prospect }: { prospect: Prospect }) {
           {nonZeroDetails.map(([key, value]) => (
             <li
               key={key}
-              className="flex items-center justify-between text-xs text-gray-600 dark:text-gray-400"
+              className="flex items-center justify-between text-xs text-gray-300"
             >
               <span>{formatScoreDetailLabel(key)}</span>
               <span
@@ -427,23 +427,23 @@ function IdentitySection({ prospect }: { prospect: Prospect }) {
     <Section title="Identité">
       <dl className="space-y-2 text-sm">
         <div className="flex items-center justify-between">
-          <dt className="text-gray-500 dark:text-gray-400">SIREN</dt>
+          <dt className="text-gray-400">SIREN</dt>
           <dd>
             <CopySirenButton siren={prospect.siren} />
           </dd>
         </div>
         {prospect.secteur_libelle && (
           <div className="flex items-start justify-between gap-3">
-            <dt className="flex-shrink-0 text-gray-500 dark:text-gray-400">Secteur</dt>
-            <dd className="text-right text-gray-900 dark:text-white">
+            <dt className="flex-shrink-0 text-gray-400">Secteur</dt>
+            <dd className="text-right text-white">
               {prospect.secteur_libelle}
             </dd>
           </div>
         )}
         {prospect.ville && (
           <div className="flex items-center justify-between">
-            <dt className="text-gray-500 dark:text-gray-400">Ville</dt>
-            <dd className="text-gray-900 dark:text-white">
+            <dt className="text-gray-400">Ville</dt>
+            <dd className="text-white">
               {prospect.ville}
               {prospect.code_postal ? ` (${prospect.code_postal})` : ''}
             </dd>
@@ -451,8 +451,8 @@ function IdentitySection({ prospect }: { prospect: Prospect }) {
         )}
         {(prospect.effectif_min || prospect.effectif_max) && (
           <div className="flex items-center justify-between">
-            <dt className="text-gray-500 dark:text-gray-400">Effectif</dt>
-            <dd className="text-gray-900 dark:text-white">
+            <dt className="text-gray-400">Effectif</dt>
+            <dd className="text-white">
               {prospect.effectif_min ?? '?'}–{prospect.effectif_max ?? '?'} sal.
             </dd>
           </div>
@@ -489,10 +489,10 @@ function ContactSection({ prospect }: { prospect: Prospect }) {
     <Section title="Contact">
       <div className="space-y-2 text-sm">
         {fullName && (
-          <p className="font-medium text-gray-900 dark:text-white">
+          <p className="font-medium text-white">
             {fullName}
             {prospect.contact_poste && (
-              <span className="ml-1 font-normal text-gray-500 dark:text-gray-400">
+              <span className="ml-1 font-normal text-gray-400">
                 — {prospect.contact_poste}
               </span>
             )}
@@ -616,7 +616,7 @@ function BegesSection({ prospect }: { prospect: Prospect }) {
           {badge.label}
         </span>
         {lastPub && (
-          <span className="text-xs text-gray-500 dark:text-gray-400">
+          <span className="text-xs text-gray-400">
             Dernière publi : {lastPub}
           </span>
         )}
@@ -717,7 +717,7 @@ export function KanbanSidePanel({
           <div className="min-w-0 flex-1">
             <h2
               id="side-panel-title"
-              className="truncate text-base font-bold text-gray-900 dark:text-white"
+              className="truncate text-base font-bold text-white"
             >
               {prospect.raison_sociale}
             </h2>
@@ -737,7 +737,7 @@ export function KanbanSidePanel({
             type="button"
             onClick={onClose}
             aria-label="Fermer le panneau"
-            className="flex-shrink-0 rounded-lg p-1.5 text-gray-400 transition-colors hover:bg-white/[0.06] hover:text-gray-700 dark:hover:bg-gray-800 dark:hover:text-gray-200"
+            className="flex-shrink-0 rounded-lg p-1.5 text-gray-400 transition-colors hover:bg-white/[0.06] hover:text-white"
           >
             <svg
               xmlns="http://www.w3.org/2000/svg"

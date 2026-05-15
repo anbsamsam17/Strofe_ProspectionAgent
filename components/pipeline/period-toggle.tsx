@@ -68,7 +68,7 @@ export function PeriodToggle({ current }: PeriodToggleProps) {
             className={
               active
                 ? 'rounded-md bg-green-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-gray-900'
-                : 'rounded-md px-3 py-1.5 text-xs font-medium text-gray-600 transition-colors hover:bg-white/[0.06] hover:text-gray-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-white dark:focus-visible:ring-offset-gray-900'
+                : 'rounded-md px-3 py-1.5 text-xs font-medium text-gray-300 transition-colors hover:bg-white/[0.06] hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2'
             }
           >
             {RANGE_LABELS[range]}

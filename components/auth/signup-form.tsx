@@ -187,9 +187,9 @@ function PasswordStrength({ password }: { password: string }) {
           />
         ))}
       </div>
-      <p className="text-[11px] text-gray-500">
+      <p className="text-[11px] text-gray-400">
         Force :{' '}
-        <span className="font-medium text-gray-400">{labels[score]}</span>
+        <span className="font-medium text-gray-200">{labels[score]}</span>
       </p>
     </div>
   )
@@ -238,7 +238,7 @@ function InputField({
       <div className="relative">
         <div
           className={`pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 ${
-            error ? 'text-red-400' : 'text-gray-500'
+            error ? 'text-red-400' : 'text-gray-400'
           }`}
         >
           {icon}
@@ -255,7 +255,7 @@ function InputField({
           disabled={disabled}
           aria-invalid={error ? 'true' : 'false'}
           aria-describedby={error ? `${id}-error` : undefined}
-          className={`block w-full rounded-lg border py-2.5 pl-9 pr-3 text-sm text-white placeholder:text-gray-500 bg-white/[0.04] focus:outline-none focus:ring-1 disabled:opacity-50 transition-colors ${
+          className={`block w-full rounded-lg border py-2.5 pl-9 pr-3 text-sm text-white placeholder:text-gray-400 bg-white/[0.04] focus:outline-none focus:ring-1 disabled:opacity-50 transition-colors ${
             error
               ? 'border-red-500/40 focus:border-red-500/60 focus:ring-red-500/20'
               : 'border-white/10 focus:border-cyan-400/40 focus:ring-cyan-400/30'
@@ -374,7 +374,7 @@ export function SignupForm() {
             Un email de confirmation a été envoyé à{' '}
             <span className="font-medium text-gray-200">{form.email}</span>.
           </p>
-          <p className="text-sm text-gray-500">
+          <p className="text-sm text-gray-400">
             Cliquez sur le lien dans l&apos;email pour activer votre compte.
             <br />
             Pensez à vérifier vos spams si vous ne le recevez pas.
@@ -484,7 +484,7 @@ export function SignupForm() {
         </button>
       </div>
 
-      <p className="text-center text-sm text-gray-500">
+      <p className="text-center text-sm text-gray-400">
         Déjà un compte ?{' '}
         <Link href="/login" className="font-medium text-cyan-400 transition-colors hover:text-cyan-300">
           Se connecter

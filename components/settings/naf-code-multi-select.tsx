@@ -184,7 +184,7 @@ export function NafCodeMultiSelect({
       {showSuggestedGroups && (
         <div className="rounded-2xl border border-white/[0.06] bg-white/[0.02] px-4 py-4">
           <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-            <p className="text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
+            <p className="text-xs font-semibold uppercase tracking-wider text-gray-300">
               Suggérés (prospection B2B BEGES)
             </p>
             <div className="flex gap-1.5">
@@ -192,7 +192,7 @@ export function NafCodeMultiSelect({
                 type="button"
                 onClick={selectAllSuggested}
                 disabled={disabled}
-                className="rounded-lg border border-white/[0.08] bg-white/[0.04] backdrop-blur-md px-2.5 py-1 text-xs font-medium text-gray-700 transition-colors duration-150 hover:border-green-300 hover:bg-green-50 hover:text-green-700 focus:outline-none focus:ring-2 focus:ring-green-500/30 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-green-950/40 dark:hover:text-green-300"
+                className="rounded-lg border border-white/[0.08] bg-white/[0.04] backdrop-blur-md px-2.5 py-1 text-xs font-medium text-gray-200 transition-colors duration-150 hover:border-green-400/40 hover:bg-green-500/10 hover:text-green-300 focus:outline-none focus:ring-2 focus:ring-green-500/30 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 Tout sélectionner
               </button>
@@ -200,7 +200,7 @@ export function NafCodeMultiSelect({
                 type="button"
                 onClick={deselectAllSuggested}
                 disabled={disabled}
-                className="rounded-lg border border-white/[0.08] bg-white/[0.04] backdrop-blur-md px-2.5 py-1 text-xs font-medium text-gray-700 transition-colors duration-150 hover:border-gray-300 hover:bg-white/[0.06] focus:outline-none focus:ring-2 focus:ring-green-500/30 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
+                className="rounded-lg border border-white/[0.08] bg-white/[0.04] backdrop-blur-md px-2.5 py-1 text-xs font-medium text-gray-200 transition-colors duration-150 hover:border-white/20 hover:bg-white/[0.06] focus:outline-none focus:ring-2 focus:ring-green-500/30 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 Désélectionner tout
               </button>
@@ -223,7 +223,7 @@ export function NafCodeMultiSelect({
                         ? 'border-green-200 bg-green-100 text-green-700 ring-1 ring-green-200 hover:bg-green-200/60 dark:border-green-800 dark:bg-green-950/60 dark:text-green-300 dark:ring-green-900'
                         : someSelected
                           ? 'border-green-200 bg-white/[0.04] backdrop-blur-md text-green-700 hover:bg-green-50 dark:border-green-800/60 dark:bg-gray-900 dark:text-green-300'
-                          : 'border-gray-200 bg-white/[0.04] backdrop-blur-md text-gray-700 hover:border-gray-300 hover:bg-white/[0.06] dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 dark:hover:bg-gray-800'
+                          : 'border-white/10 bg-white/[0.04] backdrop-blur-md text-gray-200 hover:border-white/20 hover:bg-white/[0.06]'
                     }`}
                   >
                     {allSelected && (
@@ -262,7 +262,7 @@ export function NafCodeMultiSelect({
         <div className="relative">
           <span
             aria-hidden="true"
-            className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-gray-400 dark:text-gray-500"
+            className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-gray-400"
           >
             <svg
               xmlns="http://www.w3.org/2000/svg"
@@ -294,14 +294,14 @@ export function NafCodeMultiSelect({
             aria-activedescendant={
               activeIndex >= 0 ? `${listboxId}-opt-${activeIndex}` : undefined
             }
-            className="w-full rounded-lg border border-white/[0.08] bg-white/[0.04] backdrop-blur-md py-2.5 pl-10 pr-3 text-sm text-gray-900 placeholder-gray-400 transition-colors duration-150 focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-500/20 disabled:cursor-not-allowed disabled:opacity-60 dark:border-gray-700 dark:bg-gray-800 dark:text-white dark:placeholder-gray-500"
+            className="w-full rounded-lg border border-white/[0.08] bg-white/[0.04] backdrop-blur-md py-2.5 pl-10 pr-3 text-sm text-white placeholder-gray-400 transition-colors duration-150 focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-500/20 disabled:cursor-not-allowed disabled:opacity-60"
           />
           {search.length > 0 && (
             <button
               type="button"
               onClick={() => setSearch('')}
               aria-label="Effacer la recherche"
-              className="absolute inset-y-0 right-2 flex items-center rounded-md p-1 text-gray-400 transition-colors hover:bg-white/[0.06] hover:text-gray-600 focus:outline-none focus:ring-2 focus:ring-green-500/30 dark:hover:bg-gray-700 dark:hover:text-gray-200"
+              className="absolute inset-y-0 right-2 flex items-center rounded-md p-1 text-gray-400 transition-colors hover:bg-white/[0.06] hover:text-white focus:outline-none focus:ring-2 focus:ring-green-500/30"
             >
               <svg
                 xmlns="http://www.w3.org/2000/svg"
@@ -321,7 +321,7 @@ export function NafCodeMultiSelect({
             </button>
           )}
         </div>
-        <p className="mt-1.5 text-xs text-gray-500 dark:text-gray-400">
+        <p className="mt-1.5 text-xs text-gray-400">
           {totalMatching === 0
             ? 'Aucun code ne correspond à votre recherche.'
             : hasOverflow
@@ -340,7 +340,7 @@ export function NafCodeMultiSelect({
         className="max-h-72 overflow-y-auto rounded-lg border border-white/[0.08] bg-white/[0.04] backdrop-blur-md dark:border-gray-700 dark:bg-gray-900"
       >
         {filtered.length === 0 && (
-          <li className="px-4 py-6 text-center text-sm text-gray-500 dark:text-gray-400">
+          <li className="px-4 py-6 text-center text-sm text-gray-400">
             Aucun résultat.
           </li>
         )}
@@ -389,14 +389,14 @@ export function NafCodeMultiSelect({
                 )}
               </span>
               <div className="min-w-0 flex-1">
-                <p className="font-medium leading-snug text-gray-900 dark:text-white">
-                  <span className="font-mono tabular-nums text-gray-700 dark:text-gray-300">
+                <p className="font-medium leading-snug text-white">
+                  <span className="font-mono tabular-nums text-gray-200">
                     {entry.code}
                   </span>
-                  <span className="mx-1.5 text-gray-300 dark:text-gray-500">—</span>
+                  <span className="mx-1.5 text-gray-400">—</span>
                   {entry.libelle}
                 </p>
-                <p className="mt-0.5 text-xs text-gray-400 dark:text-gray-500">
+                <p className="mt-0.5 text-xs text-gray-400">
                   {entry.section} · {entry.section_libelle}
                 </p>
               </div>
@@ -409,14 +409,14 @@ export function NafCodeMultiSelect({
       {selectedCount > 0 && (
         <div>
           <div className="mb-2 flex items-center justify-between gap-2">
-            <p className="text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
+            <p className="text-xs font-semibold uppercase tracking-wider text-gray-300">
               Sélectionnés ({selectedCount})
             </p>
             <button
               type="button"
               onClick={() => onChange([])}
               disabled={disabled}
-              className="text-xs font-medium text-gray-500 underline-offset-2 transition-colors hover:text-red-600 hover:underline focus:outline-none focus:ring-2 focus:ring-red-500/30 disabled:cursor-not-allowed disabled:opacity-50 dark:text-gray-400 dark:hover:text-red-400"
+              className="text-xs font-medium text-gray-400 underline-offset-2 transition-colors hover:text-red-400 hover:underline focus:outline-none focus:ring-2 focus:ring-red-500/30 disabled:cursor-not-allowed disabled:opacity-50"
             >
               Vider la sélection
             </button>

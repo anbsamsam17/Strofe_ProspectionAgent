@@ -246,7 +246,7 @@ export function LoginForm() {
           className={`flex-1 rounded-md py-2 font-mono text-[11px] uppercase tracking-[0.12em] transition-all ${
             mode === 'password'
               ? 'bg-white/[0.08] text-white shadow-sm'
-              : 'text-gray-500 hover:text-gray-300'
+              : 'text-gray-400 hover:text-white'
           }`}
         >
           Mot de passe
@@ -259,7 +259,7 @@ export function LoginForm() {
           className={`flex-1 rounded-md py-2 font-mono text-[11px] uppercase tracking-[0.12em] transition-all ${
             mode === 'magic-link'
               ? 'bg-white/[0.08] text-white shadow-sm'
-              : 'text-gray-500 hover:text-gray-300'
+              : 'text-gray-400 hover:text-white'
           }`}
         >
           Magic Link
@@ -299,7 +299,7 @@ export function LoginForm() {
               Adresse email
             </label>
             <div className="relative">
-              <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-gray-500">
+              <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-gray-400">
                 <MailIcon />
               </div>
               <input
@@ -313,7 +313,7 @@ export function LoginForm() {
                 placeholder="vous@entreprise.fr"
                 disabled={loading}
                 aria-describedby={error ? 'login-error' : undefined}
-                className="block w-full rounded-lg border border-white/10 bg-white/[0.04] py-2.5 pl-9 pr-3 text-sm text-white placeholder:text-gray-500 focus:border-cyan-400/40 focus:outline-none focus:ring-1 focus:ring-cyan-400/30 disabled:opacity-50 transition-colors"
+                className="block w-full rounded-lg border border-white/10 bg-white/[0.04] py-2.5 pl-9 pr-3 text-sm text-white placeholder:text-gray-400 focus:border-cyan-400/40 focus:outline-none focus:ring-1 focus:ring-cyan-400/30 disabled:opacity-50 transition-colors"
               />
             </div>
           </div>
@@ -334,7 +334,7 @@ export function LoginForm() {
               </Link>
             </div>
             <div className="relative">
-              <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-gray-500">
+              <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-gray-400">
                 <LockIcon />
               </div>
               <input
@@ -347,7 +347,7 @@ export function LoginForm() {
                 onChange={handleChange}
                 placeholder="••••••••"
                 disabled={loading}
-                className="block w-full rounded-lg border border-white/10 bg-white/[0.04] py-2.5 pl-9 pr-3 text-sm text-white placeholder:text-gray-500 focus:border-cyan-400/40 focus:outline-none focus:ring-1 focus:ring-cyan-400/30 disabled:opacity-50 transition-colors"
+                className="block w-full rounded-lg border border-white/10 bg-white/[0.04] py-2.5 pl-9 pr-3 text-sm text-white placeholder:text-gray-400 focus:border-cyan-400/40 focus:outline-none focus:ring-1 focus:ring-cyan-400/30 disabled:opacity-50 transition-colors"
               />
             </div>
           </div>
@@ -378,7 +378,7 @@ export function LoginForm() {
               Adresse email
             </label>
             <div className="relative">
-              <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-gray-500">
+              <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-gray-400">
                 <MailIcon />
               </div>
               <input
@@ -391,7 +391,7 @@ export function LoginForm() {
                 onChange={handleChange}
                 placeholder="vous@entreprise.fr"
                 disabled={loading}
-                className="block w-full rounded-lg border border-white/10 bg-white/[0.04] py-2.5 pl-9 pr-3 text-sm text-white placeholder:text-gray-500 focus:border-cyan-400/40 focus:outline-none focus:ring-1 focus:ring-cyan-400/30 disabled:opacity-50 transition-colors"
+                className="block w-full rounded-lg border border-white/10 bg-white/[0.04] py-2.5 pl-9 pr-3 text-sm text-white placeholder:text-gray-400 focus:border-cyan-400/40 focus:outline-none focus:ring-1 focus:ring-cyan-400/30 disabled:opacity-50 transition-colors"
               />
             </div>
           </div>
@@ -408,7 +408,7 @@ export function LoginForm() {
       )}
 
       {/* Lien vers inscription */}
-      <p className="text-center text-sm text-gray-500">
+      <p className="text-center text-sm text-gray-400">
         Pas encore de compte ?{' '}
         <Link href="/signup" className="font-medium text-cyan-400 transition-colors hover:text-cyan-300">
           Créer un compte

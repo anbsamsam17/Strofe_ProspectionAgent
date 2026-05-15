@@ -190,11 +190,11 @@ export function SettingsForm({ initialSettings }: SettingsFormProps) {
         <header className="border-b border-white/[0.06] px-6 py-5 dark:border-gray-800">
           <h2
             id="sectors-title"
-            className="text-sm font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400"
+            className="text-sm font-semibold uppercase tracking-wider text-gray-300"
           >
             Secteurs cibles
           </h2>
-          <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
+          <p className="mt-1 text-sm text-gray-300">
             L&apos;agent priorisera les entreprises dont le code NAF est coché.
             Recherche par code (ex. 01.21) ou par libellé (ex. viticulture).
             {selectedSecteurs.length > 0 && (
@@ -221,11 +221,11 @@ export function SettingsForm({ initialSettings }: SettingsFormProps) {
         <header className="border-b border-white/[0.06] px-6 py-5 dark:border-gray-800">
           <h2
             id="geo-title"
-            className="text-sm font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400"
+            className="text-sm font-semibold uppercase tracking-wider text-gray-300"
           >
             Zone géographique
           </h2>
-          <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
+          <p className="mt-1 text-sm text-gray-300">
             Ville, département ou région ciblée, et codes postaux complémentaires.
           </p>
         </header>
@@ -233,7 +233,7 @@ export function SettingsForm({ initialSettings }: SettingsFormProps) {
           <div>
             <label
               htmlFor="target_city"
-              className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300"
+              className="mb-1.5 block text-sm font-medium text-gray-200"
             >
               Ville / région
             </label>
@@ -245,14 +245,14 @@ export function SettingsForm({ initialSettings }: SettingsFormProps) {
                 setSettings((prev) => ({ ...prev, target_city: e.target.value }))
               }
               placeholder="Ex : Lyon, Île-de-France, Rhône-Alpes..."
-              className="w-full rounded-lg border border-white/[0.08] bg-white/[0.04] backdrop-blur-md px-4 py-2.5 text-sm text-gray-900 placeholder-gray-400 transition focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-500/20 dark:border-gray-700 dark:bg-gray-800 dark:text-white dark:placeholder-gray-500"
+              className="w-full rounded-lg border border-white/[0.08] bg-white/[0.04] backdrop-blur-md px-4 py-2.5 text-sm text-white placeholder-gray-400 transition focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-500/20"
             />
           </div>
 
           <div>
             <label
               htmlFor="postal_code_input"
-              className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300"
+              className="mb-1.5 block text-sm font-medium text-gray-200"
             >
               Codes postaux (max 10)
             </label>
@@ -275,13 +275,13 @@ export function SettingsForm({ initialSettings }: SettingsFormProps) {
                   }
                 }}
                 placeholder="69001"
-                className="flex-1 rounded-lg border border-white/[0.08] bg-white/[0.04] backdrop-blur-md px-4 py-2.5 text-sm tabular-nums text-gray-900 placeholder-gray-400 transition focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-500/20 dark:border-gray-700 dark:bg-gray-800 dark:text-white dark:placeholder-gray-500"
+                className="flex-1 rounded-lg border border-white/[0.08] bg-white/[0.04] backdrop-blur-md px-4 py-2.5 text-sm tabular-nums text-white placeholder-gray-400 transition focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-500/20"
                 aria-describedby={postalCodeError ? 'postal-code-error' : undefined}
               />
               <button
                 type="button"
                 onClick={addPostalCode}
-                className="rounded-lg border border-white/[0.08] bg-white/[0.02] px-4 py-2.5 text-sm font-medium text-gray-700 transition hover:border-gray-300 hover:bg-white/[0.06] focus:outline-none focus:ring-2 focus:ring-green-500/20 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
+                className="rounded-lg border border-white/[0.08] bg-white/[0.02] px-4 py-2.5 text-sm font-medium text-gray-200 transition hover:border-white/20 hover:bg-white/[0.06] focus:outline-none focus:ring-2 focus:ring-green-500/20"
               >
                 Ajouter
               </button>
@@ -300,14 +300,14 @@ export function SettingsForm({ initialSettings }: SettingsFormProps) {
                 {postalCodes.map((code) => (
                   <li
                     key={code}
-                    className="inline-flex items-center gap-1.5 rounded-full bg-white/[0.05] px-3 py-1 text-xs font-medium tabular-nums text-gray-700 dark:bg-gray-800 dark:text-gray-300"
+                    className="inline-flex items-center gap-1.5 rounded-full bg-white/[0.05] px-3 py-1 text-xs font-medium tabular-nums text-gray-200"
                   >
                     {code}
                     <button
                       type="button"
                       onClick={() => removePostalCode(code)}
                       aria-label={`Retirer le code postal ${code}`}
-                      className="rounded-full text-gray-500 transition hover:text-red-600 focus:outline-none focus:ring-2 focus:ring-red-500/20 dark:text-gray-400 dark:hover:text-red-400"
+                      className="rounded-full text-gray-400 transition hover:text-red-400 focus:outline-none focus:ring-2 focus:ring-red-500/20"
                     >
                       <svg
                         xmlns="http://www.w3.org/2000/svg"
@@ -341,11 +341,11 @@ export function SettingsForm({ initialSettings }: SettingsFormProps) {
         <header className="border-b border-white/[0.06] px-6 py-5 dark:border-gray-800">
           <h2
             id="scoring-title"
-            className="text-sm font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400"
+            className="text-sm font-semibold uppercase tracking-wider text-gray-300"
           >
             Pondération du scoring
           </h2>
-          <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
+          <p className="mt-1 text-sm text-gray-300">
             Ajustez l&apos;importance relative de chaque pilier dans le calcul du score.
           </p>
         </header>
@@ -359,11 +359,11 @@ export function SettingsForm({ initialSettings }: SettingsFormProps) {
                 <div className="mb-1.5 flex items-baseline justify-between gap-3">
                   <label
                     htmlFor={`weight-${pilier}`}
-                    className="text-sm font-medium text-gray-900 dark:text-white"
+                    className="text-sm font-medium text-white"
                   >
                     {info.label}
                   </label>
-                  <span className="text-sm font-semibold tabular-nums text-gray-900 dark:text-white">
+                  <span className="text-sm font-semibold tabular-nums text-white">
                     {value} %
                   </span>
                 </div>
@@ -378,7 +378,7 @@ export function SettingsForm({ initialSettings }: SettingsFormProps) {
                   className="w-full accent-green-600"
                   aria-label={`Pondération ${info.label} : ${value} %`}
                 />
-                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">{info.description}</p>
+                <p className="mt-1 text-xs text-gray-400">{info.description}</p>
               </div>
             )
           })}
@@ -393,7 +393,7 @@ export function SettingsForm({ initialSettings }: SettingsFormProps) {
             <p
               role={isWeightsBalanced ? undefined : 'status'}
               aria-live="polite"
-              className="text-sm text-gray-700 dark:text-gray-300"
+              className="text-sm text-gray-200"
             >
               <span className="tabular-nums">
                 Taille: {weights.taille} % · BEGES: {weights.beges} % · Contact: {weights.contact} %
@@ -419,14 +419,14 @@ export function SettingsForm({ initialSettings }: SettingsFormProps) {
                 type="button"
                 onClick={normalizeWeights}
                 disabled={isWeightsBalanced}
-                className="rounded-lg border border-white/[0.08] bg-white/[0.04] backdrop-blur-md px-3 py-1.5 text-xs font-medium text-gray-700 transition hover:border-gray-300 hover:bg-white/[0.06] focus:outline-none focus:ring-2 focus:ring-green-500/20 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
+                className="rounded-lg border border-white/[0.08] bg-white/[0.04] backdrop-blur-md px-3 py-1.5 text-xs font-medium text-gray-200 transition hover:border-white/20 hover:bg-white/[0.06] focus:outline-none focus:ring-2 focus:ring-green-500/20 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 Normaliser
               </button>
               <button
                 type="button"
                 onClick={resetWeights}
-                className="rounded-lg border border-white/[0.08] bg-white/[0.04] backdrop-blur-md px-3 py-1.5 text-xs font-medium text-gray-700 transition hover:border-gray-300 hover:bg-white/[0.06] focus:outline-none focus:ring-2 focus:ring-green-500/20 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
+                className="rounded-lg border border-white/[0.08] bg-white/[0.04] backdrop-blur-md px-3 py-1.5 text-xs font-medium text-gray-200 transition hover:border-white/20 hover:bg-white/[0.06] focus:outline-none focus:ring-2 focus:ring-green-500/20"
               >
                 Réinitialiser aux défauts (30 / 30 / 40)
               </button>
@@ -443,18 +443,18 @@ export function SettingsForm({ initialSettings }: SettingsFormProps) {
         <header className="border-b border-white/[0.06] px-6 py-5 dark:border-gray-800">
           <h2
             id="notifications-title"
-            className="text-sm font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400"
+            className="text-sm font-semibold uppercase tracking-wider text-gray-300"
           >
             Notifications
           </h2>
-          <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
+          <p className="mt-1 text-sm text-gray-300">
             Email pour recevoir les listes journalières et alertes.
           </p>
         </header>
         <div className="px-6 py-5">
           <label
             htmlFor="notification_email"
-            className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300"
+            className="mb-1.5 block text-sm font-medium text-gray-200"
           >
             Email de notification
           </label>
@@ -466,7 +466,7 @@ export function SettingsForm({ initialSettings }: SettingsFormProps) {
               setSettings((prev) => ({ ...prev, notification_email: e.target.value }))
             }
             placeholder="prenom.nom@exemple.com"
-            className="w-full rounded-lg border border-white/[0.08] bg-white/[0.04] backdrop-blur-md px-4 py-2.5 text-sm text-gray-900 placeholder-gray-400 transition focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-500/20 dark:border-gray-700 dark:bg-gray-800 dark:text-white dark:placeholder-gray-500"
+            className="w-full rounded-lg border border-white/[0.08] bg-white/[0.04] backdrop-blur-md px-4 py-2.5 text-sm text-white placeholder-gray-400 transition focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-500/20"
           />
         </div>
       </section>
@@ -479,11 +479,11 @@ export function SettingsForm({ initialSettings }: SettingsFormProps) {
         <header className="border-b border-white/[0.06] px-6 py-5 dark:border-gray-800">
           <h2
             id="offer-title"
-            className="text-sm font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400"
+            className="text-sm font-semibold uppercase tracking-wider text-gray-300"
           >
             Offre commerciale
           </h2>
-          <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
+          <p className="mt-1 text-sm text-gray-300">
             Utilisée par l&apos;IA pour personnaliser les pitchs et accroches de chaque appel.
           </p>
         </header>
@@ -501,7 +501,7 @@ export function SettingsForm({ initialSettings }: SettingsFormProps) {
               placeholder="Ex : Nous accompagnons les ETI dans la réalisation de leur bilan carbone réglementaire (BEGES Scope 1+2+3) et dans la construction de leur plan de décarbonation..."
               rows={6}
               maxLength={2000}
-              className="w-full resize-none rounded-lg border border-white/[0.08] bg-white/[0.04] backdrop-blur-md px-4 py-3 text-sm text-gray-900 placeholder-gray-400 transition focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-500/20 dark:border-gray-700 dark:bg-gray-800 dark:text-white dark:placeholder-gray-500"
+              className="w-full resize-none rounded-lg border border-white/[0.08] bg-white/[0.04] backdrop-blur-md px-4 py-3 text-sm text-white placeholder-gray-400 transition focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-500/20"
             />
             <span
               className={`absolute bottom-3 right-3 text-xs tabular-nums ${
@@ -529,11 +529,11 @@ export function SettingsForm({ initialSettings }: SettingsFormProps) {
           <div>
             <h2
               id="advanced-title"
-              className="text-sm font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400"
+              className="text-sm font-semibold uppercase tracking-wider text-gray-300"
             >
               Avancé
             </h2>
-            <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
+            <p className="mt-1 text-sm text-gray-300">
               Paramètres hérités, conservés pour rétrocompatibilité.
             </p>
           </div>
@@ -547,7 +547,7 @@ export function SettingsForm({ initialSettings }: SettingsFormProps) {
             strokeWidth="2"
             strokeLinecap="round"
             strokeLinejoin="round"
-            className={`flex-shrink-0 text-gray-400 transition-transform dark:text-gray-500 ${
+            className={`flex-shrink-0 text-gray-400 transition-transform ${
               isAdvancedOpen ? 'rotate-180' : ''
             }`}
             aria-hidden="true"
@@ -563,10 +563,10 @@ export function SettingsForm({ initialSettings }: SettingsFormProps) {
           >
             <label
               htmlFor="sourcing_target_per_run"
-              className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300"
+              className="mb-1.5 block text-sm font-medium text-gray-200"
             >
               Cible de sourcing par run
-              <span className="ml-2 text-sm font-semibold tabular-nums text-gray-900 dark:text-white">
+              <span className="ml-2 text-sm font-semibold tabular-nums text-white">
                 {settings.sourcing_target_per_run}
               </span>
             </label>
@@ -586,7 +586,7 @@ export function SettingsForm({ initialSettings }: SettingsFormProps) {
               className="w-full accent-green-600"
               aria-label={`Cible de sourcing par run : ${settings.sourcing_target_per_run}`}
             />
-            <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+            <p className="mt-2 text-xs text-gray-400">
               Nombre cible de prospects sourcés par run nocturne (targetCandidates = max(N×3, 50)).
             </p>
           </div>

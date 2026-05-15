@@ -223,7 +223,7 @@ export function NewExchangeDialog({ prospectId }: NewExchangeDialogProps) {
                   required
                   value={form.occurred_at}
                   onChange={(e) => update('occurred_at', e.target.value)}
-                  className="w-full rounded-lg border border-white/[0.08] bg-white/[0.04] backdrop-blur-md px-3 py-2 text-sm text-white placeholder:text-gray-500 transition focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-500/20"
+                  className="w-full rounded-lg border border-white/[0.08] bg-white/[0.04] backdrop-blur-md px-3 py-2 text-sm text-white placeholder:text-gray-400 transition focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-500/20"
                 />
               </div>
 
@@ -239,7 +239,7 @@ export function NewExchangeDialog({ prospectId }: NewExchangeDialogProps) {
                     id="exchange-type"
                     value={form.type}
                     onChange={(e) => update('type', e.target.value as ExchangeType)}
-                    className="w-full rounded-lg border border-white/[0.08] bg-white/[0.04] backdrop-blur-md px-3 py-2 text-sm text-white placeholder:text-gray-500 transition focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-500/20"
+                    className="w-full rounded-lg border border-white/[0.08] bg-white/[0.04] backdrop-blur-md px-3 py-2 text-sm text-white placeholder:text-gray-400 transition focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-500/20"
                   >
                     {TYPE_OPTIONS.map((opt) => (
                       <option key={opt.value} value={opt.value}>
@@ -260,7 +260,7 @@ export function NewExchangeDialog({ prospectId }: NewExchangeDialogProps) {
                     id="exchange-result"
                     value={form.result}
                     onChange={(e) => update('result', e.target.value)}
-                    className="w-full rounded-lg border border-white/[0.08] bg-white/[0.04] backdrop-blur-md px-3 py-2 text-sm text-white placeholder:text-gray-500 transition focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-500/20"
+                    className="w-full rounded-lg border border-white/[0.08] bg-white/[0.04] backdrop-blur-md px-3 py-2 text-sm text-white placeholder:text-gray-400 transition focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-500/20"
                   >
                     {RESULT_OPTIONS.map((opt) => (
                       <option key={opt.value} value={opt.value}>
@@ -284,7 +284,7 @@ export function NewExchangeDialog({ prospectId }: NewExchangeDialogProps) {
                   value={form.notes}
                   onChange={(e) => update('notes', e.target.value)}
                   placeholder="Contenu de l'échange, points abordés, prochaines étapes..."
-                  className="w-full rounded-lg border border-white/[0.08] bg-white/[0.04] backdrop-blur-md px-3 py-2 text-sm text-white placeholder:text-gray-500 transition focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-500/20"
+                  className="w-full rounded-lg border border-white/[0.08] bg-white/[0.04] backdrop-blur-md px-3 py-2 text-sm text-white placeholder:text-gray-400 transition focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-500/20"
                 />
               </div>
 
@@ -300,7 +300,7 @@ export function NewExchangeDialog({ prospectId }: NewExchangeDialogProps) {
                   type="date"
                   value={form.callback_date}
                   onChange={(e) => update('callback_date', e.target.value)}
-                  className="w-full rounded-lg border border-white/[0.08] bg-white/[0.04] backdrop-blur-md px-3 py-2 text-sm text-white placeholder:text-gray-500 transition focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-500/20"
+                  className="w-full rounded-lg border border-white/[0.08] bg-white/[0.04] backdrop-blur-md px-3 py-2 text-sm text-white placeholder:text-gray-400 transition focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-500/20"
                 />
               </div>
 

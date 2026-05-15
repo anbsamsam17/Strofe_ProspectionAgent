@@ -193,7 +193,7 @@ export function ProspectsFilters({
         {/* Statuts — pills */}
         <div className="min-w-0 flex-1">
           <fieldset>
-            <legend className="mb-2.5 text-xs font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">
+            <legend className="mb-2.5 text-xs font-semibold uppercase tracking-wider text-gray-300">
               Statut
             </legend>
             <div className="flex flex-wrap gap-1.5" role="group" aria-label="Filtrer par statut">
@@ -208,7 +208,7 @@ export function ProspectsFilters({
                     className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition-all duration-150 ${
                       isActive
                         ? 'border-green-500 bg-green-50 text-green-700 shadow-sm dark:border-green-600 dark:bg-green-950/50 dark:text-green-400'
-                        : 'border-gray-200 bg-white/[0.04] backdrop-blur-md text-gray-600 hover:border-gray-300 hover:bg-white/[0.06] dark:border-gray-700 dark:bg-transparent dark:text-gray-400 dark:hover:border-gray-600 dark:hover:bg-gray-800/50'
+                        : 'border-white/10 bg-white/[0.04] backdrop-blur-md text-gray-300 hover:border-white/20 hover:bg-white/[0.06]'
                     }`}
                   >
                     <span
@@ -232,7 +232,7 @@ export function ProspectsFilters({
           <div>
             <label
               htmlFor="filter-secteur"
-              className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500"
+              className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-gray-300"
             >
               Secteur
             </label>
@@ -247,7 +247,7 @@ export function ProspectsFilters({
                 strokeWidth="2"
                 strokeLinecap="round"
                 strokeLinejoin="round"
-                className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-gray-500"
+                className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
                 aria-hidden="true"
               >
                 <circle cx="11" cy="11" r="8" />
@@ -261,7 +261,7 @@ export function ProspectsFilters({
                 onKeyDown={handleSecteurKeyDown}
                 onBlur={() => applyFilters(statuts, secteur, scoreMin, archived, contactTypes, begesFilter)}
                 placeholder="ex : Transport..."
-                className="w-full rounded-lg border border-white/[0.08] bg-white/[0.04] backdrop-blur-md py-2 pl-9 pr-3 text-sm text-gray-900 placeholder-gray-400 transition focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-500/20 dark:border-gray-700 dark:bg-gray-800 dark:text-white dark:placeholder-gray-500"
+                className="w-full rounded-lg border border-white/[0.08] bg-white/[0.04] backdrop-blur-md py-2 pl-9 pr-3 text-sm text-white placeholder-gray-400 transition focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-500/20"
               />
               {isPending && (
                 <svg
@@ -288,7 +288,7 @@ export function ProspectsFilters({
             <div className="mb-1.5 flex items-center justify-between">
               <label
                 htmlFor="filter-score"
-                className="text-xs font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500"
+                className="text-xs font-semibold uppercase tracking-wider text-gray-300"
               >
                 Score min.
               </label>
@@ -323,7 +323,7 @@ export function ProspectsFilters({
 
           {/* Type de contact disponible */}
           <fieldset>
-            <legend className="mb-1.5 text-xs font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">
+            <legend className="mb-1.5 text-xs font-semibold uppercase tracking-wider text-gray-300">
               Contact dispo
             </legend>
             <div
@@ -342,7 +342,7 @@ export function ProspectsFilters({
                     className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition-all duration-150 ${
                       isActive
                         ? 'border-green-500 bg-green-50 text-green-700 shadow-sm dark:border-green-600 dark:bg-green-950/50 dark:text-green-400'
-                        : 'border-gray-200 bg-white/[0.04] backdrop-blur-md text-gray-600 hover:border-gray-300 hover:bg-white/[0.06] dark:border-gray-700 dark:bg-transparent dark:text-gray-400 dark:hover:border-gray-600 dark:hover:bg-gray-800/50'
+                        : 'border-white/10 bg-white/[0.04] backdrop-blur-md text-gray-300 hover:border-white/20 hover:bg-white/[0.06]'
                     }`}
                   >
                     {label}
@@ -362,7 +362,7 @@ export function ProspectsFilters({
               className={`inline-flex w-full items-center justify-between rounded-lg border px-3 py-2 text-xs font-medium transition-colors ${
                 begesFilter === 'missing'
                   ? 'border-red-300 bg-red-50 text-red-700 dark:border-red-700 dark:bg-red-950/40 dark:text-red-400'
-                  : 'border-gray-200 bg-white/[0.04] backdrop-blur-md text-gray-600 hover:border-gray-300 hover:bg-white/[0.06] dark:border-gray-700 dark:bg-transparent dark:text-gray-400 dark:hover:bg-gray-800/50'
+                  : 'border-white/10 bg-white/[0.04] backdrop-blur-md text-gray-300 hover:border-white/20 hover:bg-white/[0.06]'
               }`}
             >
               <span className="inline-flex items-center gap-2">
@@ -408,7 +408,7 @@ export function ProspectsFilters({
               className={`inline-flex w-full items-center justify-between rounded-lg border px-3 py-2 text-xs font-medium transition-colors ${
                 archived
                   ? 'border-orange-300 bg-orange-50 text-orange-700 dark:border-orange-700 dark:bg-orange-950/40 dark:text-orange-400'
-                  : 'border-gray-200 bg-white/[0.04] backdrop-blur-md text-gray-600 hover:border-gray-300 hover:bg-white/[0.06] dark:border-gray-700 dark:bg-transparent dark:text-gray-400 dark:hover:bg-gray-800/50'
+                  : 'border-white/10 bg-white/[0.04] backdrop-blur-md text-gray-300 hover:border-white/20 hover:bg-white/[0.06]'
               }`}
             >
               <span className="inline-flex items-center gap-2">
@@ -450,7 +450,7 @@ export function ProspectsFilters({
       {/* Pied de barre — actions */}
       {hasFilters && (
         <div className="flex items-center justify-between border-t border-white/[0.06] px-4 py-2.5 dark:border-gray-800">
-          <p className="text-xs text-gray-500 dark:text-gray-400">
+          <p className="text-xs text-gray-400">
             {[
               statuts.length > 0 && `${statuts.length} statut${statuts.length > 1 ? 's' : ''}`,
               secteur && `secteur "${secteur}"`,
@@ -469,7 +469,7 @@ export function ProspectsFilters({
             type="button"
             onClick={handleReset}
             aria-label="Réinitialiser tous les filtres"
-            className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium text-gray-500 transition-colors hover:bg-white/[0.06] hover:text-gray-700 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-200"
+            className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium text-gray-300 transition-colors hover:bg-white/[0.06] hover:text-white"
           >
             <svg
               xmlns="http://www.w3.org/2000/svg"

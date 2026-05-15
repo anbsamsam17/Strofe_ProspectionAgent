@@ -1,23 +1,16 @@
-﻿'use client'
+'use client'
 
 // ============================================================
-// GlanHeroLoader — pont Client pour GlanHero (qui contient R3F)
+// GlanHeroLoader — wrapper Client pour <GlanHero>
 //
-// Next.js 15 interdit `ssr: false` dans un Server Component (cf. erreur build).
-// Ce wrapper Client permet à app/page.tsx (Server Component) d'utiliser
-// GlanHero sans payer le SSR du canvas R3F.
-//
-// Le fallback CSS est rendu pendant le chargement du bundle R3F (~180kB lazy).
+// Refonte 2026-05-15 : R3F retiré (Hero utilise désormais un PNG portrait).
+// Ce loader reste pour conserver le point d'entrée stable côté app/page.tsx
+// (Server Component). Toutes les animations Framer Motion vivent dans
+// <GlanHero>, qui est 'use client'.
 // ============================================================
 
-import dynamic from 'next/dynamic'
-import { GlanHeroFallback } from './glan-hero'
-
-const GlanHeroDynamic = dynamic(
-  () => import('./glan-hero').then((m) => m.GlanHero),
-  { ssr: false, loading: () => <GlanHeroFallback /> },
-)
+import { GlanHero } from './glan-hero'
 
 export function GlanHeroLoader() {
-  return <GlanHeroDynamic />
+  return <GlanHero />
 }

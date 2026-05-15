@@ -37,7 +37,7 @@ export function ConversionFunnel({ countsByStatus }: ConversionFunnelProps) {
         <h2 className="font-mono text-[10px] uppercase tracking-[0.18em] text-green-400/80">
           {'// Entonnoir de conversion'}
         </h2>
-        <p className="font-mono text-[10px] text-gray-500">
+        <p className="font-mono text-[10px] text-gray-400">
           du sourcing à la conversion
         </p>
       </header>
@@ -136,7 +136,7 @@ function FunnelLegend({ stages }: { stages: FunnelStage[] }) {
               <span className="font-medium text-white">{stage.label}</span>
               <span className="tabular-nums text-gray-200">{stage.count}</span>
             </p>
-            <p className="flex items-baseline justify-between gap-2 font-mono text-[10px] text-gray-500">
+            <p className="flex items-baseline justify-between gap-2 font-mono text-[10px] text-gray-400">
               {idx === 0 ? (
                 <span>100 % du sourcing</span>
               ) : (

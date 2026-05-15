@@ -404,7 +404,7 @@ function DroppableColumn({
               strokeWidth="1.5"
               strokeLinecap="round"
               strokeLinejoin="round"
-              className="text-gray-500"
+              className="text-gray-400"
               aria-hidden="true"
             >
               <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
@@ -412,7 +412,7 @@ function DroppableColumn({
               <line x1="9" y1="12" x2="15" y2="12" />
               <line x1="9" y1="15" x2="12" y2="15" />
             </svg>
-            <p className="text-xs text-gray-500">Aucun prospect</p>
+            <p className="text-xs text-gray-400">Aucun prospect</p>
           </div>
         ) : (
           items.map((prospect) => (
@@ -489,13 +489,13 @@ function DraggableCard({
     >
       <p
         id={labelId}
-        className="font-semibold leading-tight text-gray-900 line-clamp-1 transition-colors group-hover:text-green-700 dark:text-white dark:group-hover:text-green-400"
+        className="font-semibold leading-tight text-white line-clamp-1 transition-colors group-hover:text-green-400"
       >
         {prospect.raison_sociale}
       </p>
 
       {prospect.secteur_libelle && (
-        <span className="mt-2 inline-block max-w-full truncate rounded-md bg-white/[0.05] px-2 py-0.5 text-xs text-gray-500 dark:bg-gray-800 dark:text-gray-400">
+        <span className="mt-2 inline-block max-w-full truncate rounded-md bg-white/[0.05] px-2 py-0.5 text-xs text-gray-300">
           {prospect.secteur_libelle}
         </span>
       )}
@@ -530,16 +530,16 @@ function ProspectCardPreview({ prospect }: { prospect: Prospect }) {
       className="pointer-events-none w-[280px] rotate-2 rounded-2xl border border-white/[0.08] bg-white/[0.03] backdrop-blur-md p-4 shadow-2xl ring-1 ring-white/10 sm:w-[300px]"
       aria-hidden="true"
     >
-      <p className="font-semibold leading-tight text-gray-900 line-clamp-1 dark:text-white">
+      <p className="font-semibold leading-tight text-white line-clamp-1">
         {prospect.raison_sociale}
       </p>
       {prospect.secteur_libelle && (
-        <span className="mt-2 inline-block max-w-full truncate rounded-md bg-white/[0.05] px-2 py-0.5 text-xs text-gray-500 dark:bg-gray-800 dark:text-gray-400">
+        <span className="mt-2 inline-block max-w-full truncate rounded-md bg-white/[0.05] px-2 py-0.5 text-xs text-gray-300">
           {prospect.secteur_libelle}
         </span>
       )}
       <div className="mt-3 flex items-center justify-between gap-2">
-        <span className="truncate text-xs text-gray-400 dark:text-gray-400">
+        <span className="truncate text-xs text-gray-400">
           {prospect.ville ?? '—'}
         </span>
         <span
