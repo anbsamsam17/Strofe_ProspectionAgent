@@ -7,11 +7,12 @@ import type { ProspectStatus } from '@/lib/types'
 export type ContactFilterType = 'phone' | 'email' | 'linkedin'
 
 /**
- * Filtre BEGES :
- *   - 'missing' : entreprises avec BEGES absent OU expiré (cible commerciale chaude).
- *   - undefined : pas de filtre BEGES.
+ * Filtres BEGES — combinables (AND) :
+ *   - 'missing' : BEGES absent OU expiré (cible commerciale chaude).
+ *   - 'obligation' : entreprises soumises à l'obligation BEGES (Article L. 229-25).
+ * Tableau vide = aucun filtre BEGES.
  */
-export type BegesFilterValue = 'missing'
+export type BegesFilterValue = 'missing' | 'obligation'
 
 interface ProspectsFiltersProps {
   currentStatuts: string[]
@@ -19,7 +20,7 @@ interface ProspectsFiltersProps {
   currentScoreMin: number
   currentArchived: boolean
   currentContactTypes?: ContactFilterType[]
-  currentBegesFilter?: BegesFilterValue
+  currentBegesFilters?: BegesFilterValue[]
 }
 
 // TODO(Agent A): `offer_sent` à ajouter à `ProspectStatus` (`lib/types.ts`).
@@ -53,7 +54,7 @@ export function ProspectsFilters({
   currentScoreMin,
   currentArchived,
   currentContactTypes = [],
-  currentBegesFilter,
+  currentBegesFilters = [],
 }: ProspectsFiltersProps) {
   const router = useRouter()
   const pathname = usePathname()
@@ -65,7 +66,7 @@ export function ProspectsFilters({
   const [scoreMin, setScoreMin] = useState(currentScoreMin)
   const [archived, setArchived] = useState<boolean>(currentArchived)
   const [contactTypes, setContactTypes] = useState<ContactFilterType[]>(currentContactTypes)
-  const [begesFilter, setBegesFilter] = useState<BegesFilterValue | undefined>(currentBegesFilter)
+  const [begesFilters, setBegesFilters] = useState<BegesFilterValue[]>(currentBegesFilters)
 
   function applyFilters(
     newStatuts: string[],
@@ -73,7 +74,7 @@ export function ProspectsFilters({
     newScoreMin: number,
     newArchived: boolean,
     newContactTypes: ContactFilterType[],
-    newBegesFilter: BegesFilterValue | undefined,
+    newBegesFilters: BegesFilterValue[],
   ) {
     const params = new URLSearchParams(searchParams.toString())
     params.set('page', '1')
@@ -108,8 +109,8 @@ export function ProspectsFilters({
       params.delete('contact_type')
     }
 
-    if (newBegesFilter) {
-      params.set('beges', newBegesFilter)
+    if (newBegesFilters.length > 0) {
+      params.set('beges', newBegesFilters.join(','))
     } else {
       params.delete('beges')
     }
@@ -124,7 +125,7 @@ export function ProspectsFilters({
       ? statuts.filter((s) => s !== value)
       : [...statuts, value]
     setStatuts(next)
-    applyFilters(next, secteur, scoreMin, archived, contactTypes, begesFilter)
+    applyFilters(next, secteur, scoreMin, archived, contactTypes, begesFilters)
   }
 
   function toggleContactType(value: ContactFilterType) {
@@ -132,12 +133,14 @@ export function ProspectsFilters({
       ? contactTypes.filter((t) => t !== value)
       : [...contactTypes, value]
     setContactTypes(next)
-    applyFilters(statuts, secteur, scoreMin, archived, next, begesFilter)
+    applyFilters(statuts, secteur, scoreMin, archived, next, begesFilters)
   }
 
-  function toggleBegesFilter() {
-    const next: BegesFilterValue | undefined = begesFilter === 'missing' ? undefined : 'missing'
-    setBegesFilter(next)
+  function toggleBegesValue(value: BegesFilterValue) {
+    const next: BegesFilterValue[] = begesFilters.includes(value)
+      ? begesFilters.filter((b) => b !== value)
+      : [...begesFilters, value]
+    setBegesFilters(next)
     applyFilters(statuts, secteur, scoreMin, archived, contactTypes, next)
   }
 
@@ -147,20 +150,20 @@ export function ProspectsFilters({
 
   function handleSecteurKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
     if (e.key === 'Enter') {
-      applyFilters(statuts, secteur, scoreMin, archived, contactTypes, begesFilter)
+      applyFilters(statuts, secteur, scoreMin, archived, contactTypes, begesFilters)
     }
   }
 
   function handleScoreChange(e: React.ChangeEvent<HTMLInputElement>) {
     const val = parseInt(e.target.value, 10)
     setScoreMin(val)
-    applyFilters(statuts, secteur, val, archived, contactTypes, begesFilter)
+    applyFilters(statuts, secteur, val, archived, contactTypes, begesFilters)
   }
 
   function toggleArchived() {
     const next = !archived
     setArchived(next)
-    applyFilters(statuts, secteur, scoreMin, next, contactTypes, begesFilter)
+    applyFilters(statuts, secteur, scoreMin, next, contactTypes, begesFilters)
   }
 
   function handleReset() {
@@ -169,6 +172,7 @@ export function ProspectsFilters({
     setScoreMin(0)
     setArchived(false)
     setContactTypes([])
+    setBegesFilters([])
     startTransition(() => {
       router.push(pathname)
     })
@@ -180,7 +184,7 @@ export function ProspectsFilters({
     scoreMin > 0 ||
     archived ||
     contactTypes.length > 0 ||
-    !!begesFilter
+    begesFilters.length > 0
   const scorePercent = scoreMin
 
   return (
@@ -259,7 +263,7 @@ export function ProspectsFilters({
                 value={secteur}
                 onChange={handleSecteurChange}
                 onKeyDown={handleSecteurKeyDown}
-                onBlur={() => applyFilters(statuts, secteur, scoreMin, archived, contactTypes, begesFilter)}
+                onBlur={() => applyFilters(statuts, secteur, scoreMin, archived, contactTypes, begesFilters)}
                 placeholder="ex : Transport..."
                 className="w-full rounded-lg border border-white/[0.08] bg-white/[0.04] backdrop-blur-md py-2 pl-10 pr-3 text-sm text-white placeholder-gray-400 transition focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-500/20"
               />
@@ -352,16 +356,61 @@ export function ProspectsFilters({
             </div>
           </fieldset>
 
+          {/* Toggle Obligation BEGES — entreprises soumises a Article L. 229-25 */}
+          <div>
+            <button
+              type="button"
+              onClick={() => toggleBegesValue('obligation')}
+              aria-pressed={begesFilters.includes('obligation')}
+              aria-label="Filtrer : entreprises soumises a l'obligation BEGES"
+              className={`inline-flex w-full items-center justify-between rounded-lg border px-3 py-2 text-xs font-medium transition-colors ${
+                begesFilters.includes('obligation')
+                  ? 'border-amber-400/40 bg-amber-500/15 text-amber-200 ring-1 ring-amber-500/25'
+                  : 'border-white/10 bg-white/[0.04] backdrop-blur-md text-gray-300 hover:border-white/20 hover:bg-white/[0.06]'
+              }`}
+            >
+              <span className="inline-flex items-center gap-2">
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="13"
+                  height="13"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden="true"
+                >
+                  <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+                </svg>
+                Obligation BEGES
+              </span>
+              <span
+                className={`relative inline-block h-4 w-7 rounded-full transition-colors ${
+                  begesFilters.includes('obligation') ? 'bg-amber-500' : 'bg-white/[0.1] ring-1 ring-white/15'
+                }`}
+                aria-hidden="true"
+              >
+                <span
+                  className={`absolute top-0.5 h-3 w-3 rounded-full bg-white shadow-sm transition-transform ${
+                    begesFilters.includes('obligation') ? 'translate-x-3.5' : 'translate-x-0.5'
+                  }`}
+                />
+              </span>
+            </button>
+          </div>
+
           {/* Toggle BEGES manquant (absent OU expiré) — cible commerciale chaude */}
           <div>
             <button
               type="button"
-              onClick={toggleBegesFilter}
-              aria-pressed={begesFilter === 'missing'}
+              onClick={() => toggleBegesValue('missing')}
+              aria-pressed={begesFilters.includes('missing')}
               aria-label="Filtrer : BEGES absent ou expiré"
               className={`inline-flex w-full items-center justify-between rounded-lg border px-3 py-2 text-xs font-medium transition-colors ${
-                begesFilter === 'missing'
-                  ? 'border-red-300 bg-red-50 text-red-700 dark:border-red-700 dark:bg-red-950/40 dark:text-red-400'
+                begesFilters.includes('missing')
+                  ? 'border-red-400/40 bg-red-500/15 text-red-200 ring-1 ring-red-500/25'
                   : 'border-white/10 bg-white/[0.04] backdrop-blur-md text-gray-300 hover:border-white/20 hover:bg-white/[0.06]'
               }`}
             >
@@ -386,13 +435,13 @@ export function ProspectsFilters({
               </span>
               <span
                 className={`relative inline-block h-4 w-7 rounded-full transition-colors ${
-                  begesFilter === 'missing' ? 'bg-red-500' : 'bg-white/[0.1] ring-1 ring-white/15'
+                  begesFilters.includes('missing') ? 'bg-red-500' : 'bg-white/[0.1] ring-1 ring-white/15'
                 }`}
                 aria-hidden="true"
               >
                 <span
                   className={`absolute top-0.5 h-3 w-3 rounded-full bg-white shadow-sm transition-transform ${
-                    begesFilter === 'missing' ? 'translate-x-3.5' : 'translate-x-0.5'
+                    begesFilters.includes('missing') ? 'translate-x-3.5' : 'translate-x-0.5'
                   }`}
                 />
               </span>
@@ -456,7 +505,8 @@ export function ProspectsFilters({
               secteur && `secteur "${secteur}"`,
               scoreMin > 0 && `score ≥ ${scoreMin}`,
               archived && 'archivés',
-              begesFilter === 'missing' && 'BEGES manquant',
+              begesFilters.includes('obligation') && 'Obligation BEGES',
+              begesFilters.includes('missing') && 'BEGES manquant',
               contactTypes.length > 0 &&
                 `contact : ${contactTypes
                   .map((t) => ALL_CONTACT_TYPES.find((c) => c.value === t)?.label ?? t)

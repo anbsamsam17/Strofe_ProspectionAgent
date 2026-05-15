@@ -270,7 +270,12 @@ export default async function ProspectsPage({
   const scoreMin = params.score_min ? parseInt(params.score_min, 10) : 0
   const showArchived = params.archived === '1'
   const contactTypes = parseContactTypes(params.contact_type)
-  const begesFilter: 'missing' | undefined = params.beges === 'missing' ? 'missing' : undefined
+  // Parsing CSV : ?beges=missing,obligation → ['missing', 'obligation']
+  // Toggles combinables (AND) côté query Supabase.
+  const begesFilters: ('missing' | 'obligation')[] = (params.beges ?? '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter((s): s is 'missing' | 'obligation' => s === 'missing' || s === 'obligation')
 
   const from = (page - 1) * PAGE_SIZE
   const to = from + PAGE_SIZE - 1
@@ -307,9 +312,13 @@ export default async function ProspectsPage({
       .join(',')
     query = query.or(orClause)
   }
-  if (begesFilter === 'missing') {
+  // Filtres BEGES combinables (AND entre eux).
+  if (begesFilters.includes('obligation')) {
+    // Entreprises soumises à l'obligation BEGES (Article L. 229-25).
+    query = query.eq('obligation_beges', true)
+  }
+  if (begesFilters.includes('missing')) {
     // BEGES manquant = absent (beges_publie=false) OU expiré (beges_publie=true && beges_valide=false).
-    // En SQL : `WHERE beges_publie = false OR beges_valide = false`.
     query = query.or('beges_publie.eq.false,beges_valide.eq.false')
   }
 
@@ -416,7 +425,7 @@ export default async function ProspectsPage({
             currentScoreMin={scoreMin}
             currentArchived={showArchived}
             currentContactTypes={contactTypes}
-            currentBegesFilter={begesFilter}
+            currentBegesFilters={begesFilters}
           />
         </div>
       </div>
