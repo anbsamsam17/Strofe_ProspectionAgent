@@ -19,6 +19,12 @@
 // ============================================================
 
 import { findLinkedinCompanyUrl } from './linkedin-company'
+import { fetchInpiData } from './sources/inpi'
+import {
+  generateEmailCandidates,
+  applyKnownPattern,
+} from './sources/email-pattern'
+import { hasMxRecord } from './sources/dns-mx'
 
 // ------------------------------------------------------------
 // TYPES
@@ -1102,6 +1108,55 @@ export async function enrichirContact(
   }
 
   // --------------------------------------------------------
+  // SOURCE 1.5 : INPI RNE (fallback gratuit illimité)
+  // Si Recherche Entreprises n'a pas donné de dirigeant, on retente
+  // via INPI RNE (mandataires sociaux à jour). Skip silencieux si
+  // INPI_USERNAME/PASSWORD non configurés.
+  // --------------------------------------------------------
+  const hasInpiCreds = Boolean(process.env.INPI_USERNAME && process.env.INPI_PASSWORD)
+  if (hasInpiCreds && (!resolvedNom || !resolvedPrenom)) {
+    try {
+      const inpi = await fetchInpiData(siren)
+      const mandataire = inpi?.mandatairePrincipal
+      if (mandataire) {
+        if (!resolvedNom && mandataire.nom) {
+          result.contact_nom = mandataire.nom
+          resolvedNom = mandataire.nom
+        }
+        if (!resolvedPrenom && mandataire.prenoms) {
+          const cleaned = cleanFirstName(mandataire.prenoms)
+          if (cleaned) {
+            result.contact_prenom = cleaned
+            resolvedPrenom = cleaned
+          }
+        }
+        if (!existingContact.contact_poste && !result.contact_poste && mandataire.qualite) {
+          result.contact_poste = mandataire.qualite
+        }
+        console.log(
+          JSON.stringify({
+            level: 'info',
+            module: 'contact-enrichment',
+            msg: 'INPI: dirigeant trouvé (fallback RE)',
+            siren,
+          }),
+        )
+      }
+    } catch (err) {
+      // Non-fatal — INPI peut être down ou auth ratée
+      console.log(
+        JSON.stringify({
+          level: 'warn',
+          module: 'contact-enrichment',
+          msg: 'INPI fetch failed',
+          siren,
+          error: err instanceof Error ? err.message : String(err),
+        }),
+      )
+    }
+  }
+
+  // --------------------------------------------------------
   // SOURCE 2 : PAPPERS (optionnelle — si crédits disponibles)
   // Objectif : téléphone standard + domaine web
   // --------------------------------------------------------
@@ -1294,6 +1349,66 @@ export async function enrichirContact(
         raison_sociale: raisonSociale,
       }),
     )
+  }
+
+  // --------------------------------------------------------
+  // SOURCE 4.5 : EMAIL PATTERN + DNS MX (gratuit illimité)
+  //
+  // Si Hunter n'a pas trouvé d'email mais qu'on a (prenom, nom, domain) :
+  //   1. Vérifier que le domain accepte du mail (MX record via Node dns)
+  //   2. Générer le pattern le plus fréquent FR : prenom.nom@domain
+  //   3. Stocker comme contact_email avec marker confidence basse côté logs
+  //
+  // C'est un email PROBABLE non vérifié SMTP. Le consultant validera à
+  // l'envoi (bounce check via Resend). 45% des PME FR utilisent ce pattern.
+  // --------------------------------------------------------
+  if (!resolvedEmail && resolvedDomain && resolvedPrenom && resolvedNom) {
+    try {
+      const mxOk = await hasMxRecord(resolvedDomain)
+      if (mxOk) {
+        const candidates = generateEmailCandidates(
+          resolvedPrenom,
+          resolvedNom,
+          resolvedDomain,
+        )
+        const best = candidates[0]
+        if (best) {
+          result.contact_email = best.email
+          resolvedEmail = best.email
+          console.log(
+            JSON.stringify({
+              level: 'info',
+              module: 'contact-enrichment',
+              msg: 'Email pattern + MX validé (fallback gratuit)',
+              siren,
+              pattern: best.pattern,
+              frequency: best.frequency,
+              mx_valid: true,
+            }),
+          )
+        }
+      } else {
+        console.log(
+          JSON.stringify({
+            level: 'info',
+            module: 'contact-enrichment',
+            msg: 'Domain sans MX record — pattern ignoré',
+            siren,
+            domain: resolvedDomain,
+          }),
+        )
+      }
+    } catch (err) {
+      console.log(
+        JSON.stringify({
+          level: 'warn',
+          module: 'contact-enrichment',
+          msg: 'email-pattern/MX failed',
+          siren,
+          error: err instanceof Error ? err.message : String(err),
+        }),
+      )
+    }
   }
 
   // --------------------------------------------------------
