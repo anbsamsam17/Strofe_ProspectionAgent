@@ -1,7 +1,8 @@
 import { type NextRequest, NextResponse } from 'next/server'
-import { createHmac, timingSafeEqual } from 'crypto'
 
 import { createClient as createAdminClient } from '@supabase/supabase-js'
+
+import { verifyOptOutToken } from '@/lib/auth/opt-out-token'
 
 // ============================================================
 // Opt-out 1 clic — RGPD article 21 (droit d'opposition)
@@ -10,74 +11,11 @@ import { createClient as createAdminClient } from '@supabase/supabase-js'
 // Cliquable depuis tout email de prospection envoyé via Resend.
 // L'insert dans `opt_out` est fait via service_role (pas de session).
 //
-// Génération du token : voir helper `generateOptOutToken` en fin de fichier.
+// Le helper `generateOptOutToken` vit dans `lib/auth/opt-out-token.ts`
+// (Next.js 15 interdit les exports utilitaires depuis un route handler).
 // ============================================================
 
 export const dynamic = 'force-dynamic'
-
-interface OptOutPayload {
-  u: string
-  s?: string
-  e?: string
-  exp: number
-}
-
-function base64urlDecode(input: string): string {
-  const pad = 4 - (input.length % 4)
-  const padded = pad < 4 ? input + '='.repeat(pad) : input
-  const std = padded.replace(/-/g, '+').replace(/_/g, '/')
-  return Buffer.from(std, 'base64').toString('utf-8')
-}
-
-function base64urlEncode(input: string): string {
-  return Buffer.from(input, 'utf-8')
-    .toString('base64')
-    .replace(/\+/g, '-')
-    .replace(/\//g, '_')
-    .replace(/=+$/, '')
-}
-
-function verifyToken(
-  token: string,
-  secret: string,
-): { ok: true; payload: OptOutPayload } | { ok: false; reason: string } {
-  const parts = token.split('.')
-  if (parts.length !== 2) return { ok: false, reason: 'format' }
-
-  const [payloadB64, sigB64] = parts
-
-  const expected = createHmac('sha256', secret)
-    .update(payloadB64)
-    .digest('base64url')
-
-  const expectedBuf = Buffer.from(expected)
-  const providedBuf = Buffer.from(sigB64)
-  if (expectedBuf.length !== providedBuf.length) {
-    return { ok: false, reason: 'signature' }
-  }
-  if (!timingSafeEqual(expectedBuf, providedBuf)) {
-    return { ok: false, reason: 'signature' }
-  }
-
-  let payload: OptOutPayload
-  try {
-    payload = JSON.parse(base64urlDecode(payloadB64)) as OptOutPayload
-  } catch {
-    return { ok: false, reason: 'payload' }
-  }
-
-  if (typeof payload.u !== 'string' || !payload.u) {
-    return { ok: false, reason: 'user' }
-  }
-  if (!payload.s && !payload.e) {
-    return { ok: false, reason: 'target' }
-  }
-  if (typeof payload.exp !== 'number' || payload.exp < Date.now()) {
-    return { ok: false, reason: 'expired' }
-  }
-
-  return { ok: true, payload }
-}
 
 function htmlResponse(body: string, status = 200): NextResponse {
   return new NextResponse(body, {
@@ -113,7 +51,7 @@ export async function GET(
     return htmlResponse(pageError('config'), 500)
   }
 
-  const verified = verifyToken(token, secret)
+  const verified = verifyOptOutToken(token, secret)
   if (!verified.ok) {
     return htmlResponse(pageError(verified.reason), 400)
   }
@@ -155,37 +93,4 @@ export async function GET(
   )
 
   return htmlResponse(pageOK(), 200)
-}
-
-/**
- * Génère un token opt-out signé HMAC pour inclusion dans un email Resend.
- * À importer depuis le module d'envoi d'email (`lib/email/send.ts`).
- *
- * @example
- * const token = generateOptOutToken({ userId, siren, email, ttlDays: 365 })
- * const url = `https://app.strofe.fr/api/opt-out/${token}`
- */
-export function generateOptOutToken(input: {
-  userId: string
-  siren?: string
-  email?: string
-  ttlDays?: number
-}): string {
-  const secret = process.env.OPT_OUT_HMAC_SECRET
-  if (!secret) {
-    throw new Error('OPT_OUT_HMAC_SECRET env non configurée')
-  }
-
-  const ttlMs = (input.ttlDays ?? 365) * 24 * 60 * 60 * 1000
-  const payload: OptOutPayload = {
-    u: input.userId,
-    s: input.siren,
-    e: input.email,
-    exp: Date.now() + ttlMs,
-  }
-
-  const payloadB64 = base64urlEncode(JSON.stringify(payload))
-  const sig = createHmac('sha256', secret).update(payloadB64).digest('base64url')
-
-  return `${payloadB64}.${sig}`
 }
