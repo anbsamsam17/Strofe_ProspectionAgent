@@ -123,6 +123,7 @@ function makeProspect(overrides: Partial<Prospect> = {}): Prospect {
 }
 
 // Colonnes alignées sur la spec utilisateur (cf. app/(dashboard)/pipeline/page.tsx).
+// Migration 017 : 9ᵉ colonne `do_not_contact` (opt-out manuel utilisateur).
 const COLUMNS: { status: KanbanStatus; label: string; color: string }[] = [
   { status: 'sourced', label: 'Pas de contact identifié', color: 'gray' },
   { status: 'qualified', label: 'Qualifié', color: 'blue' },
@@ -132,6 +133,7 @@ const COLUMNS: { status: KanbanStatus; label: string; color: string }[] = [
   { status: 'converted', label: 'Affaire conclue', color: 'emerald' },
   { status: 'rejected', label: 'Sans suite', color: 'red' },
   { status: 'on_hold', label: 'En stand-by', color: 'orange' },
+  { status: 'do_not_contact', label: 'Ne pas contacter', color: 'slate' },
 ]
 
 function emptyByStatus(): Record<KanbanStatus, Prospect[]> {
@@ -146,6 +148,8 @@ function emptyByStatus(): Record<KanbanStatus, Prospect[]> {
     on_hold: [],
     // `rdv` n'est pas une colonne affichée mais reste typé dans ProspectStatus.
     rdv: [],
+    // Migration 017 : opt-out manuel utilisateur.
+    do_not_contact: [],
   } as unknown as Record<KanbanStatus, Prospect[]>
 }
 
@@ -181,7 +185,7 @@ afterEach(() => {
 // ── Tests : Rendu ─────────────────────────────────────────────────────────────
 
 describe('PipelineClient — rendu', () => {
-  it('affiche les 8 colonnes avec leur label localisé', () => {
+  it('affiche les 9 colonnes avec leur label localisé (incl. do_not_contact mig.017)', () => {
     render(<PipelineClient columns={COLUMNS} prospectsByStatus={emptyByStatus()} />)
 
     for (const col of COLUMNS) {
@@ -199,9 +203,9 @@ describe('PipelineClient — rendu', () => {
     ]
     render(<PipelineClient columns={COLUMNS} prospectsByStatus={byStatus} />)
 
-    // 8 colonnes affichées.
+    // 9 colonnes affichées (incl. do_not_contact mig.017).
     const groups = screen.getAllByRole('group')
-    expect(groups).toHaveLength(8)
+    expect(groups).toHaveLength(9)
 
     // Aria-label sur "Qualifié" reflète le count + pluriel.
     expect(
@@ -232,8 +236,8 @@ describe('PipelineClient — rendu', () => {
 
   it('affiche un empty state ("Aucun prospect") dans les colonnes vides', () => {
     render(<PipelineClient columns={COLUMNS} prospectsByStatus={emptyByStatus()} />)
-    // 8 colonnes vides → 8 empty states.
-    expect(screen.getAllByText('Aucun prospect')).toHaveLength(8)
+    // 9 colonnes vides → 9 empty states (incl. do_not_contact mig.017).
+    expect(screen.getAllByText('Aucun prospect')).toHaveLength(9)
   })
 
   it('affiche les cards prospect avec score badge selon les paliers (75+, 50+, <50)', () => {

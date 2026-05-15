@@ -22,6 +22,16 @@ vi.mock('./add-contact-dialog', () => ({
   ),
 }))
 
+// Mock EnrichContactButton — utilise useRouter (next/navigation) qui n'est pas
+// monté dans jsdom hors AppRouterContext. On stub par un bouton inerte.
+vi.mock('./enrich-contact-button', () => ({
+  EnrichContactButton: ({ prospectId }: { prospectId: string }) => (
+    <button type="button" data-testid={`enrich-contact-mock-${prospectId}`}>
+      Vérifier maintenant
+    </button>
+  ),
+}))
+
 import { ContactsList, type ProspectContact } from './contacts-list'
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────

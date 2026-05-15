@@ -18,7 +18,10 @@
 //   HUNTER_API_KEY   — hunter.io, 50 crédits/mois gratuits
 // ============================================================
 
+import type { SupabaseClient } from '@supabase/supabase-js'
+
 import { findLinkedinCompanyUrl } from './linkedin-company'
+import { consumeQuota, refundQuota, type QuotaProvider } from './quotas'
 import { fetchInpiData } from './sources/inpi'
 import {
   generateEmailCandidates,
@@ -71,10 +74,76 @@ const _credits: Record<'pappers' | 'hunter', CreditCounter> = {
 let _pappersDisabled = false
 
 /**
- * Incrémente le compteur et logge un warning si on approche de la limite.
- * Retourne false si la limite est atteinte (appel à bloquer).
+ * Contexte DB pour la persistance des quotas (table `api_quotas`).
+ *
+ * Quand `userId` + `supabase` sont fournis à `enrichirContact()`, on les stocke
+ * ici pour les rendre disponibles aux fetchers profondément imbriqués
+ * (`fetchPappers`, `fetchHunter*`) sans modifier toutes leurs signatures.
+ *
+ * Pattern volontairement minimal — la cascade est séquentielle pour un SIREN
+ * donné, donc pas de course concurrente sur ce slot. L'orchestrateur appelle
+ * `enrichirContact` SÉQUENTIELLEMENT prospect par prospect (cf. orchestrator
+ * `phaseContactEnrichment`), ce qui garantit l'isolation du contexte.
+ *
+ * Rétrocompat : si null, on retombe sur le compteur in-memory `_credits`.
  */
-function consumeCredit(source: 'pappers' | 'hunter'): boolean {
+interface QuotaContext {
+  userId: string
+  supabase: SupabaseClient
+}
+let _currentQuotaContext: QuotaContext | null = null
+
+/**
+ * Tente de consommer 1 crédit auprès du provider donné.
+ *
+ * Comportement :
+ *  1. Si un `QuotaContext` DB est actif → check + incrément via `consumeQuota`
+ *     (persistant, cross-instance, hard stop fiable). Le compteur in-memory
+ *     est incrémenté en parallèle pour cohérence des logs locaux.
+ *  2. Sinon (rétrocompat / pas de DB) → fallback compteur in-memory uniquement.
+ *
+ * Retourne `false` si le quota est épuisé (DB OU mémoire selon le mode).
+ */
+async function consumeCredit(source: 'pappers' | 'hunter'): Promise<boolean> {
+  const ctx = _currentQuotaContext
+
+  // Mode DB : la table api_quotas fait foi (hard stop cross-instance)
+  if (ctx) {
+    const provider = source as QuotaProvider
+    const { ok, remaining } = await consumeQuota(ctx.supabase, ctx.userId, provider, 1)
+    if (!ok) {
+      console.log(
+        JSON.stringify({
+          level: 'warn',
+          module: 'contact-enrichment',
+          msg: `Quota ${source} épuisé (DB) — enrichissement ignoré`,
+          provider,
+          remaining,
+        }),
+      )
+      return false
+    }
+
+    // Cohérence logs : incrémente le compteur local également
+    const counter = _credits[source]
+    if (counter.used < counter.limit) counter.used += 1
+
+    if (counter.used >= counter.warnAt && counter.used < counter.limit) {
+      console.log(
+        JSON.stringify({
+          level: 'warn',
+          module: 'contact-enrichment',
+          msg: `Quota ${source} (DB) : ${remaining} crédits restants`,
+          used: counter.used,
+          limit: counter.limit,
+          remaining,
+        }),
+      )
+    }
+    return true
+  }
+
+  // Mode rétrocompat in-memory
   const counter = _credits[source]
   if (counter.used >= counter.limit) {
     console.log(
@@ -106,6 +175,20 @@ function consumeCredit(source: 'pappers' | 'hunter'): boolean {
   }
 
   return true
+}
+
+/**
+ * Refund 1 crédit DB pour ce provider (no-op en mode in-memory).
+ * Utilisé après un échec API pour ne pas pénaliser le quota persistant.
+ */
+async function refundCredit(source: 'pappers' | 'hunter'): Promise<void> {
+  const ctx = _currentQuotaContext
+  if (!ctx) return
+  await refundQuota(ctx.supabase, ctx.userId, source as QuotaProvider, 1)
+
+  // Cohérence logs locaux
+  const counter = _credits[source]
+  if (counter.used > 0) counter.used -= 1
 }
 
 /** Expose les compteurs courants (pour logging dans l'orchestrateur) */
@@ -467,7 +550,7 @@ async function fetchPappers(siren: string): Promise<PappersResult | null> {
     return null
   }
 
-  if (!consumeCredit('pappers')) return null
+  if (!(await consumeCredit('pappers'))) return null
 
   // BUG-FIX 2026-04-06 : Pappers exige "api_token" (pas "api_key")
   const url = new URL('https://api.pappers.fr/v2/entreprise')
@@ -491,6 +574,8 @@ async function fetchPappers(siren: string): Promise<PappersResult | null> {
       signal: AbortSignal.timeout(10_000),
     })
   } catch (err) {
+    // Refund DB quota : l'appel a échoué sans réponse, on ne pénalise pas le user.
+    await refundCredit('pappers')
     console.log(
       JSON.stringify({
         level: 'warn',
@@ -510,6 +595,9 @@ async function fetchPappers(siren: string): Promise<PappersResult | null> {
     // HTTP 401 = crédits épuisés → désactiver Pappers pour le reste de la session
     if (response.status === 401) {
       _pappersDisabled = true
+      // Refund le crédit DB consommé : Pappers vient de nous dire "tu n'en as plus",
+      // donc cet appel précis n'a pas été facturé côté provider.
+      await refundCredit('pappers')
       console.log(
         JSON.stringify({
           level: 'warn',
@@ -645,7 +733,7 @@ async function fetchHunterDomainSearchByCompany(
   const apiKey = process.env.HUNTER_API_KEY
   if (!apiKey) return null
 
-  if (!consumeCredit('hunter')) return null
+  if (!(await consumeCredit('hunter'))) return null
 
   const url = new URL('https://api.hunter.io/v2/domain-search')
   url.searchParams.set('company', raisonSociale)
@@ -816,7 +904,7 @@ async function fetchHunterDomainSearchByDomain(domain: string): Promise<{
   const apiKey = process.env.HUNTER_API_KEY
   if (!apiKey) return null
 
-  if (!consumeCredit('hunter')) return null
+  if (!(await consumeCredit('hunter'))) return null
 
   const url = new URL('https://api.hunter.io/v2/domain-search')
   url.searchParams.set('domain', domain)
@@ -930,7 +1018,7 @@ async function fetchHunterEmailFinder(
   if (!apiKey) return null
   if (!domain || !firstName || !lastName) return null
 
-  if (!consumeCredit('hunter')) return null
+  if (!(await consumeCredit('hunter'))) return null
 
   const url = new URL('https://api.hunter.io/v2/email-finder')
   url.searchParams.set('domain', domain)
@@ -1028,9 +1116,31 @@ async function fetchHunterEmailFinder(
  * @param siren          - SIREN de l'entreprise (9 chiffres)
  * @param existingContact - Champs contact déjà renseignés (depuis ADEME ou sourcing)
  * @param raisonSociale  - Raison sociale (nécessaire pour Hunter company search)
+ * @param options        - `userId` + `supabase` pour activer la persistance des quotas
+ *                         (table `api_quotas`). Si absent, fallback in-memory (rétrocompat).
  * @returns Champs contact NOUVEAUX uniquement (à merger en DB)
  */
 export async function enrichirContact(
+  siren: string,
+  existingContact: Partial<EnrichedContact>,
+  raisonSociale: string,
+  options?: { userId?: string; supabase?: SupabaseClient },
+): Promise<Partial<EnrichedContact>> {
+  // Configuration du contexte DB pour la durée de cette cascade.
+  // Try/finally pour garantir le reset même en cas d'exception.
+  const hadCtx = options?.userId && options?.supabase
+  if (hadCtx) {
+    _currentQuotaContext = { userId: options!.userId!, supabase: options!.supabase! }
+  }
+
+  try {
+    return await enrichirContactInner(siren, existingContact, raisonSociale)
+  } finally {
+    if (hadCtx) _currentQuotaContext = null
+  }
+}
+
+async function enrichirContactInner(
   siren: string,
   existingContact: Partial<EnrichedContact>,
   raisonSociale: string,

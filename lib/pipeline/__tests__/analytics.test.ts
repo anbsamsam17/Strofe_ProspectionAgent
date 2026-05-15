@@ -26,6 +26,7 @@ function emptyCounts(): Record<ProspectStatus, number> {
     converted: 0,
     rejected: 0,
     on_hold: 0,
+    do_not_contact: 0,
   }
 }
 

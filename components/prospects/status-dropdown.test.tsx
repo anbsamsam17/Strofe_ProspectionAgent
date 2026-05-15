@@ -65,8 +65,37 @@ describe('StatusDropdown — ouverture menu', () => {
 
     expect(trigger).toHaveAttribute('aria-expanded', 'true')
     expect(screen.getByRole('listbox', { name: /Sélectionner un statut CRM/i })).toBeInTheDocument()
-    // 8 statuts disponibles dans le menu.
-    expect(screen.getAllByRole('option')).toHaveLength(8)
+    // 9 statuts disponibles dans le menu (8 historiques + do_not_contact mig.017).
+    expect(screen.getAllByRole('option')).toHaveLength(9)
+  })
+
+  it('expose l\'option "Ne pas contacter" (statut do_not_contact, mig. 017)', () => {
+    render(<StatusDropdown prospectId={PROSPECT_ID} currentStatut="qualified" />)
+    fireEvent.click(screen.getByRole('button', { name: /Statut CRM/i }))
+    expect(screen.getByRole('option', { name: /Ne pas contacter/i })).toBeInTheDocument()
+  })
+
+  it('PATCH avec { statut: "do_not_contact" } au clic sur "Ne pas contacter"', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: () => Promise.resolve({ data: { ok: true } }),
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    render(<StatusDropdown prospectId={PROSPECT_ID} currentStatut="qualified" />)
+    fireEvent.click(screen.getByRole('button', { name: /Statut CRM/i }))
+    fireEvent.click(screen.getByRole('option', { name: /Ne pas contacter/i }))
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        `/api/prospects/${PROSPECT_ID}`,
+        expect.objectContaining({
+          method: 'PATCH',
+          body: JSON.stringify({ statut: 'do_not_contact' }),
+        }),
+      )
+    })
   })
 })
 

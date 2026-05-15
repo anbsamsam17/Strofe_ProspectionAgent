@@ -333,10 +333,17 @@ async function phaseContactEnrichment(
     score_priorite: number | null
   }
 
+  // Migration 017 : on EXCLUT systématiquement les prospects 'do_not_contact'
+  // (opt-out manuel utilisateur — RGPD) ET 'rejected' (tentative non aboutie,
+  // pas la peine de consommer des crédits Pappers/Hunter pour les recontacter).
+  // L'exclusion 'do_not_contact' est CONTRACTUELLE — ne jamais retirer sans
+  // validation produit (cf. .claude/rules/security.md, RGPD opt-out).
   const { data: prospectsRaw, error } = await supabase
     .from('prospects')
     .select('id, siren, raison_sociale, contact_email, contact_telephone, contact_nom, contact_prenom, contact_poste, contact_linkedin, obligation_beges, beges_publie, beges_valide, score_priorite')
     .eq('user_id', run.user_id)
+    .neq('statut', 'do_not_contact')
+    .neq('statut', 'rejected')
     .or('contact_email.is.null,contact_telephone.is.null')
     .order('score_priorite', { ascending: false })
     .limit(150)
@@ -406,7 +413,16 @@ async function phaseContactEnrichment(
 
     let nouveauxChamps: Partial<typeof existingContact>
     try {
-      nouveauxChamps = await enrichirContact(prospect.siren, existingContact, prospect.raison_sociale ?? '')
+      // Passe le contexte (userId + supabase) pour activer la persistance des quotas
+      // via la table `api_quotas` (migration 015). Mode dégradé : si la table n'existe
+      // pas encore ou le client échoue, contact-enrichment.ts retombe sur le compteur
+      // in-memory _credits (rétrocompat). Cf. lib/agent/quotas.ts.
+      nouveauxChamps = await enrichirContact(
+        prospect.siren,
+        existingContact,
+        prospect.raison_sociale ?? '',
+        { userId: run.user_id, supabase },
+      )
     } catch (err) {
       log(run, 'contact_enrichment', `Erreur enrichissement SIREN ${prospect.siren}`, 'warn', {
         siren: prospect.siren,
@@ -555,6 +571,9 @@ async function phaseGeminiScoring(
     .eq('user_id', run.user_id)
     .is('archived_at', null)
     .neq('statut', 'rejected')
+    // Migration 017 : exclure les opt-out manuels — pas de scoring Gemini sur
+    // des prospects qu'on ne contactera jamais (économie de quota + RGPD).
+    .neq('statut', 'do_not_contact')
     .is('gemini_generated_at', null)
     .order('score_priorite', { ascending: false })
     .limit(GEMINI_TOP_N)

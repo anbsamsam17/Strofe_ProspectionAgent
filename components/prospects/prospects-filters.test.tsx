@@ -75,9 +75,9 @@ describe('ProspectsFilters — rendu nominal', () => {
     // Arrange + Act
     render(<ProspectsFilters {...defaultProps} />)
 
-    // Assert : 8 pills de statut présents
+    // Assert : 9 pills de statut présents (8 historiques + do_not_contact mig.017)
     const statutGroup = screen.getByRole('group', { name: /Filtrer par statut/i })
-    expect(within(statutGroup).getAllByRole('button')).toHaveLength(8)
+    expect(within(statutGroup).getAllByRole('button')).toHaveLength(9)
 
     // Assert : input secteur
     expect(screen.getByLabelText(/Secteur/i)).toBeInTheDocument()
@@ -110,6 +110,14 @@ describe('ProspectsFilters — rendu nominal', () => {
     expect(screen.getByRole('button', { name: /Affaire conclue/i })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /Sans suite/i })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /En stand-by/i })).toBeInTheDocument()
+    // Migration 017 : nouveau pill "Ne pas contacter" (opt-out manuel utilisateur).
+    expect(screen.getByRole('button', { name: /Ne pas contacter/i })).toBeInTheDocument()
+  })
+
+  it('click sur "Ne pas contacter" pousse ?statut=do_not_contact', () => {
+    render(<ProspectsFilters {...defaultProps} />)
+    fireEvent.click(screen.getByRole('button', { name: /Ne pas contacter/i }))
+    expect(lastPushedParams().get('statut')).toBe('do_not_contact')
   })
 })
 

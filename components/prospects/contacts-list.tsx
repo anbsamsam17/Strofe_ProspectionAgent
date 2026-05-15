@@ -1,10 +1,17 @@
 import type { Prospect } from '@/lib/types'
 import { AddContactDialog } from './add-contact-dialog'
+import { ContactSourceBadge, type ContactSource } from './contact-source-badge'
+import { EmailProBadge } from './email-pro-badge'
+import { EnrichContactButton } from './enrich-contact-button'
 
 // ── Types locaux ──────────────────────────────────────────────────────────────
 
 /**
- * Contact attaché à un prospect (table prospect_contacts, migration 011).
+ * Contact attaché à un prospect (table prospect_contacts, migration 011 + 015).
+ * Champs `email_is_pro` et `email_verified_at` sont ajoutés par la migration
+ * 015 (enrichment v2) — optionnels pour rester compatibles avec les lignes
+ * pré-migration et les fixtures de tests.
+ *
  * TODO(coord-A): déplacer dans lib/types.ts une fois Agent A à jour.
  */
 export interface ProspectContact {
@@ -19,8 +26,32 @@ export interface ProspectContact {
   linkedin: string | null
   source: string | null
   is_primary: boolean
+  /** Migration 015 — `false` = email perso (gmail, etc.), `true` = pro envoyable. */
+  email_is_pro?: boolean | null
+  /** Migration 015 — timestamp de la dernière vérif SMTP/Hunter. */
+  email_verified_at?: string | null
   created_at: string
   updated_at: string
+}
+
+/**
+ * Mappe un `contact.source` brut (string libre côté DB) vers la valeur
+ * canonique attendue par `<ContactSourceBadge>`. Inconnu / null → 'manual'.
+ *
+ * Tolère les alias historiques (`enrichment` = legacy fallback, `recherche_entreprises`
+ * = ancienne valeur orchestrator, etc.) pour ne pas casser les lignes existantes.
+ */
+function normalizeContactSource(raw: string | null | undefined): ContactSource {
+  if (!raw) return 'manual'
+  const s = raw.toLowerCase().trim()
+  if (s === 're' || s === 'recherche_entreprises' || s === 'recherche-entreprises') return 're'
+  if (s === 'inpi') return 'inpi'
+  if (s === 'bodacc') return 'bodacc'
+  if (s === 'pappers') return 'pappers'
+  if (s === 'hunter' || s === 'hunter-pattern') return 'hunter-pattern'
+  if (s === 'pattern' || s === 'pattern-dns') return 'pattern'
+  if (s === 'ademe' || s === 'enrichment') return 'ademe'
+  return 'manual'
 }
 
 // ── Props ─────────────────────────────────────────────────────────────────────
@@ -56,8 +87,13 @@ function fallbackFromProspect(prospect: Prospect): ProspectContact | null {
     telephone: prospect.contact_telephone ?? null,
     email: prospect.contact_email ?? null,
     linkedin: prospect.contact_linkedin ?? null,
-    source: 'enrichment',
+    // Source 'manual' pour le fallback legacy : on n'a pas de traçabilité
+    // d'enrichissement pour ces lignes pré-migration 011, et `isPro=null`
+    // côté email → l'EmailProBadge ne rend rien (pas de bruit visuel).
+    source: 'manual',
     is_primary: true,
+    email_is_pro: null,
+    email_verified_at: null,
     created_at: prospect.created_at,
     updated_at: prospect.updated_at,
   }
@@ -74,11 +110,14 @@ export function ContactsList({ prospect, contacts }: ContactsListProps) {
 
   return (
     <div className="overflow-hidden rounded-2xl border border-white/[0.08] bg-white/[0.03] backdrop-blur-md shadow-sm">
-      <div className="flex items-center justify-between gap-3 border-b border-white/[0.06] px-6 py-4">
+      <div className="flex flex-wrap items-start justify-between gap-3 border-b border-white/[0.06] px-6 py-4">
         <h2 className="font-mono text-[11px] uppercase tracking-[0.18em] text-cyan-400/80">
           Contacts identifiés{displayed.length > 0 ? ` (${displayed.length})` : ''}
         </h2>
-        <AddContactDialog prospectId={prospect.id} />
+        <div className="flex flex-wrap items-start gap-3">
+          <EnrichContactButton prospectId={prospect.id} />
+          <AddContactDialog prospectId={prospect.id} />
+        </div>
       </div>
       <div className="px-6 py-5">
         {displayed.length > 0 ? (
@@ -112,6 +151,12 @@ function ContactCard({ contact }: { contact: ProspectContact }) {
     .trim()
     .toUpperCase()
     .slice(0, 2)
+
+  const normalizedSource = normalizeContactSource(contact.source)
+  // Pour la rétrocompat fallback legacy (source='enrichment'), on n'a pas
+  // l'info pro vs perso. On laisse `isPro=null` → le badge ne rend rien.
+  const emailIsPro = contact.email_is_pro ?? null
+  const emailVerified = Boolean(contact.email_verified_at)
 
   return (
     <div className="flex gap-3 rounded-xl border border-white/[0.06] bg-white/[0.04] backdrop-blur-md px-5 py-4">
@@ -149,6 +194,15 @@ function ContactCard({ contact }: { contact: ProspectContact }) {
               <span className="inline-flex items-center rounded-full bg-green-500/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-green-300 ring-1 ring-green-500/25">
                 Primaire
               </span>
+            )}
+            {/* Badge source — toujours rendu (au minimum "manual"). Permet de
+                comprendre d'où vient un contact en un coup d'œil. */}
+            <ContactSourceBadge source={normalizedSource} />
+            {/* Badge email pro vs perso — rendu uniquement si l'info est
+                disponible côté DB (migration 015). `null` → composant ne rend
+                rien (fallback legacy non bruyant). */}
+            {contact.email && (
+              <EmailProBadge isPro={emailIsPro} verified={emailVerified} />
             )}
           </div>
         )}

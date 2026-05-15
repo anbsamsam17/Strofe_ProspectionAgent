@@ -932,8 +932,60 @@ async function upsertProspectsBatch(
   let prospectsNew = 0
   let prospectsUpdated = 0
 
-  for (let i = 0; i < scored.length; i += UPSERT_BATCH_SIZE) {
-    const batch = scored.slice(i, i + UPSERT_BATCH_SIZE)
+  // Migration 017 — préservation du statut 'do_not_contact' à l'upsert.
+  // ---------------------------------------------------------------------
+  // L'utilisateur peut avoir basculé un prospect en `do_not_contact` (opt-out
+  // RGPD manuel). L'upsert `onConflict: 'user_id,siren'` écraserait ce statut
+  // par 'qualified' / 'sourced' calculé au scoring. Pour préserver la décision
+  // utilisateur (et rester idempotent), on récupère pour ce user la liste des
+  // SIREN flaggés `do_not_contact` puis on STRIP `statut` (et `priorite`,
+  // éditée manuellement) des payloads concernés. Les autres champs (BEGES,
+  // score, contact) continuent à être rafraîchis normalement.
+  const userIds = new Set(scored.map((p) => p.user_id).filter((u): u is string => Boolean(u)))
+  const doNotContactSirens = new Set<string>()
+  for (const uid of userIds) {
+    const { data, error } = await supabase
+      .from('prospects')
+      .select('siren')
+      .eq('user_id', uid)
+      .eq('statut', 'do_not_contact')
+    if (error) {
+      pushLog(
+        'upsert',
+        'Lecture do_not_contact impossible — risque d\'écrasement statut, on continue best-effort',
+        'warn',
+        { error: error.message, user_id: uid },
+      )
+      continue
+    }
+    for (const row of (data ?? []) as Array<{ siren: string }>) {
+      doNotContactSirens.add(row.siren)
+    }
+  }
+
+  if (doNotContactSirens.size > 0) {
+    pushLog(
+      'upsert',
+      `${doNotContactSirens.size} prospect(s) en do_not_contact — statut préservé`,
+      'info',
+      { count: doNotContactSirens.size },
+    )
+  }
+
+  // Strip `statut` + `priorite` des payloads qui matchent un SIREN do_not_contact.
+  // Pas de mutation in-place — on remplace par une copie nettoyée.
+  const protectedScored: Array<Partial<Prospect>> = scored.map((p) => {
+    if (p.siren && doNotContactSirens.has(p.siren)) {
+      const { statut: _s, priorite: _p, ...rest } = p
+      void _s
+      void _p
+      return rest
+    }
+    return p
+  })
+
+  for (let i = 0; i < protectedScored.length; i += UPSERT_BATCH_SIZE) {
+    const batch = protectedScored.slice(i, i + UPSERT_BATCH_SIZE)
     let upsertError: { message: string } | null = null
 
     const result1 = await supabase

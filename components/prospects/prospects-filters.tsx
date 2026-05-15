@@ -40,6 +40,8 @@ const ALL_STATUTS: { value: StatusFilterValue; label: string; dot: string }[] = 
   { value: 'converted', label: 'Affaire conclue', dot: 'bg-emerald-500' },
   { value: 'rejected', label: 'Sans suite', dot: 'bg-red-500' },
   { value: 'on_hold', label: 'En stand-by', dot: 'bg-orange-500' },
+  // Migration 017 : slate (neutre) — distinct du red 'rejected'.
+  { value: 'do_not_contact', label: 'Ne pas contacter', dot: 'bg-slate-400' },
 ]
 
 const ALL_CONTACT_TYPES: { value: ContactFilterType; label: string }[] = [

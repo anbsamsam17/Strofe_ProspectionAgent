@@ -5,6 +5,13 @@ import { createClient } from '@/lib/supabase/server'
 import type { Prospect, ProspectStatus } from '@/lib/types'
 import { ProspectsFilters } from '@/components/prospects/prospects-filters'
 import { ProspectActionsMenu } from '@/components/prospects/prospect-actions-menu'
+import { DeleteProspectButton } from '@/components/prospects/delete-prospect-button'
+import {
+  BulkDeleteButton,
+  type BulkBegesFilter,
+  type BulkContactFilter,
+  type BulkDeleteFilters,
+} from '@/components/prospects/bulk-delete-button'
 import { buildBegesUrl } from '@/lib/utils/beges-url'
 import { RunStatusBanner } from '@/components/dashboard/run-status-banner'
 import {
@@ -358,7 +365,20 @@ export default async function ProspectsPage({
     Boolean(secteurFilter) ||
     scoreMin > 0 ||
     showArchived ||
-    contactTypes.length > 0
+    contactTypes.length > 0 ||
+    begesFilters.length > 0
+
+  // Filtres pour le BulkDeleteButton — strictement alignés avec la query GET
+  // ci-dessus. Cast safe : statutFilter sort de parseContactTypes/searchParams
+  // et a déjà été validé par la query Supabase (statuts inconnus ignorés).
+  const bulkFilters: BulkDeleteFilters = {
+    statut: statutFilter as ProspectStatus[],
+    secteur: secteurFilter || undefined,
+    score_min: scoreMin > 0 ? scoreMin : undefined,
+    archived: showArchived,
+    contact_type: contactTypes as BulkContactFilter[],
+    beges: begesFilters as BulkBegesFilter[],
+  }
 
   function buildHref(newParams: Record<string, string>) {
     const merged: Record<string, string> = {
@@ -411,6 +431,11 @@ export default async function ProspectsPage({
               </span>
             )}
           </p>
+        </div>
+
+        {/* Actions header — bulk-delete (visible seulement si filtres actifs). */}
+        <div className="flex items-center gap-2">
+          <BulkDeleteButton filters={bulkFilters} count={totalCount} />
         </div>
       </div>
 
@@ -640,6 +665,11 @@ export default async function ProspectsPage({
                       {/* 10. Actions */}
                       <td className="px-4 py-3.5 text-right">
                         <div className="flex items-center justify-end gap-2">
+                          <DeleteProspectButton
+                            prospectId={prospect.id}
+                            prospectName={prospect.raison_sociale}
+                            prospectSiren={prospect.siren}
+                          />
                           <ProspectActionsMenu
                             prospectId={prospect.id}
                             prospectName={prospect.raison_sociale}

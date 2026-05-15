@@ -152,6 +152,17 @@ const COLUMN_STYLES: Record<
     cardHover: 'hover:border-emerald-400/40 hover:shadow-md',
     accent: 'bg-emerald-500',
   },
+  // Migration 017 : slate translucide pour 'do_not_contact'. Volontairement
+  // sobre (≠ rouge 'rejected') — signale un statut "passif" (à ne pas relancer).
+  slate: {
+    header: 'bg-slate-500/10 ring-1 ring-slate-500/20',
+    headerText: 'text-slate-200',
+    dot: 'bg-slate-400',
+    badge: 'bg-slate-500/15 text-slate-200 ring-1 ring-slate-500/25',
+    card: 'border-slate-500/15',
+    cardHover: 'hover:border-slate-400/40 hover:shadow-md',
+    accent: 'bg-slate-500',
+  },
 }
 
 // ── Composant principal ───────────────────────────────────────────────────────

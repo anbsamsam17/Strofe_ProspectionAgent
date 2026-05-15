@@ -65,6 +65,14 @@ const STATUS_OPTIONS: StatusOption[] = [
     dot: 'bg-orange-400',
     badge: 'bg-orange-500/15 text-orange-200 ring-1 ring-orange-500/25',
   },
+  // Migration 017 : opt-out manuel utilisateur — sémantique "ne jamais contacter".
+  // Slate (neutre) délibérément distinct du rouge 'rejected' (refus actif).
+  {
+    value: 'do_not_contact',
+    label: 'Ne pas contacter',
+    dot: 'bg-slate-400',
+    badge: 'bg-slate-500/15 text-slate-200 ring-1 ring-slate-500/25',
+  },
 ]
 
 // ── Props ─────────────────────────────────────────────────────────────────────

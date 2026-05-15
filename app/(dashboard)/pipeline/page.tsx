@@ -34,6 +34,10 @@ const PIPELINE_COLUMNS: { status: KanbanStatus; label: string; color: string }[]
   { status: 'converted', label: 'Affaire conclue', color: 'emerald' },
   { status: 'rejected', label: 'Sans suite', color: 'red' },
   { status: 'on_hold', label: 'En stand-by', color: 'orange' },
+  // Migration 017 : opt-out manuel utilisateur. Couleur slate (neutre) pour la
+  // distinguer du rouge 'rejected' (refus actif). Ces prospects sont exclus
+  // des phases d'enrichissement de contact côté orchestrateur.
+  { status: 'do_not_contact', label: 'Ne pas contacter', color: 'slate' },
 ]
 
 // Statuts chargés côté SSR. On inclut `rdv` pour ne pas perdre les prospects
@@ -51,6 +55,7 @@ const KANBAN_STATUSES: ProspectStatus[] = [
   'converted',
   'rejected',
   'on_hold',
+  'do_not_contact',
 ]
 
 // Tous les statuts attendus dans `countsByStatus` — alignés sur `ProspectStatus`.
@@ -67,6 +72,8 @@ const ALL_STATUSES: readonly ProspectStatus[] = [
   'converted',
   'rejected',
   'on_hold',
+  // Migration 017 : opt-out manuel utilisateur.
+  'do_not_contact',
 ] as const
 
 function emptyCountsByStatus(): Record<ProspectStatus, number> {

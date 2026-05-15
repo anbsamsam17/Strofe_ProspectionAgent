@@ -143,11 +143,25 @@ function makeSupabaseAdminMock(): SupabaseAdminClient {
       }
     }
     if (table === 'prospects') {
+      // .select('siren').eq('user_id', userId)             → dedup initial
+      // .select('siren').eq('user_id', uid).eq('statut',…)  → mig.017 pré-check do_not_contact
+      // Les deux awaits doivent résoudre à `{ data: [], error: null }`.
+      type ProspectsEqChain = {
+        eq: (...args: unknown[]) => ProspectsEqChain
+        then: (resolve: (v: { data: unknown[]; error: null }) => void) => Promise<unknown>
+      }
+      const makeEqChain = (): ProspectsEqChain => {
+        const chain: ProspectsEqChain = {
+          eq: (..._args: unknown[]) => chain,
+          then: (resolve) => {
+            resolve({ data: [], error: null })
+            return Promise.resolve({ data: [], error: null })
+          },
+        }
+        return chain
+      }
       return {
-        // .select('siren').eq('user_id', userId) → liste vide (aucun SIREN exclu)
-        select: vi.fn(() => ({
-          eq: vi.fn().mockResolvedValue({ data: [], error: null }),
-        })),
+        select: vi.fn(() => makeEqChain()),
         // .upsert(...).select('id,created_at,updated_at') → renvoie liste vide
         upsert: vi.fn(() => ({
           select: vi.fn().mockResolvedValue({ data: [], error: null }),

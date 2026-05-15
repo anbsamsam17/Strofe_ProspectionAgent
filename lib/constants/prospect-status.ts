@@ -29,6 +29,8 @@ export const STATUS_LABELS: Record<ProspectStatus, string> = {
   converted: 'Affaire conclue',
   rejected: 'Sans suite',
   on_hold: 'En stand-by',
+  // Migration 017 : opt-out manuel utilisateur. Sémantique "ne jamais contacter".
+  do_not_contact: 'Ne pas contacter',
 }
 
 /**
@@ -54,6 +56,8 @@ const STATUS_COLOR: Record<ProspectStatus, string> = {
   converted: 'emerald',
   rejected: 'red',
   on_hold: 'orange',
+  // slate = neutre, distinct du red 'rejected' (qui reste pour les refus actifs).
+  do_not_contact: 'slate',
 }
 
 export interface StatusStyle {
@@ -104,6 +108,11 @@ export const STATUS_STYLES_SOLID: Record<ProspectStatus, StatusStyle> = {
     badge: 'bg-orange-950 text-orange-400',
     dot: 'bg-orange-500',
   },
+  // Migration 017 : slate — neutre, distinct visuellement du rouge 'rejected'.
+  do_not_contact: {
+    badge: 'bg-slate-800/60 text-slate-300',
+    dot: 'bg-slate-400',
+  },
 }
 
 /**
@@ -146,6 +155,11 @@ export const STATUS_STYLES_SOFT: Record<ProspectStatus, StatusStyle> = {
   on_hold: {
     badge: 'bg-orange-950 text-orange-400',
     dot: 'bg-orange-500',
+  },
+  // Migration 017 : slate — neutre, distinct visuellement du rouge 'rejected'.
+  do_not_contact: {
+    badge: 'bg-slate-800/60 text-slate-300',
+    dot: 'bg-slate-400',
   },
 }
 

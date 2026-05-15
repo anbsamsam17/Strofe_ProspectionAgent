@@ -169,25 +169,27 @@ function mockSupabaseAdminClient(
   const from = vi.fn((table: string) => {
     const tableConfig = config[table] ?? {}
 
-    // SELECT branch : .select(...).eq(...).single() OU .select(...).eq(...)
+    // SELECT branch : .select(...).eq(...).single() OU .select(...).eq(...) OU
+    // .select(...).eq(...).eq(...) (mig.017 — upsertProspectsBatch pré-check
+    // do_not_contact filtre par user_id ET statut).
     const select = vi.fn((_cols?: string) => {
       const selectResponse: ChainableResult = tableConfig.selectResponse ?? { data: null, error: null }
-      const eqChain = {
-        eq: vi.fn().mockReturnThis(),
+      interface EqChain {
+        eq: Mock
+        single: Mock
+        then: (resolve: (v: ChainableResult) => void) => Promise<ChainableResult>
+      }
+      const eqChain: EqChain = {
+        eq: vi.fn(),
         single: vi.fn().mockResolvedValue(selectResponse),
         then: (resolve: (v: ChainableResult) => void) => {
           resolve(selectResponse)
           return Promise.resolve(selectResponse)
         },
       }
-      // Permet à `await supabase.from(t).select(...).eq(...)` de résoudre directement
-      return new Proxy(eqChain, {
-        get(target, prop) {
-          if (prop in target) return (target as unknown as Record<string | symbol, unknown>)[prop]
-          if (prop === 'then') return target.then
-          return undefined
-        },
-      })
+      // `.eq()` retourne la chaîne pour permettre chainage `.eq().eq()` et résolution `await`.
+      eqChain.eq = vi.fn(() => eqChain)
+      return eqChain
     })
     selectByTable[table] = select
 
@@ -750,12 +752,25 @@ describe('runPipelineSourcing — persistance sourcing_state (Cat. C)', () => {
     }))
     // Override la table prospects pour le upsert
     const originalFrom = (client as unknown as { from: Mock }).from
+    // Mig.017 : la chaîne select doit supporter `.eq().eq()` (filtre user_id + statut do_not_contact).
+    type ProspectsEqChain = {
+      eq: (...args: unknown[]) => ProspectsEqChain
+      then: (resolve: (v: { data: unknown[]; error: null }) => void) => Promise<unknown>
+    }
+    const makeChainable = (): ProspectsEqChain => {
+      const chain: ProspectsEqChain = {
+        eq: (..._args: unknown[]) => chain,
+        then: (resolve) => {
+          resolve({ data: [], error: null })
+          return Promise.resolve({ data: [], error: null })
+        },
+      }
+      return chain
+    }
     ;(client as unknown as { from: Mock }).from = vi.fn((table: string) => {
       if (table === 'prospects') {
         return {
-          select: vi.fn(() => ({
-            eq: vi.fn().mockResolvedValue({ data: [], error: null }),
-          })),
+          select: vi.fn(() => makeChainable()),
           upsert: upsertWithThrow,
         }
       }

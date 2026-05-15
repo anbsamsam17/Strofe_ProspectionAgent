@@ -14,8 +14,10 @@ import { createClient } from '@/lib/supabase/server'
 import { GlanPortrait } from '@/components/glan/glan-portrait'
 import { GlanTimeline } from '@/components/glan/glan-timeline'
 import { GlanLogStream } from '@/components/glan/glan-log-stream'
+import { QuotaWidget } from '@/components/glan/quota-widget'
 import { GlassCard } from '@/components/ui/glass-card'
 import { EmptyState } from '@/components/ui/empty-state'
+import { getAllQuotas, QUOTA_LIMITS, QUOTA_PROVIDERS } from '@/lib/agent/quotas'
 import type { AgentRun } from '@/lib/types'
 
 export const metadata = {
@@ -70,6 +72,31 @@ export default async function GlanPage() {
   const runs = ((rawRuns ?? []) as unknown) as AgentRun[]
   const lastRun = runs[0] ?? null
 
+  // Quotas API du mois (Pappers / Hunter / INPI / Google CSE) — getAllQuotas
+  // crée les lignes manquantes via upsert (jamais d'exception), donc on récupère
+  // toujours 4 entrées même pour un user qui n'a jamais lancé d'enrichissement.
+  // Mode dégradé en cas d'erreur DB : on rend 4 quotas neutres à 0 (toujours
+  // 4 cellules visibles, jamais de section vide à l'écran).
+  let quotas: Awaited<ReturnType<typeof getAllQuotas>>
+  try {
+    quotas = await getAllQuotas(supabase, user.id)
+  } catch {
+    quotas = []
+  }
+
+  if (quotas.length === 0) {
+    const now = new Date()
+    const monthStart = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`
+    quotas = QUOTA_PROVIDERS.map((provider) => ({
+      provider,
+      used: 0,
+      remaining: QUOTA_LIMITS[provider],
+      limit: QUOTA_LIMITS[provider],
+      monthStart,
+      exhausted: false,
+    }))
+  }
+
   return (
     <div className="mx-auto max-w-5xl space-y-6">
       {/* En-tête */}
@@ -101,6 +128,9 @@ export default async function GlanPage() {
           </p>
         </div>
       </header>
+
+      {/* Quotas API d'enrichissement — mois en cours */}
+      <QuotaWidget quotas={quotas} />
 
       {/* Run le plus récent */}
       {lastRun ? (

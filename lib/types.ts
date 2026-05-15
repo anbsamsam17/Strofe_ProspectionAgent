@@ -18,6 +18,15 @@ export type ProspectStatus =
   | 'converted'
   | 'rejected'
   | 'on_hold'
+  /**
+   * NEW (migration 017) : opt-out manuel utilisateur — sémantique "ne jamais
+   * contacter". DIFFÉRENT de `rejected` (tentative non aboutie). Les prospects
+   * en `do_not_contact` sont exclus des phases d'enrichissement contact et de
+   * la daily list. Le statut est préservé par l'upsert du sourcing (idempotence).
+   * TODO(types): régénérer lib/supabase/database.types.ts après application en DB :
+   *   `npx supabase gen types typescript --project-id <id> > lib/supabase/database.types.ts`
+   */
+  | 'do_not_contact'
 
 export type CallResult =
   | 'interested'
