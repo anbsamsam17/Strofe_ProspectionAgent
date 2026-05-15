@@ -1,10 +1,3 @@
-// ============================================================
-// TYPES GÉNÉRÉS DEPUIS LE SCHEMA SUPABASE
-// Format : @supabase/postgrest-js v2 (Relationships obligatoire par table)
-// Regénérer après chaque migration avec :
-//   npx supabase gen types typescript --project-id <id> > lib/supabase/database.types.ts
-// ============================================================
-
 export type Json =
   | string
   | number
@@ -14,216 +7,343 @@ export type Json =
   | Json[]
 
 export type Database = {
+  // Allows to automatically instantiate createClient with right options
+  // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
+  __InternalSupabase: {
+    PostgrestVersion: "14.5"
+  }
   public: {
     Tables: {
+      agent_runs: {
+        Row: {
+          completed_at: string | null
+          error_message: string | null
+          id: string
+          list_generated: boolean
+          logs: Json
+          phase: string | null
+          prospects_new: number | null
+          prospects_qualified: number
+          prospects_sourced: number
+          prospects_updated: number | null
+          sirene_curseur_final: string | null
+          sirene_debut_final: number | null
+          sirene_pages_loaded: number | null
+          sirene_total_available: number | null
+          started_at: string
+          status: Database["public"]["Enums"]["agent_run_status"]
+          user_id: string
+        }
+        Insert: {
+          completed_at?: string | null
+          error_message?: string | null
+          id?: string
+          list_generated?: boolean
+          logs?: Json
+          phase?: string | null
+          prospects_new?: number | null
+          prospects_qualified?: number
+          prospects_sourced?: number
+          prospects_updated?: number | null
+          sirene_curseur_final?: string | null
+          sirene_debut_final?: number | null
+          sirene_pages_loaded?: number | null
+          sirene_total_available?: number | null
+          started_at?: string
+          status?: Database["public"]["Enums"]["agent_run_status"]
+          user_id: string
+        }
+        Update: {
+          completed_at?: string | null
+          error_message?: string | null
+          id?: string
+          list_generated?: boolean
+          logs?: Json
+          phase?: string | null
+          prospects_new?: number | null
+          prospects_qualified?: number
+          prospects_sourced?: number
+          prospects_updated?: number | null
+          sirene_curseur_final?: string | null
+          sirene_debut_final?: number | null
+          sirene_pages_loaded?: number | null
+          sirene_total_available?: number | null
+          started_at?: string
+          status?: Database["public"]["Enums"]["agent_run_status"]
+          user_id?: string
+        }
+        Relationships: []
+      }
+      api_quotas: {
+        Row: {
+          created_at: string
+          id: string
+          limit_count: number
+          month_start: string
+          provider: string
+          updated_at: string
+          used_count: number
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          limit_count: number
+          month_start: string
+          provider: string
+          updated_at?: string
+          used_count?: number
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          limit_count?: number
+          month_start?: string
+          provider?: string
+          updated_at?: string
+          used_count?: number
+          user_id?: string
+        }
+        Relationships: []
+      }
+      daily_list_items: {
+        Row: {
+          accroche: string | null
+          call_notes: string | null
+          call_result: Database["public"]["Enums"]["call_result"] | null
+          callback_date: string | null
+          called_at: string | null
+          contact_type: Database["public"]["Enums"]["contact_type"]
+          created_at: string
+          daily_list_id: string
+          id: string
+          meilleur_creneau: string | null
+          objections_reponses: Json
+          ordre: number
+          pitch: string | null
+          priorite: Database["public"]["Enums"]["call_priority"]
+          prospect_id: string
+          signaux_detectes: Json
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          accroche?: string | null
+          call_notes?: string | null
+          call_result?: Database["public"]["Enums"]["call_result"] | null
+          callback_date?: string | null
+          called_at?: string | null
+          contact_type?: Database["public"]["Enums"]["contact_type"]
+          created_at?: string
+          daily_list_id: string
+          id?: string
+          meilleur_creneau?: string | null
+          objections_reponses?: Json
+          ordre: number
+          pitch?: string | null
+          priorite?: Database["public"]["Enums"]["call_priority"]
+          prospect_id: string
+          signaux_detectes?: Json
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          accroche?: string | null
+          call_notes?: string | null
+          call_result?: Database["public"]["Enums"]["call_result"] | null
+          callback_date?: string | null
+          called_at?: string | null
+          contact_type?: Database["public"]["Enums"]["contact_type"]
+          created_at?: string
+          daily_list_id?: string
+          id?: string
+          meilleur_creneau?: string | null
+          objections_reponses?: Json
+          ordre?: number
+          pitch?: string | null
+          priorite?: Database["public"]["Enums"]["call_priority"]
+          prospect_id?: string
+          signaux_detectes?: Json
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "daily_list_items_daily_list_id_fkey"
+            columns: ["daily_list_id"]
+            isOneToOne: false
+            referencedRelation: "daily_lists"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "daily_list_items_prospect_id_fkey"
+            columns: ["prospect_id"]
+            isOneToOne: false
+            referencedRelation: "prospects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      daily_lists: {
+        Row: {
+          created_at: string
+          date: string
+          generated_at: string | null
+          id: string
+          notified_at: string | null
+          status: Database["public"]["Enums"]["daily_list_status"]
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          date: string
+          generated_at?: string | null
+          id?: string
+          notified_at?: string | null
+          status?: Database["public"]["Enums"]["daily_list_status"]
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          date?: string
+          generated_at?: string | null
+          id?: string
+          notified_at?: string | null
+          status?: Database["public"]["Enums"]["daily_list_status"]
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      opt_out: {
+        Row: {
+          created_at: string
+          email: string | null
+          id: string
+          reason: string | null
+          siren: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          email?: string | null
+          id?: string
+          reason?: string | null
+          siren?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          email?: string | null
+          id?: string
+          reason?: string | null
+          siren?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
-          id: string
-          email: string | null
-          full_name: string | null
-          company_name: string | null
           avatar_url: string | null
-          settings: Json
-          onboarded: boolean
-          sourcing_state: Json
+          company_name: string | null
           created_at: string
+          full_name: string | null
+          id: string
+          onboarded: boolean
+          settings: Json
+          sourcing_state: Json
           updated_at: string
         }
         Insert: {
-          id: string
-          email?: string | null
-          full_name?: string | null
-          company_name?: string | null
           avatar_url?: string | null
-          settings?: Json
-          onboarded?: boolean
-          sourcing_state?: Json
+          company_name?: string | null
           created_at?: string
+          full_name?: string | null
+          id: string
+          onboarded?: boolean
+          settings?: Json
+          sourcing_state?: Json
           updated_at?: string
         }
         Update: {
-          id?: string
-          email?: string | null
-          full_name?: string | null
-          company_name?: string | null
           avatar_url?: string | null
-          settings?: Json
+          company_name?: string | null
+          created_at?: string
+          full_name?: string | null
+          id?: string
           onboarded?: boolean
+          settings?: Json
           sourcing_state?: Json
           updated_at?: string
         }
         Relationships: []
       }
-      prospects: {
-        Row: {
-          id: string
-          user_id: string
-          siren: string
-          siret: string | null
-          raison_sociale: string
-          secteur_naf: string | null
-          secteur_libelle: string | null
-          effectif_min: number | null
-          effectif_max: number | null
-          ville: string | null
-          code_postal: string | null
-          adresse: string | null
-          contact_nom: string | null
-          contact_prenom: string | null
-          contact_poste: string | null
-          contact_telephone: string | null
-          contact_email: string | null
-          contact_linkedin: string | null
-          contact_linkedin_entreprise: string | null
-          beges_publie: boolean
-          beges_derniere_publication: string | null
-          obligation_beges: boolean
-          score_priorite: number
-          score_details: Json
-          signaux: Json
-          statut: string
-          source: string
-          enriched_at: string | null
-          archived_at: string | null
-          notes: string | null
-          priorite: string
-          /** Migration 014 — score Gemini 0-100, null si non scoré. */
-          gemini_score: number | null
-          /** Migration 014 — JSONB array de 3-5 raisons commerciales. */
-          gemini_raisons: Json | null
-          /** Migration 014 — horodatage ISO de génération Gemini. */
-          gemini_generated_at: string | null
-          created_at: string
-          updated_at: string
-        }
-        Insert: {
-          id?: string
-          user_id: string
-          siren: string
-          siret?: string | null
-          raison_sociale: string
-          secteur_naf?: string | null
-          secteur_libelle?: string | null
-          effectif_min?: number | null
-          effectif_max?: number | null
-          ville?: string | null
-          code_postal?: string | null
-          adresse?: string | null
-          contact_nom?: string | null
-          contact_prenom?: string | null
-          contact_poste?: string | null
-          contact_telephone?: string | null
-          contact_email?: string | null
-          contact_linkedin?: string | null
-          contact_linkedin_entreprise?: string | null
-          beges_publie?: boolean
-          beges_derniere_publication?: string | null
-          obligation_beges?: boolean
-          score_priorite?: number
-          score_details?: Json
-          signaux?: Json
-          statut?: string
-          /** Migration 009 — defaut DB 'moyenne'. */
-          priorite?: string
-          source?: string
-          enriched_at?: string | null
-          archived_at?: string | null
-          notes?: string | null
-          /** Migration 014 — initialement NULL, peuplé par Agent N3. */
-          gemini_score?: number | null
-          gemini_raisons?: Json | null
-          gemini_generated_at?: string | null
-          created_at?: string
-          updated_at?: string
-        }
-        Update: {
-          siren?: string
-          siret?: string | null
-          raison_sociale?: string
-          secteur_naf?: string | null
-          secteur_libelle?: string | null
-          effectif_min?: number | null
-          effectif_max?: number | null
-          ville?: string | null
-          code_postal?: string | null
-          adresse?: string | null
-          contact_nom?: string | null
-          contact_prenom?: string | null
-          contact_poste?: string | null
-          contact_telephone?: string | null
-          contact_email?: string | null
-          contact_linkedin?: string | null
-          contact_linkedin_entreprise?: string | null
-          beges_publie?: boolean
-          beges_derniere_publication?: string | null
-          obligation_beges?: boolean
-          score_priorite?: number
-          score_details?: Json
-          signaux?: Json
-          statut?: string
-          /** Migration 009. */
-          priorite?: string
-          enriched_at?: string | null
-          archived_at?: string | null
-          notes?: string | null
-          /** Migration 014 — mise à jour par Agent N3 (re-scoring Gemini). */
-          gemini_score?: number | null
-          gemini_raisons?: Json | null
-          gemini_generated_at?: string | null
-          updated_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "prospects_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "users"
-            referencedColumns: ["id"]
-          }
-        ]
-      }
-      // daily_lists et daily_list_items supprimées — migration 014_drop_daily_lists_and_rename.sql
       prospect_contacts: {
         Row: {
-          id: string
-          user_id: string
-          prospect_id: string
-          nom: string | null
-          prenom: string | null
-          poste: string | null
-          telephone: string | null
-          email: string | null
-          linkedin: string | null
-          source: string | null
-          is_primary: boolean
           created_at: string
+          email: string | null
+          email_confidence: number | null
+          email_is_pro: boolean
+          email_status: string | null
+          email_verified_at: string | null
+          id: string
+          is_primary: boolean
+          last_enriched_at: string | null
+          linkedin: string | null
+          nom: string | null
+          poste: string | null
+          prenom: string | null
+          prospect_id: string
+          source: string | null
+          source_chain: Json
+          telephone: string | null
           updated_at: string
+          user_id: string
         }
         Insert: {
-          id?: string
-          user_id: string
-          prospect_id: string
-          nom?: string | null
-          prenom?: string | null
-          poste?: string | null
-          telephone?: string | null
-          email?: string | null
-          linkedin?: string | null
-          source?: string | null
-          is_primary?: boolean
           created_at?: string
+          email?: string | null
+          email_confidence?: number | null
+          email_is_pro?: boolean
+          email_status?: string | null
+          email_verified_at?: string | null
+          id?: string
+          is_primary?: boolean
+          last_enriched_at?: string | null
+          linkedin?: string | null
+          nom?: string | null
+          poste?: string | null
+          prenom?: string | null
+          prospect_id: string
+          source?: string | null
+          source_chain?: Json
+          telephone?: string | null
           updated_at?: string
+          user_id: string
         }
         Update: {
-          nom?: string | null
-          prenom?: string | null
-          poste?: string | null
-          telephone?: string | null
+          created_at?: string
           email?: string | null
-          linkedin?: string | null
-          source?: string | null
+          email_confidence?: number | null
+          email_is_pro?: boolean
+          email_status?: string | null
+          email_verified_at?: string | null
+          id?: string
           is_primary?: boolean
+          last_enriched_at?: string | null
+          linkedin?: string | null
+          nom?: string | null
+          poste?: string | null
+          prenom?: string | null
+          prospect_id?: string
+          source?: string | null
+          source_chain?: Json
+          telephone?: string | null
           updated_at?: string
+          user_id?: string
         }
         Relationships: [
           {
@@ -233,47 +353,44 @@ export type Database = {
             referencedRelation: "prospects"
             referencedColumns: ["id"]
           },
-          {
-            foreignKeyName: "prospect_contacts_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "users"
-            referencedColumns: ["id"]
-          }
         ]
       }
       prospect_exchanges: {
         Row: {
-          id: string
-          user_id: string
-          prospect_id: string
-          occurred_at: string
-          type: string
-          result: string | null
-          notes: string | null
           callback_date: string | null
           created_at: string
+          id: string
+          notes: string | null
+          occurred_at: string
+          prospect_id: string
+          result: string | null
+          type: string
           updated_at: string
+          user_id: string
         }
         Insert: {
-          id?: string
-          user_id: string
-          prospect_id: string
-          occurred_at?: string
-          type: string
-          result?: string | null
-          notes?: string | null
           callback_date?: string | null
           created_at?: string
+          id?: string
+          notes?: string | null
+          occurred_at?: string
+          prospect_id: string
+          result?: string | null
+          type: string
           updated_at?: string
+          user_id: string
         }
         Update: {
-          occurred_at?: string
-          type?: string
-          result?: string | null
-          notes?: string | null
           callback_date?: string | null
+          created_at?: string
+          id?: string
+          notes?: string | null
+          occurred_at?: string
+          prospect_id?: string
+          result?: string | null
+          type?: string
           updated_at?: string
+          user_id?: string
         }
         Relationships: [
           {
@@ -283,84 +400,332 @@ export type Database = {
             referencedRelation: "prospects"
             referencedColumns: ["id"]
           },
-          {
-            foreignKeyName: "prospect_exchanges_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "users"
-            referencedColumns: ["id"]
-          }
         ]
       }
-      agent_runs: {
+      prospects: {
         Row: {
+          adresse: string | null
+          archived_at: string | null
+          beges_derniere_publication: string | null
+          beges_publie: boolean
+          beges_url: string | null
+          beges_valide: boolean | null
+          code_postal: string | null
+          contact_completeness: number | null
+          contact_email: string | null
+          contact_linkedin: string | null
+          contact_linkedin_entreprise: string | null
+          contact_nom: string | null
+          contact_outdated_at: string | null
+          contact_poste: string | null
+          contact_prenom: string | null
+          contact_source_origin: string | null
+          contact_telephone: string | null
+          contact_tier: string | null
+          created_at: string
+          effectif_max: number | null
+          effectif_min: number | null
+          enriched_at: string | null
+          gemini_generated_at: string | null
+          gemini_raisons: Json | null
+          gemini_score: number | null
           id: string
+          last_enrichment_run_at: string | null
+          notes: string | null
+          obligation_beges: boolean
+          priorite: string
+          raison_sociale: string
+          score_details: Json
+          score_priorite: number
+          secteur_libelle: string | null
+          secteur_naf: string | null
+          signaux: Json
+          siren: string
+          siret: string | null
+          source: string
+          statut: Database["public"]["Enums"]["prospect_status"]
+          updated_at: string
           user_id: string
-          status: string
-          phase: string | null
-          prospects_sourced: number
-          prospects_qualified: number
-          prospects_new: number | null
-          prospects_updated: number | null
-          sirene_total_available: number | null
-          sirene_pages_loaded: number | null
-          sirene_debut_final: number | null
-          sirene_curseur_final: string | null
-          list_generated: boolean
-          error_message: string | null
-          logs: Json
-          started_at: string
-          completed_at: string | null
+          ville: string | null
         }
         Insert: {
+          adresse?: string | null
+          archived_at?: string | null
+          beges_derniere_publication?: string | null
+          beges_publie?: boolean
+          beges_url?: string | null
+          beges_valide?: boolean | null
+          code_postal?: string | null
+          contact_completeness?: number | null
+          contact_email?: string | null
+          contact_linkedin?: string | null
+          contact_linkedin_entreprise?: string | null
+          contact_nom?: string | null
+          contact_outdated_at?: string | null
+          contact_poste?: string | null
+          contact_prenom?: string | null
+          contact_source_origin?: string | null
+          contact_telephone?: string | null
+          contact_tier?: string | null
+          created_at?: string
+          effectif_max?: number | null
+          effectif_min?: number | null
+          enriched_at?: string | null
+          gemini_generated_at?: string | null
+          gemini_raisons?: Json | null
+          gemini_score?: number | null
           id?: string
+          last_enrichment_run_at?: string | null
+          notes?: string | null
+          obligation_beges?: boolean
+          priorite?: string
+          raison_sociale: string
+          score_details?: Json
+          score_priorite?: number
+          secteur_libelle?: string | null
+          secteur_naf?: string | null
+          signaux?: Json
+          siren: string
+          siret?: string | null
+          source?: string
+          statut?: Database["public"]["Enums"]["prospect_status"]
+          updated_at?: string
           user_id: string
-          status?: string
-          phase?: string | null
-          prospects_sourced?: number
-          prospects_qualified?: number
-          prospects_new?: number | null
-          prospects_updated?: number | null
-          sirene_total_available?: number | null
-          sirene_pages_loaded?: number | null
-          sirene_debut_final?: number | null
-          sirene_curseur_final?: string | null
-          list_generated?: boolean
-          error_message?: string | null
-          logs?: Json
-          started_at?: string
-          completed_at?: string | null
+          ville?: string | null
         }
         Update: {
-          status?: string
-          phase?: string | null
-          prospects_sourced?: number
-          prospects_qualified?: number
-          prospects_new?: number | null
-          prospects_updated?: number | null
-          sirene_total_available?: number | null
-          sirene_pages_loaded?: number | null
-          sirene_debut_final?: number | null
-          sirene_curseur_final?: string | null
-          list_generated?: boolean
-          error_message?: string | null
-          logs?: Json
-          completed_at?: string | null
+          adresse?: string | null
+          archived_at?: string | null
+          beges_derniere_publication?: string | null
+          beges_publie?: boolean
+          beges_url?: string | null
+          beges_valide?: boolean | null
+          code_postal?: string | null
+          contact_completeness?: number | null
+          contact_email?: string | null
+          contact_linkedin?: string | null
+          contact_linkedin_entreprise?: string | null
+          contact_nom?: string | null
+          contact_outdated_at?: string | null
+          contact_poste?: string | null
+          contact_prenom?: string | null
+          contact_source_origin?: string | null
+          contact_telephone?: string | null
+          contact_tier?: string | null
+          created_at?: string
+          effectif_max?: number | null
+          effectif_min?: number | null
+          enriched_at?: string | null
+          gemini_generated_at?: string | null
+          gemini_raisons?: Json | null
+          gemini_score?: number | null
+          id?: string
+          last_enrichment_run_at?: string | null
+          notes?: string | null
+          obligation_beges?: boolean
+          priorite?: string
+          raison_sociale?: string
+          score_details?: Json
+          score_priorite?: number
+          secteur_libelle?: string | null
+          secteur_naf?: string | null
+          signaux?: Json
+          siren?: string
+          siret?: string | null
+          source?: string
+          statut?: Database["public"]["Enums"]["prospect_status"]
+          updated_at?: string
+          user_id?: string
+          ville?: string | null
         }
-        Relationships: [
-          {
-            foreignKeyName: "agent_runs_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "users"
-            referencedColumns: ["id"]
-          }
-        ]
+        Relationships: []
       }
     }
-    Views: { [_ in never]: never }
-    Functions: { [_ in never]: never }
-    Enums: { [_ in never]: never }
-    CompositeTypes: { [_ in never]: never }
+    Views: {
+      [_ in never]: never
+    }
+    Functions: {
+      show_limit: { Args: never; Returns: number }
+      show_trgm: { Args: { "": string }; Returns: string[] }
+    }
+    Enums: {
+      agent_run_status: "running" | "completed" | "failed"
+      call_priority: "haute" | "normale" | "basse"
+      call_result:
+        | "interested"
+        | "callback"
+        | "not_interested"
+        | "wrong_contact"
+        | "no_answer"
+        | "voicemail"
+        | "email_sent"
+        | "no_contact_point"
+      contact_type: "rse" | "daf" | "drh" | "dg" | "autre"
+      daily_list_status: "pending" | "generating" | "ready" | "completed"
+      prospect_status:
+        | "sourced"
+        | "qualified"
+        | "contacted"
+        | "interested"
+        | "rdv"
+        | "converted"
+        | "rejected"
+        | "on_hold"
+        | "offer_sent"
+        | "do_not_contact"
+    }
+    CompositeTypes: {
+      [_ in never]: never
+    }
   }
 }
+
+type DatabaseWithoutInternals = Omit<Database, "__InternalSupabase">
+
+type DefaultSchema = DatabaseWithoutInternals[Extract<keyof Database, "public">]
+
+export type Tables<
+  DefaultSchemaTableNameOrOptions extends
+    | keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
+    | { schema: keyof DatabaseWithoutInternals },
+  TableName extends DefaultSchemaTableNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
+        DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
+    : never = never,
+> = DefaultSchemaTableNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
+      DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])[TableName] extends {
+      Row: infer R
+    }
+    ? R
+    : never
+  : DefaultSchemaTableNameOrOptions extends keyof (DefaultSchema["Tables"] &
+        DefaultSchema["Views"])
+    ? (DefaultSchema["Tables"] &
+        DefaultSchema["Views"])[DefaultSchemaTableNameOrOptions] extends {
+        Row: infer R
+      }
+      ? R
+      : never
+    : never
+
+export type TablesInsert<
+  DefaultSchemaTableNameOrOptions extends
+    | keyof DefaultSchema["Tables"]
+    | { schema: keyof DatabaseWithoutInternals },
+  TableName extends DefaultSchemaTableNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
+    : never = never,
+> = DefaultSchemaTableNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"][TableName] extends {
+      Insert: infer I
+    }
+    ? I
+    : never
+  : DefaultSchemaTableNameOrOptions extends keyof DefaultSchema["Tables"]
+    ? DefaultSchema["Tables"][DefaultSchemaTableNameOrOptions] extends {
+        Insert: infer I
+      }
+      ? I
+      : never
+    : never
+
+export type TablesUpdate<
+  DefaultSchemaTableNameOrOptions extends
+    | keyof DefaultSchema["Tables"]
+    | { schema: keyof DatabaseWithoutInternals },
+  TableName extends DefaultSchemaTableNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
+    : never = never,
+> = DefaultSchemaTableNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"][TableName] extends {
+      Update: infer U
+    }
+    ? U
+    : never
+  : DefaultSchemaTableNameOrOptions extends keyof DefaultSchema["Tables"]
+    ? DefaultSchema["Tables"][DefaultSchemaTableNameOrOptions] extends {
+        Update: infer U
+      }
+      ? U
+      : never
+    : never
+
+export type Enums<
+  DefaultSchemaEnumNameOrOptions extends
+    | keyof DefaultSchema["Enums"]
+    | { schema: keyof DatabaseWithoutInternals },
+  EnumName extends DefaultSchemaEnumNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
+    : never = never,
+> = DefaultSchemaEnumNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"][EnumName]
+  : DefaultSchemaEnumNameOrOptions extends keyof DefaultSchema["Enums"]
+    ? DefaultSchema["Enums"][DefaultSchemaEnumNameOrOptions]
+    : never
+
+export type CompositeTypes<
+  PublicCompositeTypeNameOrOptions extends
+    | keyof DefaultSchema["CompositeTypes"]
+    | { schema: keyof DatabaseWithoutInternals },
+  CompositeTypeName extends PublicCompositeTypeNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
+    : never = never,
+> = PublicCompositeTypeNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"][CompositeTypeName]
+  : PublicCompositeTypeNameOrOptions extends keyof DefaultSchema["CompositeTypes"]
+    ? DefaultSchema["CompositeTypes"][PublicCompositeTypeNameOrOptions]
+    : never
+
+export const Constants = {
+  public: {
+    Enums: {
+      agent_run_status: ["running", "completed", "failed"],
+      call_priority: ["haute", "normale", "basse"],
+      call_result: [
+        "interested",
+        "callback",
+        "not_interested",
+        "wrong_contact",
+        "no_answer",
+        "voicemail",
+        "email_sent",
+        "no_contact_point",
+      ],
+      contact_type: ["rse", "daf", "drh", "dg", "autre"],
+      daily_list_status: ["pending", "generating", "ready", "completed"],
+      prospect_status: [
+        "sourced",
+        "qualified",
+        "contacted",
+        "interested",
+        "rdv",
+        "converted",
+        "rejected",
+        "on_hold",
+        "offer_sent",
+        "do_not_contact",
+      ],
+    },
+  },
+} as const

@@ -315,30 +315,13 @@ async function phaseContactEnrichment(
 
   // Charger jusqu'à 150 prospects sans contact complet (vs 10 + score>70 avant).
   // On récupère aussi obligation_beges/beges_publie/beges_valide pour computer le tier.
-  // Cast `as unknown as ProspectRow[]` : beges_valide (migration 004) n'est pas
-  // encore dans database.types.ts régénéré. À nettoyer après `npx supabase gen types`.
-  type ProspectRow = {
-    id: string
-    siren: string | null
-    raison_sociale: string | null
-    contact_email: string | null
-    contact_telephone: string | null
-    contact_nom: string | null
-    contact_prenom: string | null
-    contact_poste: string | null
-    contact_linkedin: string | null
-    obligation_beges: boolean | null
-    beges_publie: boolean | null
-    beges_valide: boolean | null
-    score_priorite: number | null
-  }
-
+  //
   // Migration 017 : on EXCLUT systématiquement les prospects 'do_not_contact'
   // (opt-out manuel utilisateur — RGPD) ET 'rejected' (tentative non aboutie,
   // pas la peine de consommer des crédits Pappers/Hunter pour les recontacter).
   // L'exclusion 'do_not_contact' est CONTRACTUELLE — ne jamais retirer sans
   // validation produit (cf. .claude/rules/security.md, RGPD opt-out).
-  const { data: prospectsRaw, error } = await supabase
+  const { data: prospects, error } = await supabase
     .from('prospects')
     .select('id, siren, raison_sociale, contact_email, contact_telephone, contact_nom, contact_prenom, contact_poste, contact_linkedin, obligation_beges, beges_publie, beges_valide, score_priorite')
     .eq('user_id', run.user_id)
@@ -347,8 +330,6 @@ async function phaseContactEnrichment(
     .or('contact_email.is.null,contact_telephone.is.null')
     .order('score_priorite', { ascending: false })
     .limit(150)
-
-  const prospects = (prospectsRaw ?? []) as unknown as ProspectRow[]
 
   if (error) {
     log(run, 'contact_enrichment', 'Impossible de charger les prospects à enrichir', 'warn', {

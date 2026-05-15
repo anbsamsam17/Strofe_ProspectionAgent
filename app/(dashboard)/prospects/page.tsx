@@ -272,7 +272,28 @@ export default async function ProspectsPage({
   // Tri par défaut : score décroissant — c'est l'axe principal de l'app.
   const sortCol = (params.sort as SortableColumn) ?? 'score_priorite'
   const sortOrderAsc = params.order === 'asc'
-  const statutFilter = params.statut ? params.statut.split(',') : []
+  // Statuts valides post-migration 017 (ENUM prospect_status).
+  // Filtre defensive : on retire silencieusement les valeurs URL qui ne
+  // correspondent pas à un statut connu (anti-fuzzing).
+  const VALID_STATUTS: readonly ProspectStatus[] = [
+    'sourced',
+    'qualified',
+    'contacted',
+    'interested',
+    'rdv',
+    'offer_sent',
+    'converted',
+    'rejected',
+    'on_hold',
+    'do_not_contact',
+  ]
+  const statutFilter: ProspectStatus[] = params.statut
+    ? params.statut
+        .split(',')
+        .filter((s): s is ProspectStatus =>
+          (VALID_STATUTS as readonly string[]).includes(s),
+        )
+    : []
   const secteurFilter = params.secteur ?? ''
   const scoreMin = params.score_min ? parseInt(params.score_min, 10) : 0
   const showArchived = params.archived === '1'

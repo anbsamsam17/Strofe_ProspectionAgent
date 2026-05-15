@@ -24,8 +24,16 @@ interface Kpis {
 
 // ── Constantes ────────────────────────────────────────────────────────────────
 
-const QUALIFIED_PLUS = ['qualified', 'contacted', 'interested', 'rdv', 'converted'] as const
-const RDV_PLUS = ['rdv', 'converted'] as const
+import type { ProspectStatus } from '@/lib/types'
+
+const QUALIFIED_PLUS: readonly ProspectStatus[] = [
+  'qualified',
+  'contacted',
+  'interested',
+  'rdv',
+  'converted',
+]
+const RDV_PLUS: readonly ProspectStatus[] = ['rdv', 'converted']
 
 const MS_PER_SECOND = 1000
 
@@ -171,20 +179,20 @@ export async function KpiCards({ range }: KpiCardsProps) {
         supabase
           .from('prospects')
           .select('id', { count: 'exact', head: true })
-          .in('statut', QUALIFIED_PLUS as unknown as string[]),
+          .in('statut', QUALIFIED_PLUS),
       ),
       windowStart === null
         ? getCount(() =>
             supabase
               .from('prospects')
               .select('id', { count: 'exact', head: true })
-              .in('statut', RDV_PLUS as unknown as string[]),
+              .in('statut', RDV_PLUS),
           )
         : getCount(() =>
             supabase
               .from('prospects')
               .select('id', { count: 'exact', head: true })
-              .in('statut', RDV_PLUS as unknown as string[])
+              .in('statut', RDV_PLUS)
               .gte('created_at', windowStart),
           ),
       getCount(() =>
