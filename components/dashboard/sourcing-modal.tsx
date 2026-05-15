@@ -372,75 +372,73 @@ export function SourcingModal({ isOpen, onClose }: SourcingModalProps) {
           style={{ maxHeight: 'calc(100vh - 4rem)' }}
         >
           {/* En-tête */}
-          <div className="border-b border-white/[0.06] px-6 py-5 dark:border-gray-800">
-            <div className="flex items-start justify-between gap-3">
-              <div className="flex items-center gap-3">
-                <span className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-green-100 text-green-600 dark:bg-green-950/60 dark:text-green-400">
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    width="20"
-                    height="20"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    aria-hidden="true"
-                  >
-                    <circle cx="11" cy="11" r="8" />
-                    <line x1="21" y1="21" x2="16.65" y2="16.65" />
-                  </svg>
-                </span>
-                <div>
-                  <h2
-                    id="sourcing-modal-title"
-                    className="text-base font-semibold text-white"
-                  >
-                    {view === 'results'
-                      ? 'Résultats du sourcing'
-                      : view === 'running'
-                        ? 'Recherche en cours'
-                        : 'Lancer une recherche de prospects'}
-                  </h2>
-                  <p
-                    id="sourcing-modal-description"
-                    className="mt-0.5 text-xs text-gray-400"
-                  >
-                    {view === 'results'
-                      ? 'Récapitulatif du run.'
-                      : view === 'running'
-                        ? 'Peut prendre jusqu\'à 5 minutes.'
-                        : 'Paramétrez les critères de ciblage pour l\'agent de sourcing.'}
-                  </p>
-                </div>
-              </div>
-
-              {/* Bouton fermer — désactivé pendant le run */}
-              <button
-                ref={firstFocusableRef}
-                onClick={handleClose}
-                disabled={isLoading}
-                aria-label="Fermer la modal"
-                className="flex-shrink-0 rounded-lg p-1.5 text-gray-400 transition-colors hover:bg-white/[0.06] hover:text-white focus:outline-none focus:ring-2 focus:ring-green-500 disabled:cursor-not-allowed"
-              >
+          <div className="relative border-b border-white/[0.06] px-6 py-5 pr-14 dark:border-gray-800">
+            <div className="flex items-center gap-3">
+              <span className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-green-100 text-green-600 dark:bg-green-950/60 dark:text-green-400">
                 <svg
                   xmlns="http://www.w3.org/2000/svg"
-                  width="16"
-                  height="16"
+                  width="20"
+                  height="20"
                   viewBox="0 0 24 24"
                   fill="none"
                   stroke="currentColor"
-                  strokeWidth="2.5"
+                  strokeWidth="2"
                   strokeLinecap="round"
                   strokeLinejoin="round"
                   aria-hidden="true"
                 >
-                  <line x1="18" y1="6" x2="6" y2="18" />
-                  <line x1="6" y1="6" x2="18" y2="18" />
+                  <circle cx="11" cy="11" r="8" />
+                  <line x1="21" y1="21" x2="16.65" y2="16.65" />
                 </svg>
-              </button>
+              </span>
+              <div className="min-w-0">
+                <h2
+                  id="sourcing-modal-title"
+                  className="text-base font-semibold text-white"
+                >
+                  {view === 'results'
+                    ? 'Résultats du sourcing'
+                    : view === 'running'
+                      ? 'Recherche en cours'
+                      : 'Lancer une recherche de prospects'}
+                </h2>
+                <p
+                  id="sourcing-modal-description"
+                  className="mt-1 text-xs text-gray-400"
+                >
+                  {view === 'results'
+                    ? 'Récapitulatif du run.'
+                    : view === 'running'
+                      ? 'Peut prendre jusqu\'à 5 minutes.'
+                      : 'Paramétrez les critères de ciblage pour l\'agent de sourcing.'}
+                </p>
+              </div>
             </div>
+
+            {/* Bouton fermer — absolute top-right, désactivé pendant le run */}
+            <button
+              ref={firstFocusableRef}
+              onClick={handleClose}
+              disabled={isLoading}
+              aria-label="Fermer la modal"
+              className="absolute right-4 top-4 rounded-lg p-1.5 text-gray-400 transition-colors hover:bg-white/[0.06] hover:text-white focus:outline-none focus:ring-2 focus:ring-green-500 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+              >
+                <line x1="18" y1="6" x2="6" y2="18" />
+                <line x1="6" y1="6" x2="18" y2="18" />
+              </svg>
+            </button>
           </div>
 
           {/* Vues alternées : form / running / results */}
@@ -624,18 +622,18 @@ export function SourcingModal({ isOpen, onClose }: SourcingModalProps) {
 
           {view === 'form' && (
             <form onSubmit={handleSubmit} noValidate className="flex min-h-0 flex-1 flex-col">
-              <div className="flex-1 overflow-y-auto px-6 py-5">
-                <div className="space-y-5">
+              <div className="flex-1 overflow-y-auto px-6 py-6">
+                <div className="space-y-6">
                   {/* Effectif */}
                   <fieldset>
-                    <legend className="mb-2 text-sm font-medium text-gray-200">
+                    <legend className="mb-2.5 text-sm font-medium text-gray-200">
                       Effectif de l&apos;entreprise
                     </legend>
                     <div className="grid grid-cols-2 gap-3">
-                      <div>
+                      <div className="space-y-1.5">
                         <label
                           htmlFor="effectifMin"
-                          className="mb-1 block text-xs font-medium text-gray-300"
+                          className="block text-xs font-medium text-gray-300"
                         >
                           Minimum
                         </label>
@@ -649,15 +647,15 @@ export function SourcingModal({ isOpen, onClose }: SourcingModalProps) {
                             setFormData((prev) => ({ ...prev, effectifMin: e.target.value }))
                           }
                           disabled={isLoading}
-                          className="w-full rounded-lg border border-white/[0.08] bg-white/[0.04] backdrop-blur-md px-3 py-2 text-sm text-white placeholder-gray-400 transition-colors focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-500/20 disabled:cursor-not-allowed disabled:opacity-60"
+                          className="w-full rounded-lg border border-white/[0.08] bg-white/[0.04] backdrop-blur-md px-3 py-2.5 text-sm text-white placeholder-gray-400 transition-colors focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-500/20 disabled:cursor-not-allowed disabled:opacity-60"
                           required
                           aria-describedby="effectif-hint"
                         />
                       </div>
-                      <div>
+                      <div className="space-y-1.5">
                         <label
                           htmlFor="effectifMax"
-                          className="mb-1 block text-xs font-medium text-gray-300"
+                          className="block text-xs font-medium text-gray-300"
                         >
                           Maximum
                         </label>
@@ -671,19 +669,19 @@ export function SourcingModal({ isOpen, onClose }: SourcingModalProps) {
                             setFormData((prev) => ({ ...prev, effectifMax: e.target.value }))
                           }
                           disabled={isLoading}
-                          className="w-full rounded-lg border border-white/[0.08] bg-white/[0.04] backdrop-blur-md px-3 py-2 text-sm text-white placeholder-gray-400 transition-colors focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-500/20 disabled:cursor-not-allowed disabled:opacity-60"
+                          className="w-full rounded-lg border border-white/[0.08] bg-white/[0.04] backdrop-blur-md px-3 py-2.5 text-sm text-white placeholder-gray-400 transition-colors focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-500/20 disabled:cursor-not-allowed disabled:opacity-60"
                           required
                         />
                       </div>
                     </div>
-                    <p id="effectif-hint" className="mt-1.5 text-xs text-gray-400 dark:text-gray-400">
+                    <p id="effectif-hint" className="mt-2 text-xs text-gray-400 dark:text-gray-400">
                       Entre 1 et 10 000 salariés
                     </p>
                   </fieldset>
 
                   {/* Secteurs cibles */}
                   <fieldset>
-                    <legend className="mb-2 text-sm font-medium text-gray-200">
+                    <legend className="mb-2.5 text-sm font-medium text-gray-200">
                       Secteurs cibles
                       <span className="ml-1.5 text-xs font-normal text-gray-400 dark:text-gray-400">
                         (optionnel — tous si aucun coché)
@@ -697,7 +695,7 @@ export function SourcingModal({ isOpen, onClose }: SourcingModalProps) {
                           <label
                             key={checkboxId}
                             htmlFor={checkboxId}
-                            className={`flex cursor-pointer items-center gap-2.5 rounded-lg border px-3 py-2 text-sm transition-colors ${
+                            className={`flex cursor-pointer items-center gap-3 rounded-lg border px-3 py-2.5 text-sm transition-colors ${
                               isChecked
                                 ? 'border-green-300 bg-green-50 text-green-800 dark:border-green-700 dark:bg-green-950/40 dark:text-green-300'
                                 : 'border-white/10 bg-white/[0.04] backdrop-blur-md text-gray-200 hover:border-white/20 hover:bg-white/[0.06]'
@@ -709,7 +707,7 @@ export function SourcingModal({ isOpen, onClose }: SourcingModalProps) {
                               checked={isChecked}
                               onChange={() => toggleSector(index)}
                               disabled={isLoading}
-                              className="h-3.5 w-3.5 flex-shrink-0 rounded border-gray-300 text-green-600 accent-green-600 focus:ring-green-500 dark:border-gray-600"
+                              className="h-4 w-4 flex-shrink-0 rounded border-gray-300 text-green-600 accent-green-600 focus:ring-green-500 dark:border-gray-600"
                               aria-label={sector.label}
                             />
                             <span className="select-none leading-tight">{sector.label}</span>
@@ -720,10 +718,10 @@ export function SourcingModal({ isOpen, onClose }: SourcingModalProps) {
                   </fieldset>
 
                   {/* Zone géographique */}
-                  <div>
+                  <div className="space-y-1.5">
                     <label
                       htmlFor="targetRegion"
-                      className="mb-1 block text-sm font-medium text-gray-200"
+                      className="block text-sm font-medium text-gray-200"
                     >
                       Zone géographique
                       <span className="ml-1.5 text-xs font-normal text-gray-400 dark:text-gray-400">
@@ -739,11 +737,11 @@ export function SourcingModal({ isOpen, onClose }: SourcingModalProps) {
                       }
                       disabled={isLoading}
                       placeholder="Ex : France, IDF, 75, Nouvelle-Aquitaine (vide = France entière)"
-                      className="w-full rounded-lg border border-white/[0.08] bg-white/[0.04] backdrop-blur-md px-3 py-2 text-sm text-white placeholder-gray-400 transition-colors focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-500/20 disabled:cursor-not-allowed disabled:opacity-60"
+                      className="w-full rounded-lg border border-white/[0.08] bg-white/[0.04] backdrop-blur-md px-3 py-2.5 text-sm text-white placeholder-gray-400 transition-colors focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-500/20 disabled:cursor-not-allowed disabled:opacity-60"
                       maxLength={30}
                       aria-describedby="region-hint"
                     />
-                    <p id="region-hint" className="mt-1.5 text-xs text-gray-400 dark:text-gray-400">
+                    <p id="region-hint" className="mt-1 text-xs text-gray-400 dark:text-gray-400">
                       Code département, label région, ou laisser vide pour France entière
                     </p>
                   </div>

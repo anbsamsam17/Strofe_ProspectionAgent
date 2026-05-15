@@ -78,7 +78,7 @@ export function ProspectNotes({ prospectId, initialNotes }: ProspectNotesProps) 
         rows={5}
         placeholder="Notes libres sur ce prospect (contexte, historique, prochaines actions...)"
         aria-label="Notes sur le prospect"
-        className="w-full rounded-lg border border-white/[0.08] bg-white/[0.04] backdrop-blur-md px-3 py-2 text-sm text-white placeholder:text-gray-400 transition focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-500/20"
+        className="w-full rounded-lg border border-white/[0.08] bg-white/[0.04] backdrop-blur-md px-4 py-3 text-sm leading-relaxed text-white placeholder:text-gray-400 transition focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-500/20"
       />
       <div className="flex items-center justify-between text-xs">
         <span className="flex items-center gap-2 text-gray-400">

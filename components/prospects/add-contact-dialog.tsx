@@ -234,12 +234,12 @@ export function AddContactDialog({ prospectId }: AddContactDialogProps) {
                 placeholder="https://linkedin.com/in/..."
               />
 
-              <label className="flex items-center gap-2 text-sm text-gray-200">
+              <label className="flex items-center gap-3 text-sm text-gray-200">
                 <input
                   type="checkbox"
                   checked={form.is_primary}
                   onChange={(e) => update('is_primary', e.target.checked)}
-                  className="h-4 w-4 rounded border-white/20 bg-white/[0.06] text-green-500 focus:ring-green-500"
+                  className="h-4 w-4 rounded border-white/20 bg-white/[0.06] text-green-500 accent-green-500 focus:ring-2 focus:ring-green-500/40"
                 />
                 Définir comme contact principal
               </label>
@@ -247,25 +247,25 @@ export function AddContactDialog({ prospectId }: AddContactDialogProps) {
               {error && (
                 <p
                   role="alert"
-                  className="rounded-lg bg-red-500/15 px-3 py-2 text-sm text-red-200 ring-1 ring-red-500/25"
+                  className="mt-1.5 rounded-lg bg-red-500/15 px-3 py-2.5 text-sm text-red-200 ring-1 ring-red-500/25"
                 >
                   {error}
                 </p>
               )}
 
-              <div className="flex items-center justify-end gap-2 border-t border-white/[0.06] pt-4">
+              <div className="flex items-center justify-end gap-3 border-t border-white/[0.06] pt-5">
                 <button
                   type="button"
                   onClick={closeDialog}
                   disabled={pending}
-                  className="rounded-lg border border-white/[0.08] bg-white/[0.04] backdrop-blur-md px-4 py-2 text-sm font-medium text-gray-200 transition-colors hover:bg-white/[0.06] disabled:cursor-not-allowed disabled:opacity-50"
+                  className="rounded-lg border border-white/[0.08] bg-white/[0.04] backdrop-blur-md px-4 py-2.5 text-sm font-medium text-gray-200 transition-colors hover:bg-white/[0.06] focus:outline-none focus:ring-2 focus:ring-white/20 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   Annuler
                 </button>
                 <button
                   type="submit"
                   disabled={pending}
-                  className="inline-flex items-center gap-1.5 rounded-lg bg-green-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-50"
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-green-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500/40 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   {pending ? 'Ajout en cours…' : 'Ajouter le contact'}
                 </button>
@@ -298,10 +298,10 @@ function FieldText({
   inputRef?: React.RefObject<HTMLInputElement | null>
 }) {
   return (
-    <div>
+    <div className="space-y-1.5">
       <label
         htmlFor={id}
-        className="mb-1 block font-mono text-[10px] uppercase tracking-[0.18em] text-cyan-400/80"
+        className="block font-mono text-[10px] uppercase tracking-[0.18em] text-cyan-400/80"
       >
         {label}
       </label>
@@ -312,7 +312,7 @@ function FieldText({
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
-        className="w-full rounded-lg border border-white/[0.08] bg-white/[0.04] backdrop-blur-md px-3 py-2 text-sm text-white placeholder:text-gray-400 transition focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-500/20"
+        className="w-full rounded-lg border border-white/[0.08] bg-white/[0.04] backdrop-blur-md px-3 py-2.5 text-sm text-white placeholder:text-gray-400 transition focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-500/20"
       />
     </div>
   )

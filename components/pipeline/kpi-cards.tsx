@@ -6,21 +6,6 @@ import { AnimatedCounter } from '@/components/ui/animated-counter'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-interface ProspectRow {
-  statut: string
-  beges_publie: boolean
-  archived_at: string | null
-  created_at: string
-}
-
-// Post-pivot 2026-05-15 : daily_list_items droppée — source des appels
-// désormais = prospect_exchanges (type='appel').
-interface ExchangeRow {
-  type: string
-  result: string | null
-  occurred_at: string
-}
-
 interface AgentRunRow {
   status: string
   started_at: string
@@ -39,61 +24,60 @@ interface Kpis {
 
 // ── Constantes ────────────────────────────────────────────────────────────────
 
-const QUALIFIED_PLUS: ReadonlySet<string> = new Set([
-  'qualified',
-  'contacted',
-  'interested',
-  'rdv',
-  'converted',
-])
-
-const RDV_PLUS: ReadonlySet<string> = new Set(['rdv', 'converted'])
+const QUALIFIED_PLUS = ['qualified', 'contacted', 'interested', 'rdv', 'converted'] as const
+const RDV_PLUS = ['rdv', 'converted'] as const
 
 const MS_PER_SECOND = 1000
 
-// ── Calculs (purs, testables) ─────────────────────────────────────────────────
+// Limite locale au calcul de la durée moyenne — on garde les N derniers runs
+// complétés. `.limit(N)` est respecté quel que soit max-rows serveur.
+const AVG_RUN_LIMIT = 30
 
-export function computeKpis(
-  prospects: ProspectRow[],
-  exchanges: ExchangeRow[],
+// ── Helpers count exact ───────────────────────────────────────────────────────
+
+/**
+ * Lance une query `select('id', { count: 'exact', head: true })` et renvoie
+ * uniquement le count, sans charger les rows. Contourne la limite PostgREST
+ * `max-rows` (par défaut 1000) qui bride les selects classiques.
+ */
+type CountQueryFn = () => PromiseLike<{ count: number | null; error: { message: string } | null }>
+
+async function getCount(q: CountQueryFn): Promise<{ value: number; error: string | null }> {
+  const { count, error } = await q()
+  if (error) return { value: 0, error: error.message }
+  return { value: count ?? 0, error: null }
+}
+
+// ── Calculs purs (depuis counts pré-agrégés) ──────────────────────────────────
+
+interface KpiCounts {
+  totalCount: number
+  activeCount: number
+  activeDelta: number
+  qualifiedPlusCount: number
+  rdvCountInWindow: number
+  begesPublishedCount: number
+  appelsInWindow: number
+  appelsWithResultInWindow: number
+}
+
+export function computeKpisFromCounts(
+  c: KpiCounts,
   runs: AgentRunRow[],
   windowStartISO: string | null,
 ): Kpis {
   const inWindow = (iso: string): boolean =>
     windowStartISO === null ? true : iso >= windowStartISO
 
-  // 1. Prospects actifs (archived_at IS NULL)
-  const active = prospects.filter((p) => p.archived_at === null)
-  const activeCount = active.length
+  const qualifiedRate =
+    c.totalCount === 0 ? 0 : Math.round((c.qualifiedPlusCount / c.totalCount) * 100)
 
-  // Delta = créés dans la fenêtre — la fenêtre `all` donne 0 (pas pertinent)
-  const activeDelta =
-    windowStartISO === null
-      ? 0
-      : active.filter((p) => inWindow(p.created_at)).length
-
-  // 2. Taux de qualification : qualified+ / total
-  const total = prospects.length
-  const qualifiedPlus = prospects.filter((p) => QUALIFIED_PLUS.has(p.statut)).length
-  const qualifiedRate = total === 0 ? 0 : Math.round((qualifiedPlus / total) * 100)
-
-  // 3. Taux de contact réussi : appels (type='appel') avec résultat / appels totaux.
-  // Source : prospect_exchanges — daily_list_items droppée post-pivot 2026-05-15.
-  const appelsInWindow = exchanges.filter(
-    (ex) => ex.type === 'appel' && inWindow(ex.occurred_at),
-  )
-  const appelsWithResult = appelsInWindow.filter((ex) => ex.result !== null)
   const contactSuccessRate =
-    appelsInWindow.length === 0
+    c.appelsInWindow === 0
       ? 0
-      : Math.round((appelsWithResult.length / appelsInWindow.length) * 100)
+      : Math.round((c.appelsWithResultInWindow / c.appelsInWindow) * 100)
 
-  // 4. RDV pris dans la fenêtre (prospects statut rdv/converted créés dans la fenêtre)
-  const rdvCount = prospects.filter(
-    (p) => RDV_PLUS.has(p.statut) && inWindow(p.created_at),
-  ).length
-
-  // 5. Durée moyenne run (runs completed dans la fenêtre)
+  // Durée moyenne run (runs completed dans la fenêtre)
   const completed = runs.filter(
     (r) =>
       r.status === 'completed' &&
@@ -109,16 +93,15 @@ export function computeKpis(
           return acc + Math.max(0, end - start)
         }, 0) / completed.length
 
-  // 6. BEGES coverage
-  const begesPublished = prospects.filter((p) => p.beges_publie).length
-  const begesCoverage = total === 0 ? 0 : Math.round((begesPublished / total) * 100)
+  const begesCoverage =
+    c.totalCount === 0 ? 0 : Math.round((c.begesPublishedCount / c.totalCount) * 100)
 
   return {
-    activeCount,
-    activeDelta,
+    activeCount: c.activeCount,
+    activeDelta: c.activeDelta,
     qualifiedRate,
     contactSuccessRate,
-    rdvCount,
+    rdvCount: c.rdvCountInWindow,
     avgRunMs,
     begesCoverage,
   }
@@ -139,48 +122,144 @@ interface KpiCardsProps {
 }
 
 export async function KpiCards({ range }: KpiCardsProps) {
-  let kpis: ReturnType<typeof computeKpis>
+  let kpis: Kpis
   try {
     const supabase = await createClient()
     const windowStart = rangeStartISO(range)
 
-    // RLS implicite — pas de filtre user_id.
-    // Supabase coupe par défaut à 1000 rows : on explicite la range jusqu'à 50k
-    // pour que les agrégats KPI restent corrects même avec >1000 prospects.
+    // RLS implicite (auth.uid()) — pas de filtre user_id manuel.
+    //
+    // On utilise EXCLUSIVEMENT des `count: 'exact', head: true` pour les
+    // agrégats : le payload est juste un header Content-Range, sans aucune
+    // contrainte par max-rows. Les comptes restent exacts même au-delà de
+    // 50k prospects.
+    //
+    // 8 counts en parallèle + 1 fetch runs limité à 30 derniers.
+
     const [
-      { data: prospectsRaw, error: pErr },
-      { data: exchangesRaw, error: eErr },
+      totalRes,
+      activeRes,
+      activeDeltaRes,
+      qualifiedPlusRes,
+      rdvInWindowRes,
+      begesPublishedRes,
+      appelsInWindowRes,
+      appelsWithResultRes,
       { data: runsRaw, error: rErr },
     ] = await Promise.all([
-      supabase
-        .from('prospects')
-        .select('statut, beges_publie, archived_at, created_at')
-        .range(0, 49_999),
-      // Post-pivot : source des appels = prospect_exchanges (daily_list_items droppée)
-      supabase
-        .from('prospect_exchanges')
-        .select('type, result, occurred_at')
-        .range(0, 49_999),
+      getCount(() =>
+        supabase
+          .from('prospects')
+          .select('id', { count: 'exact', head: true }),
+      ),
+      getCount(() =>
+        supabase
+          .from('prospects')
+          .select('id', { count: 'exact', head: true })
+          .is('archived_at', null),
+      ),
+      windowStart === null
+        ? Promise.resolve({ value: 0, error: null })
+        : getCount(() =>
+            supabase
+              .from('prospects')
+              .select('id', { count: 'exact', head: true })
+              .is('archived_at', null)
+              .gte('created_at', windowStart),
+          ),
+      getCount(() =>
+        supabase
+          .from('prospects')
+          .select('id', { count: 'exact', head: true })
+          .in('statut', QUALIFIED_PLUS as unknown as string[]),
+      ),
+      windowStart === null
+        ? getCount(() =>
+            supabase
+              .from('prospects')
+              .select('id', { count: 'exact', head: true })
+              .in('statut', RDV_PLUS as unknown as string[]),
+          )
+        : getCount(() =>
+            supabase
+              .from('prospects')
+              .select('id', { count: 'exact', head: true })
+              .in('statut', RDV_PLUS as unknown as string[])
+              .gte('created_at', windowStart),
+          ),
+      getCount(() =>
+        supabase
+          .from('prospects')
+          .select('id', { count: 'exact', head: true })
+          .eq('beges_publie', true),
+      ),
+      windowStart === null
+        ? getCount(() =>
+            supabase
+              .from('prospect_exchanges')
+              .select('id', { count: 'exact', head: true })
+              .eq('type', 'appel'),
+          )
+        : getCount(() =>
+            supabase
+              .from('prospect_exchanges')
+              .select('id', { count: 'exact', head: true })
+              .eq('type', 'appel')
+              .gte('occurred_at', windowStart),
+          ),
+      windowStart === null
+        ? getCount(() =>
+            supabase
+              .from('prospect_exchanges')
+              .select('id', { count: 'exact', head: true })
+              .eq('type', 'appel')
+              .not('result', 'is', null),
+          )
+        : getCount(() =>
+            supabase
+              .from('prospect_exchanges')
+              .select('id', { count: 'exact', head: true })
+              .eq('type', 'appel')
+              .not('result', 'is', null)
+              .gte('occurred_at', windowStart),
+          ),
       supabase
         .from('agent_runs')
         .select('status, started_at, completed_at')
-        .range(0, 9_999),
+        .order('started_at', { ascending: false })
+        .limit(AVG_RUN_LIMIT),
     ])
 
-    if (pErr || eErr || rErr) {
-      console.error('[KpiCards] Supabase query error', {
-        prospects_error: pErr?.message,
-        exchanges_error: eErr?.message,
-        runs_error: rErr?.message,
-      })
-      return <KpiCardsError reason={pErr?.message ?? eErr?.message ?? rErr?.message ?? 'unknown'} />
+    const firstErr =
+      totalRes.error ??
+      activeRes.error ??
+      activeDeltaRes.error ??
+      qualifiedPlusRes.error ??
+      rdvInWindowRes.error ??
+      begesPublishedRes.error ??
+      appelsInWindowRes.error ??
+      appelsWithResultRes.error ??
+      rErr?.message ??
+      null
+
+    if (firstErr) {
+      console.error('[KpiCards] Supabase query error', { error: firstErr })
+      return <KpiCardsError reason={firstErr} />
     }
 
-    const prospects = (prospectsRaw ?? []) as unknown as ProspectRow[]
-    const exchanges = (exchangesRaw ?? []) as unknown as ExchangeRow[]
-    const runs = (runsRaw ?? []) as unknown as AgentRunRow[]
+    const counts: KpiCounts = {
+      totalCount: totalRes.value,
+      activeCount: activeRes.value,
+      activeDelta: activeDeltaRes.value,
+      qualifiedPlusCount: qualifiedPlusRes.value,
+      rdvCountInWindow: rdvInWindowRes.value,
+      begesPublishedCount: begesPublishedRes.value,
+      appelsInWindow: appelsInWindowRes.value,
+      appelsWithResultInWindow: appelsWithResultRes.value,
+    }
 
-    kpis = computeKpis(prospects, exchanges, runs, windowStart)
+    const runs = (runsRaw ?? []) as unknown as AgentRunRow[]
+    kpis = computeKpisFromCounts(counts, runs, windowStart)
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
     console.error('[KpiCards] Render error', { message: msg, stack: err instanceof Error ? err.stack : undefined })
@@ -241,7 +320,6 @@ export async function KpiCards({ range }: KpiCardsProps) {
         label="Durée run moyenne"
         value={formatDuration(kpis.avgRunMs)}
         sublabel="Plus court = mieux"
-        inverted
         icon={<IconClock />}
       />
       <KpiCard
@@ -258,52 +336,20 @@ export async function KpiCards({ range }: KpiCardsProps) {
   )
 }
 
-// ── Sous-composant carte ──────────────────────────────────────────────────────
+// ── KpiCard atom ──────────────────────────────────────────────────────────────
 
-const ACCENT_VALUE_GRADIENT: Record<string, string> = {
-  brand: 'bg-gradient-to-br from-white to-green-200 bg-clip-text text-transparent',
-  cyan: 'bg-gradient-to-br from-white to-cyan-200 bg-clip-text text-transparent',
-  violet: 'bg-gradient-to-br from-white to-violet-200 bg-clip-text text-transparent',
-  amber: 'bg-gradient-to-br from-white to-amber-200 bg-clip-text text-transparent',
-}
-
-const ACCENT_LABEL: Record<string, string> = {
-  brand: 'text-green-400/80',
-  cyan: 'text-cyan-400/80',
-  violet: 'text-violet-400/80',
-  amber: 'text-amber-400/80',
-}
-
-const ACCENT_ICON_BG: Record<string, string> = {
-  brand: 'bg-green-500/10 text-green-400',
-  cyan: 'bg-cyan-500/10 text-cyan-400',
-  violet: 'bg-violet-500/10 text-violet-400',
-  amber: 'bg-amber-500/10 text-amber-400',
-}
+type KpiAccent = 'brand' | 'cyan' | 'violet' | 'amber'
 
 interface KpiCardProps {
   index: number
-  accent: 'brand' | 'cyan' | 'violet' | 'amber'
+  accent: KpiAccent
   label: string
   value: string
-  sublabel: string
-  icon: React.ReactNode
-  deltaPositive?: boolean
-  inverted?: boolean
-  /** Si fourni, anime un compteur 0 → numericValue (avec suffixe optionnel). */
   numericValue?: number
-  /** Suffixe (ex. "%") rendu après le compteur. */
   numericSuffix?: string
-}
-
-// Stagger d'apparition : 6 cards échelonnées toutes les 100ms (~0 à 500ms).
-const STAGGER_DELAY: Record<number, string> = {
-  1: 'animation-delay-100',
-  2: 'animation-delay-200',
-  3: 'animation-delay-300',
-  4: 'animation-delay-400',
-  5: 'animation-delay-500',
-  6: 'animation-delay-500',
+  sublabel: string
+  deltaPositive?: boolean
+  icon: React.ReactNode
 }
 
 function KpiCard({
@@ -311,160 +357,146 @@ function KpiCard({
   accent,
   label,
   value,
-  sublabel,
-  icon,
-  deltaPositive,
-  inverted,
   numericValue,
   numericSuffix,
+  sublabel,
+  deltaPositive,
+  icon,
 }: KpiCardProps) {
-  const paddedIndex = String(index).padStart(2, '0')
-  const staggerClass = STAGGER_DELAY[index] ?? ''
+  const displayValue =
+    numericValue !== undefined ? (
+      <>
+        <AnimatedCounter key={numericValue} value={numericValue} />
+        {numericSuffix}
+      </>
+    ) : (
+      value
+    )
+
   return (
-    <BentoCell
-      accent={accent}
-      className={`p-4 opacity-0 animate-fade-in-up ${staggerClass}`}
-    >
-      <div className="flex items-start justify-between">
-        <span className={`font-mono text-[10px] uppercase tracking-[0.18em] ${ACCENT_LABEL[accent]}`}>
-          [{paddedIndex}] {label}
-        </span>
-        <span
-          aria-hidden="true"
-          className={`flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg ${ACCENT_ICON_BG[accent]}`}
-        >
-          {icon}
-        </span>
-      </div>
-      <p className={`mt-3 text-4xl font-bold tracking-tight tabular-nums ${ACCENT_VALUE_GRADIENT[accent]}`}>
-        {numericValue !== undefined ? (
-          <>
-            {/* key={numericValue} pour rejouer l'animation quand la valeur change. */}
-            <AnimatedCounter key={numericValue} value={numericValue} />
-            {numericSuffix ?? ''}
-          </>
-        ) : (
-          value
-        )}
-      </p>
-      <p
-        className={
-          deltaPositive !== undefined
-            ? deltaPositive
-              ? inverted
-                ? 'mt-1.5 font-mono text-[11px] text-red-400'
-                : 'mt-1.5 font-mono text-[11px] text-green-400'
-              : 'mt-1.5 font-mono text-[11px] text-gray-400'
-            : 'mt-1.5 font-mono text-[11px] text-gray-400'
-        }
+    <BentoCell accent={accent}>
+      <div
+        className="opacity-0 animate-fade-in-up"
+        style={{ animationDelay: `${index * 0.08}s`, animationFillMode: 'forwards' }}
       >
-        {sublabel}
-      </p>
+        <header className="mb-3 flex items-start justify-between gap-3">
+          <p className="min-w-0 flex-1 font-mono text-[10px] uppercase tracking-[0.2em] text-gray-400">
+            [{index.toString().padStart(2, '0')}] {label}
+          </p>
+          <span className="flex-shrink-0" aria-hidden="true">{icon}</span>
+        </header>
+        <p
+          className={`text-4xl font-bold tabular-nums tracking-tight text-white ${
+            deltaPositive ? 'drop-shadow-[0_0_18px_oklch(70%_0.19_152_/_0.45)]' : ''
+          }`}
+        >
+          {displayValue}
+        </p>
+        <p className="mt-2 text-xs text-gray-400">{sublabel}</p>
+      </div>
     </BentoCell>
   )
 }
 
-// ── Fallback erreur (try/catch interne KpiCards) ──────────────────────────────
-
-function KpiCardsError({ reason }: { reason: string }) {
-  return (
-    <div
-      role="alert"
-      className="grid grid-cols-1 gap-3 rounded-2xl border border-amber-500/20 bg-amber-500/5 p-4 sm:grid-cols-2"
-    >
-      <div>
-        <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-amber-400">
-          KPI indisponibles
-        </p>
-        <p className="mt-1 text-sm text-amber-400/80">
-          Le calcul des indicateurs a échoué côté serveur. Le pipeline reste utilisable.
-        </p>
-      </div>
-      <div>
-        <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-amber-400">
-          Diagnostic
-        </p>
-        <p className="mt-1 break-words font-mono text-xs text-amber-500/60">
-          {reason}
-        </p>
-      </div>
-    </div>
-  )
-}
-
-// ── Skeleton (Suspense fallback) ──────────────────────────────────────────────
+// ── Skeleton ──────────────────────────────────────────────────────────────────
 
 export function KpiCardsSkeleton() {
   return (
-    <div
-      className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3"
-      aria-busy="true"
-      aria-label="Chargement des KPI"
-    >
+    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
       {Array.from({ length: 6 }).map((_, i) => (
         <div
           key={i}
-          className="h-[116px] animate-pulse rounded-2xl border border-white/[0.06] bg-white/[0.02]"
-        />
+          className="rounded-2xl border border-white/[0.08] bg-white/[0.03] p-5 backdrop-blur-md"
+        >
+          <div className="mb-3 h-3 w-24 animate-shimmer rounded bg-gradient-to-r from-white/[0.04] via-white/[0.1] to-white/[0.04] bg-[length:200%_100%]" />
+          <div className="h-10 w-32 animate-shimmer rounded bg-gradient-to-r from-white/[0.04] via-white/[0.1] to-white/[0.04] bg-[length:200%_100%]" />
+          <div className="mt-3 h-3 w-40 animate-shimmer rounded bg-gradient-to-r from-white/[0.04] via-white/[0.1] to-white/[0.04] bg-[length:200%_100%]" />
+        </div>
       ))}
     </div>
   )
 }
 
-// ── Icônes SVG inline ─────────────────────────────────────────────────────────
+// ── Fallback error ────────────────────────────────────────────────────────────
+
+function KpiCardsError({ reason }: { reason: string }) {
+  return (
+    <section
+      role="alert"
+      className="rounded-2xl border border-amber-500/30 bg-amber-500/10 p-5 backdrop-blur-md"
+    >
+      <h2 className="text-sm font-semibold uppercase tracking-wider text-amber-300">
+        KPI — indisponibles
+      </h2>
+      <p className="mt-2 text-sm text-amber-200/90">
+        Les indicateurs n&apos;ont pas pu être calculés. Le reste du pipeline reste utilisable.
+      </p>
+      <p className="mt-2 break-words font-mono text-xs text-amber-300/80">{reason}</p>
+    </section>
+  )
+}
+
+// ── Icônes inline ─────────────────────────────────────────────────────────────
 
 function IconBriefcase() {
   return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <rect x="2" y="7" width="20" height="14" rx="2" ry="2" />
-      <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16" />
-    </svg>
+    <span className="rounded-lg bg-green-500/15 p-2 text-green-400 ring-1 ring-green-500/25">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <rect x="2" y="7" width="20" height="14" rx="2" />
+        <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16" />
+      </svg>
+    </span>
   )
 }
-
 function IconTarget() {
   return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <circle cx="12" cy="12" r="10" />
-      <circle cx="12" cy="12" r="6" />
-      <circle cx="12" cy="12" r="2" />
-    </svg>
+    <span className="rounded-lg bg-cyan-500/15 p-2 text-cyan-400 ring-1 ring-cyan-500/25">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <circle cx="12" cy="12" r="10" />
+        <circle cx="12" cy="12" r="6" />
+        <circle cx="12" cy="12" r="2" />
+      </svg>
+    </span>
   )
 }
-
 function IconPhone() {
   return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12a19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 3.5 1h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 8.91a16 16 0 0 0 5.27 5.27l1.17-1.17a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 21.28 15l.64 1.92z" />
-    </svg>
+    <span className="rounded-lg bg-violet-500/15 p-2 text-violet-400 ring-1 ring-violet-500/25">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.37 1.9.72 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.91.35 1.85.59 2.81.72A2 2 0 0 1 22 16.92z" />
+      </svg>
+    </span>
   )
 }
-
 function IconCalendar() {
   return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
-      <line x1="16" y1="2" x2="16" y2="6" />
-      <line x1="8" y1="2" x2="8" y2="6" />
-      <line x1="3" y1="10" x2="21" y2="10" />
-    </svg>
+    <span className="rounded-lg bg-amber-500/15 p-2 text-amber-400 ring-1 ring-amber-500/25">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+        <line x1="16" y1="2" x2="16" y2="6" />
+        <line x1="8" y1="2" x2="8" y2="6" />
+        <line x1="3" y1="10" x2="21" y2="10" />
+      </svg>
+    </span>
   )
 }
-
 function IconClock() {
   return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <circle cx="12" cy="12" r="10" />
-      <polyline points="12 6 12 12 16 14" />
-    </svg>
+    <span className="rounded-lg bg-green-500/15 p-2 text-green-400 ring-1 ring-green-500/25">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <circle cx="12" cy="12" r="10" />
+        <polyline points="12 6 12 12 16 14" />
+      </svg>
+    </span>
   )
 }
-
 function IconLeaf() {
   return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d="M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.48 19.2 2.96c.66 5.95.7 9.97-3.1 13.78A7 7 0 0 1 11 20z" />
-      <path d="M2 21c0-3 1.85-5.36 5.08-6" />
-    </svg>
+    <span className="rounded-lg bg-cyan-500/15 p-2 text-cyan-400 ring-1 ring-cyan-500/25">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <path d="M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.48 19 2c1 2 2 4.18 2 8 0 5.5-4.78 10-10 10z" />
+        <path d="M2 21c0-3 1.85-5.36 5.08-6C9.5 14.52 12 13 13 12" />
+      </svg>
+    </span>
   )
 }

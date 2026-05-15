@@ -309,14 +309,14 @@ function TopSectors({ sectors }: { sectors: SectorStat[] }) {
             >
               {s.label}
             </span>
-            <div className="h-1.5 w-24 overflow-hidden rounded-full bg-white/[0.05] dark:bg-gray-800">
+            <div className="h-1.5 w-24 flex-shrink-0 overflow-hidden rounded-full bg-white/[0.05] dark:bg-gray-800">
               <div
                 className="h-full bg-green-500"
                 style={{ width: `${Math.max(2, s.sharePct)}%` }}
                 aria-hidden="true"
               />
             </div>
-            <span className="w-8 text-right text-xs tabular-nums text-gray-200">
+            <span className="w-8 flex-shrink-0 text-right text-xs tabular-nums text-gray-200">
               {s.count}
             </span>
           </li>

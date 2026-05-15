@@ -62,7 +62,7 @@ function SectionCard({
 
 function InfoRow({ label, value }: { label: string; value: React.ReactNode }) {
   return (
-    <div className="flex flex-col gap-0.5 sm:flex-row sm:gap-4">
+    <div className="flex flex-col gap-2 sm:flex-row sm:gap-4">
       <dt className="w-40 flex-shrink-0 text-sm text-gray-400">{label}</dt>
       <dd className="text-sm font-medium text-white">{value}</dd>
     </div>
@@ -80,15 +80,28 @@ function ScoreRow({
 }) {
   // Contribution pondérée arrondie (sur 100).
   const contribution = Math.round((pillar * weight) / 100)
+  // Pourcentage atteint pour ce pilier (sur sa pondération max).
+  const pct = weight > 0 ? Math.min(100, Math.max(0, (contribution / weight) * 100)) : 0
   return (
-    <div className="flex items-center justify-between gap-3">
-      <dt className="flex items-center gap-2 text-sm text-gray-300">
-        <span>{label}</span>
-        <span className="text-xs text-gray-400">(pondération {weight}%)</span>
-      </dt>
-      <dd className="text-sm font-semibold tabular-nums text-white">
-        {contribution} / {weight} pts
-      </dd>
+    <div className="space-y-1.5">
+      <div className="flex items-center justify-between gap-3">
+        <dt className="flex items-center gap-2 text-sm text-gray-300">
+          <span>{label}</span>
+          <span className="text-xs text-gray-400">(pondération {weight}%)</span>
+        </dt>
+        <dd className="text-sm font-semibold tabular-nums text-white">
+          {contribution} / {weight} pts
+        </dd>
+      </div>
+      <div
+        className="h-1 overflow-hidden rounded-full bg-white/[0.06]"
+        aria-hidden="true"
+      >
+        <div
+          className="h-1 rounded-full bg-gradient-to-r from-green-500 to-emerald-400 transition-all"
+          style={{ width: `${pct}%` }}
+        />
+      </div>
     </div>
   )
 }
@@ -219,19 +232,19 @@ export default async function ProspectDetailPage({ params }: PageProps) {
           Prospects
         </Link>
 
-        <div className="flex flex-wrap items-start gap-4">
+        <div className="flex flex-wrap items-start gap-x-6 gap-y-4">
           <div className="min-w-0 flex-1">
             <h1 className="text-2xl font-bold tracking-tight text-white">
               {prospect.raison_sociale}
             </h1>
             {prospect.siren && (
-              <p className="mt-1 font-mono text-sm tabular-nums text-gray-400">
+              <p className="mt-1.5 font-mono text-sm tabular-nums text-gray-400">
                 SIREN {prospect.siren}
               </p>
             )}
           </div>
 
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2 sm:gap-3">
             <StatusDropdown
               prospectId={prospect.id}
               currentStatut={prospect.statut}
@@ -265,12 +278,14 @@ export default async function ProspectDetailPage({ params }: PageProps) {
             )}
 
             {/* Menu actions secondaires (archiver, supprimer, etc.) */}
-            <ProspectActionsMenu
-              prospectId={prospect.id}
-              prospectName={prospect.raison_sociale}
-              currentStatut={prospect.statut}
-              archived={Boolean(prospect.archived_at)}
-            />
+            <div className="ml-1">
+              <ProspectActionsMenu
+                prospectId={prospect.id}
+                prospectName={prospect.raison_sociale}
+                currentStatut={prospect.statut}
+                archived={Boolean(prospect.archived_at)}
+              />
+            </div>
           </div>
         </div>
       </div>
@@ -359,7 +374,7 @@ export default async function ProspectDetailPage({ params }: PageProps) {
                 <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-cyan-400/80">
                   {'// Décomposition'}
                 </p>
-                <dl className="space-y-2">
+                <dl className="space-y-3">
                   <ScoreRow label="Taille" pillar={scoreDetails.taille ?? 0} weight={weights.taille} />
                   <ScoreRow label="BEGES" pillar={scoreDetails.beges ?? 0} weight={weights.beges} />
                   <ScoreRow label="Contact" pillar={scoreDetails.contact ?? 0} weight={weights.contact} />
@@ -485,40 +500,40 @@ export default async function ProspectDetailPage({ params }: PageProps) {
 
       {/* ── Métadonnées ── */}
       <SectionCard title="Métadonnées">
-        <dl className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <dl className="grid grid-cols-1 gap-4 sm:grid-cols-3">
           <div>
-            <dt className="font-mono text-[10px] uppercase tracking-[0.18em] text-cyan-400/80">
+            <dt className="mb-2 font-mono text-[10px] uppercase tracking-[0.18em] text-cyan-400/80">
               Créé le
             </dt>
-            <dd className="mt-1 text-sm font-medium text-white">
+            <dd className="text-sm font-medium text-white">
               {formatDate(prospect.created_at, { dateStyle: 'long' }) ?? '—'}
             </dd>
           </div>
           {prospect.enriched_at && (
             <div>
-              <dt className="font-mono text-[10px] uppercase tracking-[0.18em] text-amber-400/80">
+              <dt className="mb-2 font-mono text-[10px] uppercase tracking-[0.18em] text-amber-400/80">
                 Enrichi le
               </dt>
-              <dd className="mt-1 text-sm font-medium text-white">
+              <dd className="text-sm font-medium text-white">
                 {formatDate(prospect.enriched_at, { dateStyle: 'long' }) ?? '—'}
               </dd>
             </div>
           )}
           {prospect.archived_at && (
             <div>
-              <dt className="font-mono text-[10px] uppercase tracking-[0.18em] text-orange-400/80">
+              <dt className="mb-2 font-mono text-[10px] uppercase tracking-[0.18em] text-orange-400/80">
                 Archivé le
               </dt>
-              <dd className="mt-1 text-sm font-medium text-white">
+              <dd className="text-sm font-medium text-white">
                 {formatDate(prospect.archived_at, { dateStyle: 'long' }) ?? '—'}
               </dd>
             </div>
           )}
           <div>
-            <dt className="font-mono text-[10px] uppercase tracking-[0.18em] text-cyan-400/80">
+            <dt className="mb-2 font-mono text-[10px] uppercase tracking-[0.18em] text-cyan-400/80">
               Dernière mise à jour
             </dt>
-            <dd className="mt-1 text-sm font-medium text-white">
+            <dd className="text-sm font-medium text-white">
               {formatDate(prospect.updated_at, { dateStyle: 'long' }) ?? '—'}
             </dd>
           </div>

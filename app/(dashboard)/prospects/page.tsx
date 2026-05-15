@@ -155,12 +155,12 @@ function ScoreCell({ score }: { score: number }) {
         : 'bg-gray-600'
 
   return (
-    <div className="flex items-center gap-2">
-      <span className="w-7 text-right font-mono text-sm font-bold tabular-nums text-white">
+    <div className="flex flex-shrink-0 items-center gap-2">
+      <span className="w-7 flex-shrink-0 text-right font-mono text-sm font-bold tabular-nums text-white">
         {score}
       </span>
       <div
-        className="h-1 w-14 overflow-hidden rounded-full bg-white/10"
+        className="h-1 w-14 flex-shrink-0 overflow-hidden rounded-full bg-white/10"
         aria-hidden="true"
       >
         <div
@@ -727,7 +727,7 @@ export default async function ProspectsPage({
                 <Link
                   href={buildHref({ page: String(page - 1) })}
                   aria-label="Page précédente"
-                  className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/[0.04] px-3 py-1.5 font-mono text-xs text-gray-300 transition-colors hover:border-white/20 hover:bg-white/[0.08] hover:text-white"
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/[0.04] px-3 py-2 font-mono text-xs text-gray-300 transition-colors hover:border-white/20 hover:bg-white/[0.08] hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-green-500/40 focus-visible:ring-offset-1 focus-visible:ring-offset-[oklch(11%_0.022_250)]"
                 >
                   <svg
                     xmlns="http://www.w3.org/2000/svg"
@@ -746,7 +746,7 @@ export default async function ProspectsPage({
                   Préc.
                 </Link>
               ) : (
-                <span className="inline-flex cursor-not-allowed items-center gap-1.5 rounded-lg border border-white/[0.05] bg-white/[0.02] px-3 py-1.5 font-mono text-xs text-gray-400">
+                <span className="inline-flex cursor-not-allowed items-center gap-1.5 rounded-lg border border-white/[0.05] bg-white/[0.02] px-3 py-2 font-mono text-xs text-gray-400">
                   <svg
                     xmlns="http://www.w3.org/2000/svg"
                     width="12"
@@ -765,7 +765,7 @@ export default async function ProspectsPage({
                 </span>
               )}
 
-              <span className="rounded-lg bg-green-500/15 px-3 py-1.5 font-mono text-xs font-semibold tabular-nums text-green-300 ring-1 ring-green-500/30">
+              <span className="rounded-lg bg-green-500/15 px-3 py-2 font-mono text-xs font-semibold tabular-nums text-green-300 ring-1 ring-green-500/30">
                 {page}
               </span>
 
@@ -773,7 +773,7 @@ export default async function ProspectsPage({
                 <Link
                   href={buildHref({ page: String(page + 1) })}
                   aria-label="Page suivante"
-                  className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/[0.04] px-3 py-1.5 font-mono text-xs text-gray-300 transition-colors hover:border-white/20 hover:bg-white/[0.08] hover:text-white"
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/[0.04] px-3 py-2 font-mono text-xs text-gray-300 transition-colors hover:border-white/20 hover:bg-white/[0.08] hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-green-500/40 focus-visible:ring-offset-1 focus-visible:ring-offset-[oklch(11%_0.022_250)]"
                 >
                   Suiv.
                   <svg
@@ -792,7 +792,7 @@ export default async function ProspectsPage({
                   </svg>
                 </Link>
               ) : (
-                <span className="inline-flex cursor-not-allowed items-center gap-1.5 rounded-lg border border-white/[0.05] bg-white/[0.02] px-3 py-1.5 font-mono text-xs text-gray-400">
+                <span className="inline-flex cursor-not-allowed items-center gap-1.5 rounded-lg border border-white/[0.05] bg-white/[0.02] px-3 py-2 font-mono text-xs text-gray-400">
                   Suiv.
                   <svg
                     xmlns="http://www.w3.org/2000/svg"

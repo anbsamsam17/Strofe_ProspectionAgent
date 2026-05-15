@@ -142,7 +142,7 @@ export function ProspectActionsMenu({
         aria-expanded={open}
         aria-label={`Actions pour ${prospectName}`}
         disabled={pending}
-        className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-white/[0.08] bg-white/[0.04] backdrop-blur-md text-gray-300 transition-colors hover:border-white/20 hover:bg-white/[0.08] hover:text-white disabled:opacity-60"
+        className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-white/[0.08] bg-white/[0.04] backdrop-blur-md text-gray-300 transition-colors hover:border-white/20 hover:bg-white/[0.08] hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-green-500/40 disabled:opacity-60"
       >
         <svg
           xmlns="http://www.w3.org/2000/svg"

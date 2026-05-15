@@ -208,11 +208,11 @@ export function NewExchangeDialog({ prospectId }: NewExchangeDialogProps) {
               </button>
             </div>
 
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div>
+            <form onSubmit={handleSubmit} className="space-y-5">
+              <div className="space-y-1.5">
                 <label
                   htmlFor="exchange-occurred"
-                  className="mb-1 block font-mono text-[10px] uppercase tracking-[0.18em] text-cyan-400/80"
+                  className="block font-mono text-[10px] uppercase tracking-[0.18em] text-cyan-400/80"
                 >
                   Date et heure
                 </label>
@@ -223,15 +223,15 @@ export function NewExchangeDialog({ prospectId }: NewExchangeDialogProps) {
                   required
                   value={form.occurred_at}
                   onChange={(e) => update('occurred_at', e.target.value)}
-                  className="w-full rounded-lg border border-white/[0.08] bg-white/[0.04] backdrop-blur-md px-3 py-2 text-sm text-white placeholder:text-gray-400 transition focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-500/20"
+                  className="w-full rounded-lg border border-white/[0.08] bg-white/[0.04] backdrop-blur-md px-3 py-2.5 text-sm text-white placeholder:text-gray-400 transition focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-500/20 [color-scheme:dark]"
                 />
               </div>
 
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <div>
+                <div className="space-y-1.5">
                   <label
                     htmlFor="exchange-type"
-                    className="mb-1 block font-mono text-[10px] uppercase tracking-[0.18em] text-cyan-400/80"
+                    className="block font-mono text-[10px] uppercase tracking-[0.18em] text-cyan-400/80"
                   >
                     Type
                   </label>
@@ -239,7 +239,7 @@ export function NewExchangeDialog({ prospectId }: NewExchangeDialogProps) {
                     id="exchange-type"
                     value={form.type}
                     onChange={(e) => update('type', e.target.value as ExchangeType)}
-                    className="w-full rounded-lg border border-white/[0.08] bg-white/[0.04] backdrop-blur-md px-3 py-2 text-sm text-white placeholder:text-gray-400 transition focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-500/20"
+                    className="w-full rounded-lg border border-white/[0.08] bg-white/[0.04] backdrop-blur-md px-3 py-2.5 text-sm text-white placeholder:text-gray-400 transition focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-500/20"
                   >
                     {TYPE_OPTIONS.map((opt) => (
                       <option key={opt.value} value={opt.value}>
@@ -249,10 +249,10 @@ export function NewExchangeDialog({ prospectId }: NewExchangeDialogProps) {
                   </select>
                 </div>
 
-                <div>
+                <div className="space-y-1.5">
                   <label
                     htmlFor="exchange-result"
-                    className="mb-1 block font-mono text-[10px] uppercase tracking-[0.18em] text-cyan-400/80"
+                    className="block font-mono text-[10px] uppercase tracking-[0.18em] text-cyan-400/80"
                   >
                     Résultat
                   </label>
@@ -260,7 +260,7 @@ export function NewExchangeDialog({ prospectId }: NewExchangeDialogProps) {
                     id="exchange-result"
                     value={form.result}
                     onChange={(e) => update('result', e.target.value)}
-                    className="w-full rounded-lg border border-white/[0.08] bg-white/[0.04] backdrop-blur-md px-3 py-2 text-sm text-white placeholder:text-gray-400 transition focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-500/20"
+                    className="w-full rounded-lg border border-white/[0.08] bg-white/[0.04] backdrop-blur-md px-3 py-2.5 text-sm text-white placeholder:text-gray-400 transition focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-500/20"
                   >
                     {RESULT_OPTIONS.map((opt) => (
                       <option key={opt.value} value={opt.value}>
@@ -271,10 +271,10 @@ export function NewExchangeDialog({ prospectId }: NewExchangeDialogProps) {
                 </div>
               </div>
 
-              <div>
+              <div className="space-y-1.5">
                 <label
                   htmlFor="exchange-notes"
-                  className="mb-1 block font-mono text-[10px] uppercase tracking-[0.18em] text-cyan-400/80"
+                  className="block font-mono text-[10px] uppercase tracking-[0.18em] text-cyan-400/80"
                 >
                   Notes
                 </label>
@@ -284,14 +284,14 @@ export function NewExchangeDialog({ prospectId }: NewExchangeDialogProps) {
                   value={form.notes}
                   onChange={(e) => update('notes', e.target.value)}
                   placeholder="Contenu de l'échange, points abordés, prochaines étapes..."
-                  className="w-full rounded-lg border border-white/[0.08] bg-white/[0.04] backdrop-blur-md px-3 py-2 text-sm text-white placeholder:text-gray-400 transition focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-500/20"
+                  className="w-full rounded-lg border border-white/[0.08] bg-white/[0.04] backdrop-blur-md px-3 py-2.5 text-sm leading-relaxed text-white placeholder:text-gray-400 transition focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-500/20"
                 />
               </div>
 
-              <div>
+              <div className="space-y-1.5">
                 <label
                   htmlFor="exchange-callback"
-                  className="mb-1 block font-mono text-[10px] uppercase tracking-[0.18em] text-cyan-400/80"
+                  className="block font-mono text-[10px] uppercase tracking-[0.18em] text-cyan-400/80"
                 >
                   Date de rappel (optionnel)
                 </label>
@@ -300,32 +300,32 @@ export function NewExchangeDialog({ prospectId }: NewExchangeDialogProps) {
                   type="date"
                   value={form.callback_date}
                   onChange={(e) => update('callback_date', e.target.value)}
-                  className="w-full rounded-lg border border-white/[0.08] bg-white/[0.04] backdrop-blur-md px-3 py-2 text-sm text-white placeholder:text-gray-400 transition focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-500/20"
+                  className="w-full rounded-lg border border-white/[0.08] bg-white/[0.04] backdrop-blur-md px-3 py-2.5 text-sm text-white placeholder:text-gray-400 transition focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-500/20 [color-scheme:dark]"
                 />
               </div>
 
               {error && (
                 <p
                   role="alert"
-                  className="rounded-lg bg-red-500/15 px-3 py-2 text-sm text-red-200 ring-1 ring-red-500/25"
+                  className="mt-1.5 rounded-lg bg-red-500/15 px-3 py-2.5 text-sm text-red-200 ring-1 ring-red-500/25"
                 >
                   {error}
                 </p>
               )}
 
-              <div className="flex items-center justify-end gap-2 border-t border-white/[0.06] pt-4">
+              <div className="flex items-center justify-end gap-3 border-t border-white/[0.06] pt-5">
                 <button
                   type="button"
                   onClick={closeDialog}
                   disabled={pending}
-                  className="rounded-lg border border-white/[0.08] bg-white/[0.04] backdrop-blur-md px-4 py-2 text-sm font-medium text-gray-200 transition-colors hover:bg-white/[0.06] disabled:cursor-not-allowed disabled:opacity-50"
+                  className="rounded-lg border border-white/[0.08] bg-white/[0.04] backdrop-blur-md px-4 py-2.5 text-sm font-medium text-gray-200 transition-colors hover:bg-white/[0.06] focus:outline-none focus:ring-2 focus:ring-white/20 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   Annuler
                 </button>
                 <button
                   type="submit"
                   disabled={pending}
-                  className="inline-flex items-center gap-1.5 rounded-lg bg-green-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-50"
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-green-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500/40 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   {pending ? 'Enregistrement…' : "Enregistrer l'échange"}
                 </button>

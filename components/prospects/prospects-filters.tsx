@@ -196,7 +196,7 @@ export function ProspectsFilters({
             <legend className="mb-2.5 text-xs font-semibold uppercase tracking-wider text-gray-300">
               Statut
             </legend>
-            <div className="flex flex-wrap gap-1.5" role="group" aria-label="Filtrer par statut">
+            <div className="flex flex-wrap gap-2" role="group" aria-label="Filtrer par statut">
               {ALL_STATUTS.map(({ value, label, dot }) => {
                 const isActive = statuts.includes(value)
                 return (
@@ -205,7 +205,7 @@ export function ProspectsFilters({
                     type="button"
                     onClick={() => toggleStatut(value)}
                     aria-pressed={isActive}
-                    className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition-all duration-150 ${
+                    className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition-all duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-green-500/40 focus-visible:ring-offset-1 focus-visible:ring-offset-[oklch(11%_0.022_250)] ${
                       isActive
                         ? 'border-green-500 bg-green-50 text-green-700 shadow-sm dark:border-green-600 dark:bg-green-950/50 dark:text-green-400'
                         : 'border-white/10 bg-white/[0.04] backdrop-blur-md text-gray-300 hover:border-white/20 hover:bg-white/[0.06]'
@@ -247,7 +247,7 @@ export function ProspectsFilters({
                 strokeWidth="2"
                 strokeLinecap="round"
                 strokeLinejoin="round"
-                className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
+                className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400"
                 aria-hidden="true"
               >
                 <circle cx="11" cy="11" r="8" />
@@ -261,7 +261,7 @@ export function ProspectsFilters({
                 onKeyDown={handleSecteurKeyDown}
                 onBlur={() => applyFilters(statuts, secteur, scoreMin, archived, contactTypes, begesFilter)}
                 placeholder="ex : Transport..."
-                className="w-full rounded-lg border border-white/[0.08] bg-white/[0.04] backdrop-blur-md py-2 pl-9 pr-3 text-sm text-white placeholder-gray-400 transition focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-500/20"
+                className="w-full rounded-lg border border-white/[0.08] bg-white/[0.04] backdrop-blur-md py-2 pl-10 pr-3 text-sm text-white placeholder-gray-400 transition focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-500/20"
               />
               {isPending && (
                 <svg
@@ -327,7 +327,7 @@ export function ProspectsFilters({
               Contact dispo
             </legend>
             <div
-              className="flex flex-wrap gap-1.5"
+              className="flex flex-wrap gap-2"
               role="group"
               aria-label="Filtrer par canal de contact disponible"
             >
@@ -339,7 +339,7 @@ export function ProspectsFilters({
                     type="button"
                     onClick={() => toggleContactType(value)}
                     aria-pressed={isActive}
-                    className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition-all duration-150 ${
+                    className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition-all duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-green-500/40 focus-visible:ring-offset-1 focus-visible:ring-offset-[oklch(11%_0.022_250)] ${
                       isActive
                         ? 'border-green-500 bg-green-50 text-green-700 shadow-sm dark:border-green-600 dark:bg-green-950/50 dark:text-green-400'
                         : 'border-white/10 bg-white/[0.04] backdrop-blur-md text-gray-300 hover:border-white/20 hover:bg-white/[0.06]'
@@ -469,7 +469,7 @@ export function ProspectsFilters({
             type="button"
             onClick={handleReset}
             aria-label="Réinitialiser tous les filtres"
-            className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium text-gray-300 transition-colors hover:bg-white/[0.06] hover:text-white"
+            className="inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-medium text-gray-300 transition-colors hover:bg-white/[0.06] hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-green-500/40"
           >
             <svg
               xmlns="http://www.w3.org/2000/svg"

@@ -303,9 +303,9 @@ function HowItWorksSection() {
           <h2 className="bg-gradient-to-br from-white to-gray-300 bg-clip-text text-3xl font-bold tracking-tight text-transparent sm:text-4xl">
             Trois étapes, exécutées chaque nuit
           </h2>
-          <p className="mx-auto mt-4 max-w-xl text-sm leading-relaxed text-gray-400">
-            Trois étapes, exécutées chaque nuit, transparentes du début à la
-            fin.
+          <p className="mx-auto mt-4 max-w-2xl text-base leading-relaxed text-gray-300 sm:text-lg">
+            De Sirene au pipeline commercial : trois étapes transparentes, sans
+            boîte noire, exécutées chaque nuit.
           </p>
         </div>
 
@@ -437,6 +437,10 @@ function FeaturesSection() {
           <h2 className="bg-gradient-to-br from-white to-gray-300 bg-clip-text text-3xl font-bold tracking-tight text-transparent sm:text-4xl">
             Sirene, ADEME, scoring, pipeline.
           </h2>
+          <p className="mx-auto mt-4 max-w-2xl text-base leading-relaxed text-gray-300 sm:text-lg">
+            Quatre briques qui couvrent la chaîne complète, de l&apos;identification
+            d&apos;une entreprise soumise à BEGES jusqu&apos;à la conversion.
+          </p>
         </div>
 
         <StaggerChildren
@@ -448,21 +452,22 @@ function FeaturesSection() {
               key={feature.title}
               className={`group relative cursor-default rounded-2xl border border-white/[0.08] bg-white/[0.025] p-7 backdrop-blur-md transition-all duration-300 hover:-translate-y-0.5 hover:border-white/15 ${feature.accentGlow} before:absolute before:inset-x-4 before:top-0 before:h-px ${feature.accentTop}`}
             >
-              {/* Label mono */}
-              <span
-                className={`font-mono text-[10px] uppercase tracking-[0.18em] ${feature.labelColor}`}
-              >
-                {feature.label}
-              </span>
+              {/* Header : label mono à gauche, icône cerclée à droite */}
+              <header className="mb-4 flex items-start justify-between gap-3">
+                <span
+                  className={`font-mono text-[10px] uppercase tracking-[0.18em] ${feature.labelColor}`}
+                >
+                  {feature.label}
+                </span>
+                <span
+                  className={`inline-flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full ${feature.iconAccent} transition-all duration-300 group-hover:ring-2`}
+                  aria-hidden="true"
+                >
+                  {feature.icon}
+                </span>
+              </header>
 
-              {/* Icone */}
-              <div
-                className={`mt-3 inline-flex h-11 w-11 items-center justify-center rounded-xl ${feature.iconAccent} transition-all duration-300 group-hover:ring-2`}
-              >
-                {feature.icon}
-              </div>
-
-              <h3 className="mt-4 text-base font-bold text-white">
+              <h3 className="text-base font-bold text-white">
                 {feature.title}
               </h3>
               <p className="mt-2 text-sm leading-relaxed text-gray-300">
@@ -575,7 +580,7 @@ function CtaSection() {
               {/* Bouton ghost glass */}
               <Link
                 href="/login"
-                className="inline-flex items-center justify-center rounded-xl border border-white/10 bg-white/[0.05] px-7 py-3.5 font-semibold text-gray-200 backdrop-blur transition-all duration-200 hover:-translate-y-0.5 hover:border-white/20 hover:bg-white/[0.06]/[0.10]"
+                className="inline-flex items-center justify-center rounded-xl border border-white/10 bg-white/[0.05] px-7 py-3.5 font-semibold text-gray-200 backdrop-blur transition-all duration-200 hover:-translate-y-0.5 hover:border-white/20 hover:bg-white/[0.08]"
               >
                 Se connecter
               </Link>
@@ -594,41 +599,44 @@ function CtaSection() {
 // ------------------------------------------------------------------ //
 function Footer() {
   return (
-    <footer className="border-t border-white/[0.06] px-6 py-8">
-      <div className="mx-auto flex max-w-5xl flex-col items-center justify-between gap-4 sm:flex-row">
-        {/* Logo Glan */}
-        <div className="flex items-center gap-2.5">
-          <div className="flex h-7 w-7 items-center justify-center rounded-lg border border-green-500/20 bg-green-500/10">
-            <svg
-              className="h-4 w-4 text-green-400"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              strokeWidth={1.8}
-              aria-hidden="true"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="m3.75 13.5 10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75Z"
-              />
-            </svg>
+    <footer className="mt-8 border-t border-white/[0.06] px-6 py-10 lg:px-8">
+      <div className="mx-auto flex max-w-6xl flex-col items-center gap-6 sm:flex-row sm:items-center sm:justify-between">
+        {/* Logo Glan + tagline */}
+        <div className="flex flex-col items-center gap-2 sm:items-start">
+          <div className="flex items-center gap-2.5">
+            <div className="flex h-7 w-7 items-center justify-center rounded-lg border border-green-500/20 bg-green-500/10">
+              <svg
+                className="h-4 w-4 text-green-400"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                strokeWidth={1.8}
+                aria-hidden="true"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="m3.75 13.5 10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75Z"
+                />
+              </svg>
+            </div>
+            <span className="bg-gradient-to-r from-green-400 to-emerald-300 bg-clip-text text-sm font-bold text-transparent">
+              Glan
+            </span>
+            <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-gray-400">
+              by STROFE
+            </span>
           </div>
-          <span className="bg-gradient-to-r from-green-400 to-emerald-300 bg-clip-text text-sm font-bold text-transparent">
-            Glan
-          </span>
-          <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-gray-400">
-            by STROFE
-          </span>
+          <p className="text-xs leading-relaxed text-gray-500">
+            Prospection BEGES, par un agent qui dort la nuit pour vous.
+          </p>
         </div>
 
-        {/* Copyright */}
-        <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-gray-400">
-          &copy; 2026 STROFE
-        </p>
-
         {/* Nav */}
-        <nav className="flex gap-5" aria-label="Liens pied de page">
+        <nav
+          className="flex flex-wrap items-center justify-center gap-x-5 gap-y-2"
+          aria-label="Liens pied de page"
+        >
           <Link
             href="/login"
             className="text-xs text-gray-400 transition-colors duration-150 hover:text-white"
@@ -641,7 +649,18 @@ function Footer() {
           >
             Inscription
           </Link>
+          <a
+            href="mailto:samir.anbri@gmail.com"
+            className="text-xs text-gray-400 transition-colors duration-150 hover:text-white"
+          >
+            Contact
+          </a>
         </nav>
+
+        {/* Copyright */}
+        <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-gray-500">
+          &copy; 2026 STROFE
+        </p>
       </div>
     </footer>
   )

@@ -183,11 +183,11 @@ export function NafCodeMultiSelect({
       {/* ── Groupes suggérés ────────────────────────────────────────── */}
       {showSuggestedGroups && (
         <div className="rounded-2xl border border-white/[0.06] bg-white/[0.02] px-4 py-4">
-          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
             <p className="text-xs font-semibold uppercase tracking-wider text-gray-300">
               Suggérés (prospection B2B BEGES)
             </p>
-            <div className="flex gap-1.5">
+            <div className="flex flex-wrap gap-2">
               <button
                 type="button"
                 onClick={selectAllSuggested}
@@ -262,7 +262,7 @@ export function NafCodeMultiSelect({
         <div className="relative">
           <span
             aria-hidden="true"
-            className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-gray-400"
+            className="pointer-events-none absolute inset-y-0 left-3.5 flex items-center text-gray-400"
           >
             <svg
               xmlns="http://www.w3.org/2000/svg"
@@ -294,7 +294,7 @@ export function NafCodeMultiSelect({
             aria-activedescendant={
               activeIndex >= 0 ? `${listboxId}-opt-${activeIndex}` : undefined
             }
-            className="w-full rounded-lg border border-white/[0.08] bg-white/[0.04] backdrop-blur-md py-2.5 pl-10 pr-3 text-sm text-white placeholder-gray-400 transition-colors duration-150 focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-500/20 disabled:cursor-not-allowed disabled:opacity-60"
+            className="w-full rounded-lg border border-white/[0.08] bg-white/[0.04] backdrop-blur-md py-2.5 pl-11 pr-10 text-sm text-white placeholder-gray-400 transition-colors duration-150 focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-500/20 disabled:cursor-not-allowed disabled:opacity-60"
           />
           {search.length > 0 && (
             <button
@@ -321,7 +321,7 @@ export function NafCodeMultiSelect({
             </button>
           )}
         </div>
-        <p className="mt-1.5 text-xs text-gray-400">
+        <p className="mt-2 text-xs text-gray-400">
           {totalMatching === 0
             ? 'Aucun code ne correspond à votre recherche.'
             : hasOverflow
@@ -408,7 +408,7 @@ export function NafCodeMultiSelect({
       {/* ── Chips sélectionnés ──────────────────────────────────────── */}
       {selectedCount > 0 && (
         <div>
-          <div className="mb-2 flex items-center justify-between gap-2">
+          <div className="mb-2.5 flex items-center justify-between gap-2">
             <p className="text-xs font-semibold uppercase tracking-wider text-gray-300">
               Sélectionnés ({selectedCount})
             </p>
@@ -421,7 +421,7 @@ export function NafCodeMultiSelect({
               Vider la sélection
             </button>
           </div>
-          <ul className="flex flex-wrap gap-1.5" aria-label="Codes NAF sélectionnés">
+          <ul className="flex flex-wrap gap-2" aria-label="Codes NAF sélectionnés">
             {selectedCodes.map((code) => (
               <li key={code}>
                 <span className="inline-flex items-center gap-1 rounded-full bg-green-100 px-2.5 py-1 text-xs font-medium text-green-700 ring-1 ring-green-200 dark:bg-green-950/60 dark:text-green-300 dark:ring-green-900">

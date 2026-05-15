@@ -180,7 +180,7 @@ export function SettingsForm({ initialSettings }: SettingsFormProps) {
       onSubmit={handleSubmit}
       noValidate
       aria-label="Paramètres de l'agent"
-      className="space-y-6"
+      className="space-y-8"
     >
       {/* ── Section : Ciblage commercial — Secteurs ────────────────────────── */}
       <section
@@ -229,11 +229,11 @@ export function SettingsForm({ initialSettings }: SettingsFormProps) {
             Ville, département ou région ciblée, et codes postaux complémentaires.
           </p>
         </header>
-        <div className="space-y-5 px-6 py-5">
-          <div>
+        <div className="space-y-6 px-6 py-6">
+          <div className="space-y-1.5">
             <label
               htmlFor="target_city"
-              className="mb-1.5 block text-sm font-medium text-gray-200"
+              className="block text-sm font-medium text-gray-200"
             >
               Ville / région
             </label>
@@ -249,14 +249,14 @@ export function SettingsForm({ initialSettings }: SettingsFormProps) {
             />
           </div>
 
-          <div>
+          <div className="space-y-1.5">
             <label
               htmlFor="postal_code_input"
-              className="mb-1.5 block text-sm font-medium text-gray-200"
+              className="block text-sm font-medium text-gray-200"
             >
               Codes postaux (max 10)
             </label>
-            <div className="flex gap-2">
+            <div className="flex gap-3">
               <input
                 id="postal_code_input"
                 type="text"
@@ -290,7 +290,7 @@ export function SettingsForm({ initialSettings }: SettingsFormProps) {
               <p
                 id="postal-code-error"
                 role="alert"
-                className="mt-2 text-xs text-red-600 dark:text-red-400"
+                className="mt-1.5 text-xs text-red-600 dark:text-red-400"
               >
                 {postalCodeError}
               </p>
@@ -350,20 +350,20 @@ export function SettingsForm({ initialSettings }: SettingsFormProps) {
           </p>
         </header>
 
-        <div className="space-y-6 px-6 py-5">
+        <div className="space-y-7 px-6 py-6">
           {(Object.keys(PILIERS_INFO) as ScoringPilier[]).map((pilier) => {
             const info = PILIERS_INFO[pilier]
             const value = weights[pilier]
             return (
-              <div key={pilier}>
-                <div className="mb-1.5 flex items-baseline justify-between gap-3">
+              <div key={pilier} className="space-y-2">
+                <div className="flex items-baseline justify-between gap-3">
                   <label
                     htmlFor={`weight-${pilier}`}
                     className="text-sm font-medium text-white"
                   >
                     {info.label}
                   </label>
-                  <span className="text-sm font-semibold tabular-nums text-white">
+                  <span className="rounded-md bg-white/[0.06] px-2 py-0.5 text-sm font-semibold tabular-nums text-white">
                     {value} %
                   </span>
                 </div>
@@ -375,10 +375,10 @@ export function SettingsForm({ initialSettings }: SettingsFormProps) {
                   step={1}
                   value={value}
                   onChange={(e) => updateWeight(pilier, parseInt(e.target.value, 10))}
-                  className="w-full accent-green-600"
+                  className="block w-full accent-green-500"
                   aria-label={`Pondération ${info.label} : ${value} %`}
                 />
-                <p className="mt-1 text-xs text-gray-400">{info.description}</p>
+                <p className="text-xs text-gray-400">{info.description}</p>
               </div>
             )
           })}
@@ -414,7 +414,7 @@ export function SettingsForm({ initialSettings }: SettingsFormProps) {
                 </span>
               )}
             </p>
-            <div className="flex gap-2">
+            <div className="flex flex-shrink-0 flex-wrap gap-2">
               <button
                 type="button"
                 onClick={normalizeWeights}
@@ -451,23 +451,25 @@ export function SettingsForm({ initialSettings }: SettingsFormProps) {
             Email pour recevoir les listes journalières et alertes.
           </p>
         </header>
-        <div className="px-6 py-5">
-          <label
-            htmlFor="notification_email"
-            className="mb-1.5 block text-sm font-medium text-gray-200"
-          >
-            Email de notification
-          </label>
-          <input
-            id="notification_email"
-            type="email"
-            value={settings.notification_email ?? ''}
-            onChange={(e) =>
-              setSettings((prev) => ({ ...prev, notification_email: e.target.value }))
-            }
-            placeholder="prenom.nom@exemple.com"
-            className="w-full rounded-lg border border-white/[0.08] bg-white/[0.04] backdrop-blur-md px-4 py-2.5 text-sm text-white placeholder-gray-400 transition focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-500/20"
-          />
+        <div className="px-6 py-6">
+          <div className="space-y-1.5">
+            <label
+              htmlFor="notification_email"
+              className="block text-sm font-medium text-gray-200"
+            >
+              Email de notification
+            </label>
+            <input
+              id="notification_email"
+              type="email"
+              value={settings.notification_email ?? ''}
+              onChange={(e) =>
+                setSettings((prev) => ({ ...prev, notification_email: e.target.value }))
+              }
+              placeholder="prenom.nom@exemple.com"
+              className="w-full rounded-lg border border-white/[0.08] bg-white/[0.04] backdrop-blur-md px-4 py-2.5 text-sm text-white placeholder-gray-400 transition focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-500/20"
+            />
+          </div>
         </div>
       </section>
 
@@ -487,7 +489,7 @@ export function SettingsForm({ initialSettings }: SettingsFormProps) {
             Utilisée par l&apos;IA pour personnaliser les pitchs et accroches de chaque appel.
           </p>
         </header>
-        <div className="px-6 py-5">
+        <div className="px-6 py-6">
           <label htmlFor="offer_description" className="sr-only">
             Description de l&apos;offre
           </label>
@@ -501,11 +503,11 @@ export function SettingsForm({ initialSettings }: SettingsFormProps) {
               placeholder="Ex : Nous accompagnons les ETI dans la réalisation de leur bilan carbone réglementaire (BEGES Scope 1+2+3) et dans la construction de leur plan de décarbonation..."
               rows={6}
               maxLength={2000}
-              className="w-full resize-none rounded-lg border border-white/[0.08] bg-white/[0.04] backdrop-blur-md px-4 py-3 text-sm text-white placeholder-gray-400 transition focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-500/20"
+              className="w-full resize-none rounded-lg border border-white/[0.08] bg-white/[0.04] backdrop-blur-md px-4 py-3 pb-9 text-sm leading-relaxed text-white placeholder-gray-400 transition focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-500/20"
             />
             <span
-              className={`absolute bottom-3 right-3 text-xs tabular-nums ${
-                charCount > 1800 ? 'text-orange-500' : 'text-gray-400 dark:text-gray-400'
+              className={`pointer-events-none absolute bottom-3 right-3 rounded-md bg-black/40 px-1.5 py-0.5 text-[11px] tabular-nums backdrop-blur-sm ${
+                charCount > 1800 ? 'text-orange-400' : 'text-gray-400'
               }`}
             >
               {charCount} / 2000
@@ -559,17 +561,19 @@ export function SettingsForm({ initialSettings }: SettingsFormProps) {
         {isAdvancedOpen && (
           <div
             id="advanced-content"
-            className="border-t border-white/[0.06] px-6 py-5 dark:border-gray-800"
+            className="space-y-2 border-t border-white/[0.06] px-6 py-6 dark:border-gray-800"
           >
-            <label
-              htmlFor="sourcing_target_per_run"
-              className="mb-1.5 block text-sm font-medium text-gray-200"
-            >
-              Cible de sourcing par run
-              <span className="ml-2 text-sm font-semibold tabular-nums text-white">
+            <div className="flex items-baseline justify-between gap-3">
+              <label
+                htmlFor="sourcing_target_per_run"
+                className="text-sm font-medium text-gray-200"
+              >
+                Cible de sourcing par run
+              </label>
+              <span className="rounded-md bg-white/[0.06] px-2 py-0.5 text-sm font-semibold tabular-nums text-white">
                 {settings.sourcing_target_per_run}
               </span>
-            </label>
+            </div>
             <input
               id="sourcing_target_per_run"
               type="range"
@@ -583,10 +587,10 @@ export function SettingsForm({ initialSettings }: SettingsFormProps) {
                   sourcing_target_per_run: parseInt(e.target.value, 10),
                 }))
               }
-              className="w-full accent-green-600"
+              className="block w-full accent-green-500"
               aria-label={`Cible de sourcing par run : ${settings.sourcing_target_per_run}`}
             />
-            <p className="mt-2 text-xs text-gray-400">
+            <p className="text-xs text-gray-400">
               Nombre cible de prospects sourcés par run nocturne (targetCandidates = max(N×3, 50)).
             </p>
           </div>

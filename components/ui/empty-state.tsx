@@ -144,10 +144,10 @@ export function EmptyState({
     <div
       className={`flex flex-col items-center gap-3 py-12 text-center ${className}`}
     >
-      <div className="flex h-12 w-12 items-center justify-center rounded-full bg-white/[0.05] text-gray-400 ring-1 ring-white/[0.08]">
+      <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-full bg-white/[0.05] text-gray-400 ring-1 ring-white/[0.08]">
         {preset.icon}
       </div>
-      <p className="text-sm font-medium text-gray-200">
+      <p className="mt-1 text-sm font-medium text-gray-200">
         {finalTitle}
       </p>
       <p className="max-w-sm text-xs text-gray-400">

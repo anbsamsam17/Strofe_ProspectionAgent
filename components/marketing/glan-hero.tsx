@@ -187,7 +187,7 @@ export function GlanHero() {
           {/* H1 — solide blanc + gradient vert vif sur ligne 2.
               Animations inline (m.span par mot) avec delays calculés —
               aucun variants imbriqué qui pourrait laisser opacity à 0. */}
-          <h1 className="mt-6 text-5xl font-extrabold leading-[1.05] tracking-tight text-white sm:text-6xl lg:text-7xl">
+          <h1 className="mt-6 text-5xl font-extrabold leading-[1.05] tracking-tight text-white sm:text-6xl xl:text-7xl">
             <span className="block text-white">
               {part1Words.map((word, i) => (
                 <m.span
@@ -311,7 +311,7 @@ export function GlanHeroFallback() {
             <span className="h-2 w-2 rounded-full bg-green-400" />
             Agent IA — Prospection BEGES
           </span>
-          <h1 className="mt-6 text-5xl font-extrabold leading-[1.05] tracking-tight text-white sm:text-6xl lg:text-7xl">
+          <h1 className="mt-6 text-5xl font-extrabold leading-[1.05] tracking-tight text-white sm:text-6xl xl:text-7xl">
             <span className="block text-white">Vos prospects bilan carbone,</span>
             <span
               className="mt-2 block bg-gradient-to-r from-green-400 via-emerald-300 to-cyan-300 bg-clip-text text-transparent"

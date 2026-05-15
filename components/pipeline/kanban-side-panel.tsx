@@ -347,11 +347,11 @@ function PriorityInlineDropdown({ priorite }: { priorite: Priority }) {
   const current = PRIORITY_LABELS[priorite]
   return (
     <div className="space-y-1">
-      <div className="flex w-full items-center justify-between gap-2 rounded-lg border border-white/[0.08] bg-white/[0.02] px-3 py-2 text-sm font-medium text-white">
-        <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs ${current.badge}`}>
+      <div className="flex w-full items-center justify-between gap-3 rounded-lg border border-white/[0.08] bg-white/[0.02] px-3 py-2 text-sm font-medium text-white">
+        <span className={`inline-flex flex-shrink-0 items-center rounded-full px-2 py-0.5 text-xs ${current.badge}`}>
           {current.label}
         </span>
-        <span className="text-[10px] uppercase tracking-wide text-gray-400">
+        <span className="truncate text-[10px] uppercase tracking-wide text-gray-400">
           dérivée du score
         </span>
       </div>
@@ -385,7 +385,7 @@ function ScoreSection({ prospect }: { prospect: Prospect }) {
   return (
     <Section title="Score">
       <div className="flex items-center gap-3">
-        <span className="text-2xl font-bold tabular-nums text-white">
+        <span className="flex-shrink-0 text-2xl font-bold tabular-nums text-white">
           {score}
         </span>
         <div className="h-2 flex-1 overflow-hidden rounded-full bg-white/[0.08] dark:bg-gray-700">
@@ -609,9 +609,9 @@ function BegesSection({ prospect }: { prospect: Prospect }) {
 
   return (
     <Section title="BEGES">
-      <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
         <span
-          className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ${badge.classes}`}
+          className={`inline-flex flex-shrink-0 items-center rounded-full px-2 py-0.5 text-xs font-semibold ${badge.classes}`}
         >
           {badge.label}
         </span>

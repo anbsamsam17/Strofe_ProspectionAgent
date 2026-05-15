@@ -29,7 +29,7 @@ export function DashboardHeader({ userName, agentRun }: DashboardHeaderProps) {
   const userInitial = userName.charAt(0).toUpperCase()
 
   return (
-    <header className="sticky top-0 z-20 flex h-16 items-center justify-between gap-3 border-b border-white/[0.06] bg-white/[0.025] px-4 backdrop-blur-xl sm:px-6">
+    <header className="sticky top-0 z-20 flex h-16 items-center justify-between gap-3 border-b border-white/[0.06] bg-white/[0.025] px-4 backdrop-blur-xl sm:px-6 relative">
       {/* Accent horizontal lumineux en bas (signature tech) */}
       <span
         aria-hidden="true"
@@ -37,12 +37,12 @@ export function DashboardHeader({ userName, agentRun }: DashboardHeaderProps) {
       />
 
       {/* Gauche : statut Glan persistant */}
-      <div className="flex min-w-0 flex-1 items-center gap-3">
-        <GlanStatusBar />
+      <div className="flex min-w-0 flex-1 items-center gap-3 overflow-hidden">
+        <GlanStatusBar className="min-w-0 max-w-full" />
       </div>
 
       {/* Droite : bouton lancer + avatar user */}
-      <div className="flex items-center gap-3">
+      <div className="flex flex-shrink-0 items-center gap-3">
         <BorderBeam color="brand" thickness={1.5} paused={isAgentRunning}>
         <button
           onClick={handleLaunchAgent}
@@ -52,7 +52,7 @@ export function DashboardHeader({ userName, agentRun }: DashboardHeaderProps) {
             isAgentRunning ? 'Un run est déjà en cours' : "Lancer l'agent de prospection"
           }
           title={isAgentRunning ? 'Un run est déjà en cours' : undefined}
-          className={`relative inline-flex items-center gap-2 overflow-hidden rounded-lg border px-4 py-2 text-sm font-semibold text-white transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-green-500/50 disabled:cursor-not-allowed disabled:opacity-60 ${
+          className={`relative inline-flex items-center gap-2 overflow-hidden rounded-lg border px-4 py-2 text-sm font-semibold text-white transition-all duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-green-400/70 focus-visible:ring-offset-2 focus-visible:ring-offset-black/40 disabled:cursor-not-allowed disabled:opacity-60 ${
             isDisabled
               ? 'border-green-500/30 bg-green-500/15'
               : 'border-green-400/40 bg-gradient-to-r from-green-600 to-emerald-500 shadow-[0_0_20px_-4px_oklch(70%_0.19_152_/_0.5)] hover:shadow-[0_0_28px_-2px_oklch(70%_0.19_152_/_0.7)] active:scale-95'

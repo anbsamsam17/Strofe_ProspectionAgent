@@ -373,19 +373,19 @@ function DroppableColumn({
       aria-label={`Colonne ${column.label} — ${items.length} prospect${items.length > 1 ? 's' : ''}`}
     >
       <div
-        className={`flex items-center justify-between rounded-2xl px-4 py-3 ${styles.header}`}
+        className={`flex items-center justify-between gap-3 rounded-2xl px-4 py-3 ${styles.header}`}
       >
-        <div className="flex items-center gap-2.5">
+        <div className="flex min-w-0 items-center gap-2.5">
           <span
-            className={`h-2.5 w-2.5 rounded-full ${styles.dot} shadow-sm`}
+            className={`h-2.5 w-2.5 flex-shrink-0 rounded-full ${styles.dot} shadow-sm`}
             aria-hidden="true"
           />
-          <span className={`text-sm font-semibold ${styles.headerText}`}>
+          <span className={`truncate text-sm font-semibold ${styles.headerText}`}>
             {column.label}
           </span>
         </div>
         <span
-          className={`rounded-full px-2 py-0.5 text-xs font-bold tabular-nums ${styles.badge}`}
+          className={`flex-shrink-0 rounded-full px-2 py-0.5 text-xs font-bold tabular-nums ${styles.badge}`}
         >
           {items.length}
         </span>

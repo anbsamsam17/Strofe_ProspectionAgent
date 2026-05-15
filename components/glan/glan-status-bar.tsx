@@ -19,7 +19,7 @@ import {
   useGlanStatus,
   type GlanState,
 } from '@/lib/hooks/use-glan-status'
-import { GlanAvatar } from './glan-avatar'
+import { GlanPortrait } from './glan-portrait'
 
 interface GlanStatusBarProps {
   className?: string
@@ -84,11 +84,11 @@ export function GlanStatusBar({ className = '' }: GlanStatusBarProps) {
   if (isLoading) {
     return (
       <div
-        className={`inline-flex items-center gap-3 ${className}`}
+        className={`inline-flex min-w-0 items-center gap-3 ${className}`}
         aria-busy="true"
         aria-label="Chargement du statut de Glan"
       >
-        <div className="h-8 w-8 animate-pulse rounded-full bg-white/[0.06]" />
+        <div className="h-11 w-11 flex-shrink-0 animate-pulse rounded-full bg-white/[0.06]" />
         <div className="hidden h-3 w-32 animate-pulse rounded bg-white/[0.06] sm:block" />
       </div>
     )
@@ -98,12 +98,15 @@ export function GlanStatusBar({ className = '' }: GlanStatusBarProps) {
 
   return (
     <div
-      className={`inline-flex items-center gap-3 ${className}`}
+      className={`inline-flex min-w-0 items-center gap-3 ${className}`}
       role="status"
       aria-live="polite"
     >
-      <span className="relative inline-flex">
-        <GlanAvatar state={glanState} size="sm" />
+      {/* Wrapper taille fixe : le portrait 44px (+ ses ornements légers comme
+          halo/particules) reste centré dans une boîte 44x44, ses débordements
+          sont absorbés par le header (overflow-hidden côté wrapper parent). */}
+      <span className="relative inline-flex h-11 w-11 flex-shrink-0 items-center justify-center">
+        <GlanPortrait state={glanState} size={44} interactive={false} />
         {glanState === 'working' && (
           <span
             aria-hidden="true"
@@ -112,12 +115,12 @@ export function GlanStatusBar({ className = '' }: GlanStatusBarProps) {
         )}
       </span>
 
-      <div className="hidden flex-col leading-tight sm:flex">
-        <span className="text-sm font-medium text-white">
+      <div className="hidden min-w-0 flex-1 flex-col leading-tight sm:flex">
+        <span className="truncate text-sm font-medium text-white">
           {STATE_PHRASE[glanState]}
         </span>
         {glanState === 'working' && phaseLabel && (
-          <span className="mt-0.5 font-mono text-[11px] text-cyan-300/80">
+          <span className="mt-0.5 truncate font-mono text-[11px] text-cyan-300/80">
             {phaseLabel}
             {elapsed && <span className="ml-1.5 tabular-nums">· {elapsed}</span>}
           </span>
