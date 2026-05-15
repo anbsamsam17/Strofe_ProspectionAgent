@@ -67,10 +67,12 @@ export async function AgentStats({ range }: AgentStatsProps) {
 
     // Pour `sourcingMix` + `topSectors` on n'a besoin que de 2 colonnes — pas
     // de récupérer tout score_details, signaux, contact_*, etc.
+    // Range explicite jusqu'à 50k pour ne pas être coupé à 1000 par PostgREST.
     const prospectsQuery = supabase
       .from('prospects')
       .select('source, secteur_libelle')
       .is('archived_at', null)
+      .range(0, 49_999)
 
     const [
       { data: runsRaw, error: rErr },
@@ -104,7 +106,7 @@ export async function AgentStats({ range }: AgentStatsProps) {
       className="rounded-2xl border border-white/[0.08] bg-white/[0.03] backdrop-blur-md p-5 shadow-sm dark:border-gray-800 dark:bg-gray-900"
     >
       <header className="mb-4 flex items-baseline justify-between gap-3">
-        <h2 className="text-sm font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
+        <h2 className="text-sm font-semibold uppercase tracking-wider text-gray-300">
           Activité agent
         </h2>
         <p className="text-xs text-gray-400 dark:text-gray-400">
@@ -128,7 +130,7 @@ export async function AgentStats({ range }: AgentStatsProps) {
 function RunsTimeSeries({ runs }: { runs: RunStat[] }) {
   if (runs.length === 0) {
     return (
-      <div className="flex items-center justify-center rounded-lg border border-dashed border-white/[0.08] bg-white/[0.02] py-8 text-xs text-gray-400 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-500">
+      <div className="flex items-center justify-center rounded-lg border border-dashed border-white/[0.08] bg-white/[0.02] py-8 text-xs text-gray-400">
         Aucun run agent encore enregistré sur cette période.
       </div>
     )
@@ -158,7 +160,7 @@ function RunsTimeSeries({ runs }: { runs: RunStat[] }) {
   return (
     <div>
       <div className="mb-2 flex items-baseline justify-between text-xs">
-        <p className="font-medium text-gray-700 dark:text-gray-300">
+        <p className="font-medium text-gray-200">
           {runs.length} derniers runs · sourcés (clair) + qualifiés (foncé)
         </p>
         <p className="text-gray-400 dark:text-gray-400">durée en sparkline</p>
@@ -247,7 +249,7 @@ function SourcingMixBar({ sirene, recherche, sirenePct }: SourcingMixBarProps) {
   const total = sirene + recherche
   if (total === 0) {
     return (
-      <div className="flex items-center justify-center rounded-lg border border-dashed border-white/[0.08] bg-white/[0.02] py-3 text-xs text-gray-400 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-500">
+      <div className="flex items-center justify-center rounded-lg border border-dashed border-white/[0.08] bg-white/[0.02] py-3 text-xs text-gray-400">
         Source des prospects inconnue (aucun run avec métadonnée détectée).
       </div>
     )
@@ -258,8 +260,8 @@ function SourcingMixBar({ sirene, recherche, sirenePct }: SourcingMixBarProps) {
   return (
     <div>
       <div className="mb-2 flex items-baseline justify-between text-xs">
-        <p className="font-medium text-gray-700 dark:text-gray-300">Source des prospects</p>
-        <p className="tabular-nums text-gray-500 dark:text-gray-400">
+        <p className="font-medium text-gray-200">Source des prospects</p>
+        <p className="tabular-nums text-gray-400">
           {sirene} Sirene · {recherche} Recherche Entreprises
         </p>
       </div>
@@ -288,21 +290,21 @@ function SourcingMixBar({ sirene, recherche, sirenePct }: SourcingMixBarProps) {
 function TopSectors({ sectors }: { sectors: SectorStat[] }) {
   if (sectors.length === 0) {
     return (
-      <div className="flex items-center justify-center rounded-lg border border-dashed border-white/[0.08] bg-white/[0.02] py-3 text-xs text-gray-400 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-500">
+      <div className="flex items-center justify-center rounded-lg border border-dashed border-white/[0.08] bg-white/[0.02] py-3 text-xs text-gray-400">
         Aucun secteur identifié pour l&apos;instant.
       </div>
     )
   }
   return (
     <div>
-      <p className="mb-2 text-xs font-medium text-gray-700 dark:text-gray-300">
+      <p className="mb-2 text-xs font-medium text-gray-200">
         Top {sectors.length} secteurs sourcés
       </p>
       <ul className="space-y-1.5" aria-label="Répartition des prospects par secteur">
         {sectors.map((s) => (
           <li key={s.label} className="flex items-center gap-3">
             <span
-              className="min-w-0 flex-1 truncate text-xs text-gray-600 dark:text-gray-400"
+              className="min-w-0 flex-1 truncate text-xs text-gray-300"
               title={s.label}
             >
               {s.label}
@@ -314,7 +316,7 @@ function TopSectors({ sectors }: { sectors: SectorStat[] }) {
                 aria-hidden="true"
               />
             </div>
-            <span className="w-8 text-right text-xs tabular-nums text-gray-700 dark:text-gray-300">
+            <span className="w-8 text-right text-xs tabular-nums text-gray-200">
               {s.count}
             </span>
           </li>

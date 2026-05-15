@@ -95,25 +95,52 @@ interface PipelineData {
   countsByStatus: Record<ProspectStatus, number>
 }
 
+// Limites de fetch :
+//   - `KANBAN_DISPLAY_LIMIT` : nb max de prospects chargés pour le rendu Kanban
+//     (2000 cards suffisent largement à l'UX, au-delà la page deviendrait
+//     ingérable au navigateur).
+//   - `FUNNEL_COUNT_LIMIT` : nb max de statuts agrégés pour le funnel. On
+//     récupère uniquement la colonne `statut` (~10 bytes/row) → 50k rows
+//     payload <500KB, count précis jusqu'à 50k prospects par user.
+// Supabase impose une limite par défaut PostgREST de 1000 rows si on n'utilise
+// pas .range() — d'où l'explicitation indispensable.
+const KANBAN_DISPLAY_LIMIT = 2000
+const FUNNEL_COUNT_LIMIT = 50000
+
 async function fetchPipelineData(): Promise<PipelineData> {
   const supabase = await createClient()
 
   // RLS filtre implicitement sur user_id — pas de .eq('user_id', ...) ici.
-  const { data: prospects, error } = await supabase
-    .from('prospects')
-    .select('*')
-    .in('statut', KANBAN_STATUSES)
-    .order('score_priorite', { ascending: false })
+  //
+  // 2 queries en parallèle :
+  //   1. Counts agrégés pour le funnel — payload léger (statut seul), range
+  //      large pour couvrir tous les prospects de l'utilisateur.
+  //   2. Prospects complets pour le Kanban — limités aux 2000 meilleurs scores
+  //      (les colonnes affichent au plus quelques centaines de cards).
+  const [countsRes, prospectsRes] = await Promise.all([
+    supabase
+      .from('prospects')
+      .select('statut')
+      .range(0, FUNNEL_COUNT_LIMIT - 1),
+    supabase
+      .from('prospects')
+      .select('*')
+      .in('statut', KANBAN_STATUSES)
+      .order('score_priorite', { ascending: false })
+      .range(0, KANBAN_DISPLAY_LIMIT - 1),
+  ])
 
-  if (error) {
-    // Log structuré (pas de PII) puis re-throw pour pouvoir afficher un fallback
-    // côté page sans bubble silencieux à l'error boundary.
+  const { data: countsRows, error: countsErr } = countsRes
+  const { data: prospects, error } = prospectsRes
+
+  if (countsErr || error) {
+    const firstErr = error ?? countsErr
     console.error('[/pipeline] prospects fetch error', {
-      code: error.code,
-      message: error.message,
-      details: error.details,
+      code: firstErr?.code,
+      message: firstErr?.message,
+      details: firstErr?.details,
     })
-    throw new Error(`Pipeline DB fetch failed: ${error.message}`)
+    throw new Error(`Pipeline DB fetch failed: ${firstErr?.message ?? 'unknown'}`)
   }
 
   const prospectsByStatus = emptyProspectsByStatus()
@@ -127,12 +154,14 @@ async function fetchPipelineData(): Promise<PipelineData> {
     }
   }
 
-  // Counts par statut pour le funnel — initialisation exhaustive depuis ALL_STATUSES
-  // (évite tout undefined si un statut était oublié dans la littérale).
+  // Counts agrégés depuis la query complète (pas seulement les prospects affichés).
+  // Source de vérité pour le funnel — reste correct même si > 2000 prospects.
   const countsByStatus = emptyCountsByStatus()
-  for (const s of ALL_STATUSES) {
-    // Cast safe : KanbanStatus == ProspectStatus.
-    countsByStatus[s] = prospectsByStatus[s as KanbanStatus]?.length ?? 0
+  for (const row of (countsRows ?? []) as unknown as { statut: ProspectStatus }[]) {
+    const s = row.statut
+    if (Object.prototype.hasOwnProperty.call(countsByStatus, s)) {
+      countsByStatus[s] += 1
+    }
   }
 
   return { prospectsByStatus, countsByStatus }

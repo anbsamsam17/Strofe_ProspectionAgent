@@ -1069,6 +1069,10 @@ export async function runPipelineSourcing(
   })
 
   // 3. SirenSet (dedup)
+  // Note : Supabase coupe par défaut à 1000 rows. Le dedup peut donc être
+  // partiel au-delà — l'upsert `onConflict: 'user_id,siren'` rattrape les
+  // collisions, mais `nouveaux_apres_dedup` peut être surestimé. Acceptable
+  // pour l'instant (volume cible 1500-5k prospects par user).
   const { data: existingSirens, error: sirenError } = await supabase
     .from('prospects')
     .select('siren')

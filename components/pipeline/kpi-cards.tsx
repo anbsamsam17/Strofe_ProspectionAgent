@@ -145,15 +145,26 @@ export async function KpiCards({ range }: KpiCardsProps) {
     const windowStart = rangeStartISO(range)
 
     // RLS implicite — pas de filtre user_id.
+    // Supabase coupe par défaut à 1000 rows : on explicite la range jusqu'à 50k
+    // pour que les agrégats KPI restent corrects même avec >1000 prospects.
     const [
       { data: prospectsRaw, error: pErr },
       { data: exchangesRaw, error: eErr },
       { data: runsRaw, error: rErr },
     ] = await Promise.all([
-      supabase.from('prospects').select('statut, beges_publie, archived_at, created_at'),
+      supabase
+        .from('prospects')
+        .select('statut, beges_publie, archived_at, created_at')
+        .range(0, 49_999),
       // Post-pivot : source des appels = prospect_exchanges (daily_list_items droppée)
-      supabase.from('prospect_exchanges').select('type, result, occurred_at'),
-      supabase.from('agent_runs').select('status, started_at, completed_at'),
+      supabase
+        .from('prospect_exchanges')
+        .select('type, result, occurred_at')
+        .range(0, 49_999),
+      supabase
+        .from('agent_runs')
+        .select('status, started_at, completed_at')
+        .range(0, 9_999),
     ])
 
     if (pErr || eErr || rErr) {
