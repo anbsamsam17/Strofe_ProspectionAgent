@@ -33,27 +33,14 @@ export type CallResult =
  * Priorité qualitative — valeurs canoniques de la refonte UI (migration 009).
  * Utilisée par `Prospect.priorite` (édition manuelle utilisateur) et par
  * `determinerPriorite()` dans `lib/agent/scoring.ts`.
- *
- * ATTENTION : `'normale'` a été remplacé par `'moyenne'`. La valeur historique
- * `'normale'` reste exposée uniquement via `CallPriority` pour
- * `DailyListItem.priorite` (enum DB `public.call_priority` non migré).
  */
 export type Priority = 'haute' | 'moyenne' | 'basse'
 
 /**
- * Priorité legacy pour `daily_list_items.priorite` (enum DB `public.call_priority`,
- * défini en migration 001_initial.sql). `'normale'` est sémantiquement équivalent
- * à `'moyenne'` côté nouvelle UI.
- */
-export type CallPriority = 'haute' | 'normale' | 'basse'
-
-/**
  * Alias explicite de `Priority` utilisé par les composants UI d'édition manuelle
- * (`<PriorityDropdown>`). Distinct de `CallPriority` (legacy daily_list_items).
+ * (`<PriorityDropdown>`).
  */
 export type ManualPriority = Priority
-
-export type DailyListStatus = 'pending' | 'generating' | 'ready' | 'completed'
 
 export type AgentRunStatus = 'running' | 'completed' | 'failed'
 
@@ -80,7 +67,11 @@ export interface ProfileSettings {
   target_sectors?: string[]
   target_city?: string
   target_postal_codes?: string[]
-  daily_call_target: number
+  /**
+   * Cible de sourcing par run (ex. 15 → targetCandidates = max(45, 50)).
+   * Renommé de `daily_call_target` post-pivot 2026-05-15 (migration 014).
+   */
+  sourcing_target_per_run: number
   notification_email?: string
   offer_description?: string
   /**
@@ -262,39 +253,8 @@ export interface IntentionSignal {
   weight: number
 }
 
-export interface DailyList {
-  id: string
-  user_id: string
-  date: string
-  status: DailyListStatus
-  generated_at?: string
-  /** Horodatage d'envoi de la notification email — NULL si pas encore notifié */
-  notified_at?: string
-  created_at: string
-  updated_at: string
-  items?: DailyListItem[]
-}
-
-export interface DailyListItem {
-  id: string
-  daily_list_id: string
-  user_id: string
-  prospect_id: string
-  prospect?: Prospect
-  ordre: number
-  priorite: Priority
-  meilleur_creneau?: string
-  accroche?: string
-  pitch?: string
-  signaux_detectes: IntentionSignal[]
-  objections_reponses: ObjectionReponse[]
-  contact_type?: ContactType
-  call_result?: CallResult
-  callback_date?: string
-  call_notes?: string
-  called_at?: string
-  created_at: string
-}
+// DailyList et DailyListItem supprimés post-pivot 2026-05-15
+// (tables daily_lists et daily_list_items droppées — migration 014).
 
 export interface ObjectionReponse {
   objection: string

@@ -13,10 +13,7 @@ export default defineConfig({
       '**/dist/**',
       '**/.next/**',
       '.claude/worktrees/**',
-      // Initiative alpha/glan en cours hors-scope — imports cassés
-      // (rename `alpha-*` ↔ `glan-*` incomplet). À nettoyer dans une PR
-      // dédiée à cette initiative.
-      'components/glan/**',
+      // Rename alpha→glan terminé (LOT 1 du pivot 2026-05-14) — exclusion levée.
     ],
     coverage: {
       provider: 'v8',

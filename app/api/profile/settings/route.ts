@@ -18,7 +18,7 @@ const SettingsSchema = z.object({
   target_sectors: z.array(z.string().max(50)).max(20).optional(),
   target_city: z.string().max(100).optional(),
   target_postal_codes: z.array(z.string().regex(/^\d{5}$/)).max(10).optional(),
-  daily_call_target: z.number().int().min(1).max(30).optional(),
+  sourcing_target_per_run: z.number().int().min(1).max(30).optional(),
   notification_email: z.string().email().max(200).optional(),
   scoring_weights: ScoringWeightsSchema.optional(),
 })
@@ -85,7 +85,7 @@ export async function PATCH(request: Request) {
 
     // Merge des settings (on ne remplace que les clés fournies)
     const updatedSettings: ProfileSettings = {
-      daily_call_target: currentSettings.daily_call_target ?? 15,
+      sourcing_target_per_run: currentSettings.sourcing_target_per_run ?? 15,
       target_sectors: currentSettings.target_sectors ?? [],
       target_city: currentSettings.target_city ?? '',
       offer_description: currentSettings.offer_description ?? '',
@@ -102,8 +102,8 @@ export async function PATCH(request: Request) {
       ...(payload.target_city !== undefined && {
         target_city: payload.target_city,
       }),
-      ...(payload.daily_call_target !== undefined && {
-        daily_call_target: payload.daily_call_target,
+      ...(payload.sourcing_target_per_run !== undefined && {
+        sourcing_target_per_run: payload.sourcing_target_per_run,
       }),
       // Champs précédemment absents du merge — ajoutés pour IMP-03 / BUG-05
       ...(payload.notification_email !== undefined && {

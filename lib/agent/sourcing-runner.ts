@@ -1081,8 +1081,8 @@ export async function runPipelineSourcing(
   const sirenSet = new Set<string>((existingSirens ?? []).map((r: { siren: string }) => r.siren))
   pushLog('sourcing_init', `${sirenSet.size} SIREN déjà en base (à exclure)`, 'info')
 
-  // 4. Cible adaptative : N = max(daily_call_target × 3, 50)
-  const dailyTarget = settings?.daily_call_target ?? 15
+  // 4. Cible adaptative : N = max(sourcing_target_per_run × 3, 50)
+  const dailyTarget = settings?.sourcing_target_per_run ?? 15
   const targetCandidates = Math.max(dailyTarget * 3, 50)
 
   // 5. Boucle adaptative + enrich + score + upsert

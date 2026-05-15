@@ -1,153 +1,205 @@
 import type { Metadata } from "next"
 import Link from "next/link"
+import { GlanAvatar } from "@/components/glan/glan-avatar"
 
 export const metadata: Metadata = {
   robots: { index: false, follow: false },
 }
 
 // ------------------------------------------------------------------ //
-// Logo                                                                 //
+// Logo Glan                                                            //
 // ------------------------------------------------------------------ //
-function StrofeLogo() {
+function GlanLogo() {
   return (
-    <div className="flex items-center gap-2.5">
-      <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-green-600 shadow-sm">
-        <svg
-          className="h-5 w-5 text-white"
-          xmlns="http://www.w3.org/2000/svg"
-          fill="none"
-          viewBox="0 0 24 24"
-          stroke="currentColor"
+    <div className="flex items-center gap-3">
+      <div className="relative flex h-9 w-9 items-center justify-center">
+        <div
+          className="absolute inset-0 rounded-xl bg-gradient-to-br from-green-500/20 to-emerald-500/10 blur-sm"
           aria-hidden="true"
-        >
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth={2}
-            d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01"
-          />
-        </svg>
+        />
+        <div className="relative flex h-9 w-9 items-center justify-center rounded-xl border border-white/10 bg-white/[0.06]">
+          <svg
+            className="h-4 w-4 text-green-400"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth={1.5}
+            aria-hidden="true"
+          >
+            <circle cx="12" cy="12" r="9" />
+            <path strokeLinecap="round" d="M12 3c-2.5 3-4 5.8-4 9s1.5 6 4 9" />
+            <path strokeLinecap="round" d="M12 3c2.5 3 4 5.8 4 9s-1.5 6-4 9" />
+            <path strokeLinecap="round" d="M3.5 9h17M3.5 15h17" />
+          </svg>
+        </div>
       </div>
       <div className="flex flex-col leading-tight">
-        <span className="text-base font-bold text-white tracking-tight">DecarbonLeads</span>
-        <span className="text-[10px] font-medium text-green-300 uppercase tracking-widest">by STROFE</span>
+        <span className="bg-gradient-to-br from-white to-green-200 bg-clip-text text-base font-bold tracking-tight text-transparent">
+          Glan
+        </span>
+        <span className="font-mono text-[9px] uppercase tracking-[0.2em] text-cyan-400/70">
+          Prospection BEGES — by STROFE
+        </span>
       </div>
     </div>
   )
 }
 
 // ------------------------------------------------------------------ //
-// Panneau gauche decoratif                                            //
+// Panneau gauche décoratif — Desktop only                             //
 // ------------------------------------------------------------------ //
 
-const PROOF_POINTS = [
+type AccentKey = "cyan" | "brand" | "violet" | "amber"
+
+const PROOF_POINTS: Array<{
+  accent: AccentKey
+  title: string
+  text: string
+}> = [
   {
-    icon: (
-      <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden="true">
-        <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
-      </svg>
-    ),
-    text: "15 appels qualifies prets a 7h30 chaque matin",
+    accent: "cyan",
+    title: "Sourcing nocturne automatique",
+    text: "Sirene INSEE + registre ADEME scanné chaque nuit pour vous livrer des prospects frais.",
   },
   {
-    icon: (
-      <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden="true">
-        <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
-      </svg>
-    ),
-    text: "Pitchs sur-mesure generes par Claude Sonnet",
+    accent: "brand",
+    title: "Scoring composite transparent",
+    text: "3 piliers : taille entreprise, statut BEGES, contact identifié. Score 0-100 sur chaque prospect.",
   },
   {
-    icon: (
-      <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden="true">
-        <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
-      </svg>
-    ),
-    text: "Donnees BEGES et signaux d'intention inclus",
+    accent: "violet",
+    title: "Données officielles certifiées",
+    text: "Sources Sirene INSEE et registre ADEME BEGES — les seules références légales en France.",
   },
   {
-    icon: (
-      <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden="true">
-        <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
-      </svg>
-    ),
-    text: "Source : Sirene INSEE + registre ADEME officiel",
+    accent: "amber",
+    title: "Obligation légale Art. L229-25",
+    text: "Vos cibles sont soumises à l'obligation BEGES. Vous arrivez avec un mandat légal, pas une option.",
   },
 ]
 
+const ACCENT_DOT: Record<AccentKey, string> = {
+  brand: "bg-green-400",
+  cyan: "bg-cyan-400",
+  violet: "bg-violet-400",
+  amber: "bg-amber-400",
+}
+
+const ACCENT_BORDER: Record<AccentKey, string> = {
+  brand: "border-green-400/20",
+  cyan: "border-cyan-400/20",
+  violet: "border-violet-400/20",
+  amber: "border-amber-400/20",
+}
+
+const ACCENT_TITLE: Record<AccentKey, string> = {
+  brand: "text-green-300",
+  cyan: "text-cyan-300",
+  violet: "text-violet-300",
+  amber: "text-amber-300",
+}
+
 function DecorativePanel() {
   return (
-    <div className="hidden lg:flex lg:flex-col relative w-[480px] shrink-0 overflow-hidden bg-gradient-to-br from-green-700 via-emerald-700 to-green-900">
-      {/* Motif grille */}
-      <div className="pointer-events-none absolute inset-0 opacity-10" aria-hidden="true">
+    <div
+      className="hidden lg:flex lg:flex-col relative w-[480px] shrink-0 overflow-hidden"
+      aria-hidden="true"
+    >
+      {/* Fond translucide — laisse passer le mesh global */}
+      <div className="absolute inset-0 bg-white/[0.02] backdrop-blur-[2px]" />
+
+      {/* Accents verticaux gauche / droite */}
+      <div className="absolute left-0 inset-y-0 w-px bg-gradient-to-b from-transparent via-cyan-400/40 to-transparent" />
+      <div className="absolute right-0 inset-y-0 w-px bg-gradient-to-b from-transparent via-green-400/30 to-transparent" />
+
+      {/* Halos d'ambiance */}
+      <div className="pointer-events-none absolute -top-40 left-1/2 -translate-x-1/2 h-80 w-80 rounded-full bg-green-500/5 blur-3xl" />
+      <div className="pointer-events-none absolute bottom-0 -left-20 h-60 w-60 rounded-full bg-cyan-500/6 blur-3xl" />
+
+      {/* Grille tech fine */}
+      <div className="pointer-events-none absolute inset-0 opacity-[0.04]">
         <svg className="h-full w-full" xmlns="http://www.w3.org/2000/svg">
           <defs>
-            <pattern id="auth-grid" width="32" height="32" patternUnits="userSpaceOnUse">
-              <path d="M.5 32V.5H32" fill="none" stroke="white" strokeWidth="0.5" />
+            <pattern id="auth-grid" width="40" height="40" patternUnits="userSpaceOnUse">
+              <path d="M.5 40V.5H40" fill="none" stroke="white" strokeWidth="0.5" />
             </pattern>
           </defs>
           <rect width="100%" height="100%" fill="url(#auth-grid)" />
         </svg>
       </div>
 
-      {/* Taches lumineuses */}
-      <div className="pointer-events-none absolute -top-32 -right-32 h-80 w-80 rounded-full bg-white/10 blur-3xl" aria-hidden="true" />
-      <div className="pointer-events-none absolute -bottom-32 -left-32 h-80 w-80 rounded-full bg-white/10 blur-3xl" aria-hidden="true" />
-
       {/* Contenu */}
       <div className="relative flex flex-col h-full p-10">
         {/* Logo */}
-        <Link href="/" aria-label="Retour a l'accueil">
-          <StrofeLogo />
+        <Link href="/" aria-label="Retour à l'accueil">
+          <GlanLogo />
         </Link>
 
-        {/* Tagline centrale */}
+        {/* Zone centrale */}
         <div className="flex-1 flex flex-col justify-center">
-          <div className="mb-6 inline-flex items-center gap-2 text-green-300 text-sm">
-            <span className="relative flex h-2 w-2">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
-              <span className="relative inline-flex rounded-full h-2 w-2 bg-green-400" />
+          {/* Indicateur live tech */}
+          <div className="mb-8 inline-flex items-center gap-2.5">
+            <span className="relative flex h-2 w-2 shrink-0">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-cyan-400 opacity-60" />
+              <span className="relative inline-flex h-2 w-2 rounded-full bg-cyan-400" />
             </span>
-            Agent IA actif cette nuit
+            <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-cyan-400/80">
+              Agent actif — sourcing en cours
+            </span>
           </div>
 
-          <h2 className="text-4xl font-extrabold text-white leading-tight tracking-tight">
-            Vos prospects bilan carbone,
-            <br />
-            <span className="text-green-300">prepares pendant la nuit.</span>
-          </h2>
+          {/* Mascot + tagline */}
+          <div className="mb-8 flex items-center gap-4">
+            <GlanAvatar state="working" size="lg" />
+            <div>
+              <p className="text-sm font-mono italic text-gray-400/80 leading-relaxed max-w-[260px]">
+                &ldquo;Pendant que vous dormez, je scanne Sirene et ADEME pour vous
+                trouver de nouveaux prospects BEGES qualifiés.&rdquo;
+              </p>
+              <p className="mt-2 font-mono text-[11px] italic text-green-400/70">— Glan</p>
+            </div>
+          </div>
 
-          <p className="mt-4 text-green-100/80 leading-relaxed">
-            L&apos;agent sourcé, scoré et prepare vos pitchs. Vous n&apos;avez plus qu&apos;a decrocher le telephone.
-          </p>
-
-          {/* Points de preuve */}
-          <ul className="mt-8 space-y-3">
+          {/* Points de preuve — cards translucides */}
+          <ul className="space-y-2.5">
             {PROOF_POINTS.map((point) => (
-              <li key={point.text} className="flex items-start gap-3 text-sm text-green-100">
-                <span className="mt-0.5 shrink-0 text-green-300">{point.icon}</span>
-                <span>{point.text}</span>
+              <li
+                key={point.title}
+                className={`flex items-start gap-3 rounded-xl border bg-white/[0.03] p-3.5 backdrop-blur-sm ${ACCENT_BORDER[point.accent]}`}
+              >
+                <span
+                  className={`mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full ${ACCENT_DOT[point.accent]}`}
+                />
+                <div className="min-w-0">
+                  <p className={`text-xs font-semibold leading-tight ${ACCENT_TITLE[point.accent]}`}>
+                    {point.title}
+                  </p>
+                  <p className="mt-0.5 text-[11px] text-gray-400/80 leading-relaxed">
+                    {point.text}
+                  </p>
+                </div>
               </li>
             ))}
           </ul>
         </div>
 
-        {/* Stat card en bas */}
-        <div className="mt-8 rounded-2xl bg-white/10 backdrop-blur border border-white/20 p-5">
-          <div className="flex items-center gap-4">
-            <div className="text-center">
-              <div className="text-3xl font-extrabold text-white tabular-nums">15</div>
-              <div className="text-xs text-green-200 mt-0.5">appels / jour</div>
+        {/* Stat card bas — L229-25 */}
+        <div className="mt-6 rounded-2xl border border-white/[0.08] bg-white/[0.04] backdrop-blur-md p-5">
+          <div className="flex items-center gap-5">
+            <div className="text-center shrink-0">
+              <div className="bg-gradient-to-br from-white to-green-200 bg-clip-text text-2xl font-extrabold tabular-nums text-transparent">
+                L. 229-25
+              </div>
+              <div className="font-mono text-[9px] uppercase tracking-[0.18em] text-green-400/70 mt-0.5">
+                Code de l&apos;environnement
+              </div>
             </div>
-            <div className="h-10 w-px bg-white/20" />
-            <div className="text-center">
-              <div className="text-3xl font-extrabold text-white tabular-nums">500+</div>
-              <div className="text-xs text-green-200 mt-0.5">prospects / nuit</div>
-            </div>
-            <div className="h-10 w-px bg-white/20" />
-            <div className="text-center">
-              <div className="text-3xl font-extrabold text-white tabular-nums">0</div>
-              <div className="text-xs text-green-200 mt-0.5">effort de recherche</div>
+            <div className="h-10 w-px bg-white/10 shrink-0" />
+            <div>
+              <p className="text-xs text-gray-300 leading-relaxed">
+                Obligation BEGES pour les entreprises de plus de 500 salariés.
+                Vos prospects <span className="text-green-400">doivent</span> vous appeler.
+              </p>
             </div>
           </div>
         </div>
@@ -166,51 +218,53 @@ export default function AuthLayout({
 }) {
   return (
     <div className="min-h-screen flex">
-      {/* Panneau gauche decoratif — visible uniquement desktop */}
+      {/* Panneau gauche décoratif — desktop uniquement */}
       <DecorativePanel />
 
       {/* Panneau droit : formulaire */}
       <div className="flex flex-1 flex-col">
-        {/* En-tete mobile uniquement */}
-        <header className="flex items-center justify-between px-6 py-5 lg:hidden border-b border-gray-100 dark:border-gray-800">
-          <Link href="/" aria-label="Retour a l'accueil">
+        {/* En-tête mobile uniquement */}
+        <header className="flex items-center justify-between px-6 py-5 lg:hidden border-b border-white/[0.06]">
+          <Link href="/" aria-label="Retour à l'accueil">
             <div className="flex items-center gap-2.5">
-              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-green-600">
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg border border-white/10 bg-white/[0.06]">
                 <svg
-                  className="h-4 w-4 text-white"
-                  xmlns="http://www.w3.org/2000/svg"
-                  fill="none"
+                  className="h-4 w-4 text-green-400"
                   viewBox="0 0 24 24"
+                  fill="none"
                   stroke="currentColor"
+                  strokeWidth={1.5}
                   aria-hidden="true"
                 >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01"
-                  />
+                  <circle cx="12" cy="12" r="9" />
+                  <path strokeLinecap="round" d="M12 3c-2.5 3-4 5.8-4 9s1.5 6 4 9" />
+                  <path strokeLinecap="round" d="M12 3c2.5 3 4 5.8 4 9s-1.5 6-4 9" />
+                  <path strokeLinecap="round" d="M3.5 9h17M3.5 15h17" />
                 </svg>
               </div>
               <div className="flex flex-col leading-tight">
-                <span className="text-sm font-bold text-gray-900 dark:text-white">DecarbonLeads</span>
-                <span className="text-[9px] font-medium text-green-600 uppercase tracking-widest">by STROFE</span>
+                <span className="bg-gradient-to-br from-white to-green-200 bg-clip-text text-sm font-bold text-transparent">
+                  Glan
+                </span>
+                <span className="font-mono text-[9px] uppercase tracking-widest text-cyan-400/70">
+                  by STROFE
+                </span>
               </div>
             </div>
           </Link>
         </header>
 
         {/* Zone formulaire */}
-        <main className="flex flex-1 items-center justify-center px-6 py-10 bg-gray-50 dark:bg-gray-950">
+        <main className="flex flex-1 items-center justify-center px-6 py-10">
           <div className="w-full max-w-md">
             {children}
           </div>
         </main>
 
         {/* Pied de page */}
-        <footer className="px-6 py-4 text-center border-t border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-gray-950">
-          <p className="text-xs text-gray-400 dark:text-gray-500">
-            &copy; 2026 STROFE &mdash; Tous droits reserves
+        <footer className="px-6 py-4 text-center border-t border-white/[0.06]">
+          <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-gray-600">
+            &copy; 2026 STROFE &mdash; Tous droits réservés
           </p>
         </footer>
       </div>

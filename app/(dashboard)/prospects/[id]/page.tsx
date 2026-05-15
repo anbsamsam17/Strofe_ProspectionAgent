@@ -164,21 +164,15 @@ export default async function ProspectDetailPage({ params }: PageProps) {
 
   const exchanges = (exchangesRaw ?? []) as unknown as ProspectExchange[]
 
-  // Historique daily_list_items — fusionné avec exchanges côté ExchangesPanel.
-  const { data: callsRaw } = await supabase
-    .from('daily_list_items')
-    .select('id, called_at, call_result, call_notes, callback_date')
-    .eq('prospect_id', id)
-    .not('called_at', 'is', null)
-    .order('called_at', { ascending: false })
-
-  const calls = (callsRaw ?? []) as Array<{
+  // Post-pivot 2026-05-15 : daily_list_items supprimée.
+  // L'historique d'appels est désormais 100% dans prospect_exchanges.
+  const calls: Array<{
     id: string
     called_at: string
     call_result: CallResult | null
     call_notes: string | null
     callback_date: string | null
-  }>
+  }> = []
 
   const scoreDetails = prospect.score_details as ScoreDetails | null
   const weights: ScoringWeights = scoreDetails?.weights ?? DEFAULT_WEIGHTS

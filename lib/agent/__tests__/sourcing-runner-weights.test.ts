@@ -263,7 +263,7 @@ describe('runPipelineSourcing — propagation de settings.scoring_weights vers c
     // Arrange
     const customWeights: ScoringWeights = { taille: 50, beges: 25, contact: 25 }
     const settings: ProfileSettings = {
-      daily_call_target: 15,
+      sourcing_target_per_run: 15,
       scoring_weights: customWeights,
     }
 
@@ -282,7 +282,7 @@ describe('runPipelineSourcing — propagation de settings.scoring_weights vers c
 
   it('settings sans scoring_weights → calculerScore reçoit undefined (fallback côté scoring)', async () => {
     // Arrange : settings minimalistes sans la clé scoring_weights
-    const settings: ProfileSettings = { daily_call_target: 15 }
+    const settings: ProfileSettings = { sourcing_target_per_run: 15 }
 
     // Act
     await runPipelineWithSettings(settings)
@@ -308,7 +308,7 @@ describe('runPipelineSourcing — propagation de settings.scoring_weights vers c
     // (cf. scoring.ts L831-836). Le runner ne pré-normalise pas — c'est volontaire et testé ici.
     const rawWeights: ScoringWeights = { taille: 1, beges: 1, contact: 2 }
     const settings: ProfileSettings = {
-      daily_call_target: 15,
+      sourcing_target_per_run: 15,
       scoring_weights: rawWeights,
     }
 
@@ -339,7 +339,7 @@ describe('runPipelineSourcing — propagation de settings.scoring_weights vers c
       userId: 'user-test-2',
       runId: 'run-test-2',
       params: {},
-      settings: { daily_call_target: 15, scoring_weights: customWeights },
+      settings: { sourcing_target_per_run: 15, scoring_weights: customWeights },
       supabase: makeSupabaseAdminMock(),
       pushLog,
     })
