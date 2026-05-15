@@ -5,16 +5,17 @@
 //
 // Refonte 2026-05-15 : abandon de l'orbe R3F au profit du
 // <GlanPortrait /> (avatar Pixar PNG). Animations Framer Motion :
-//   - Révélation mot-par-mot du H1 (stagger 0.06s)
+//   - Révélation mot-par-mot du H1 (stagger 0.08s, par mot avec delay calc)
 //   - Description fade-in delayed
 //   - CTAs : whileHover scale + magnetic mouse-follow sur primaire
 //   - Parallax au scroll sur le portrait (useScroll + useTransform)
 //   - Badge "Agent IA" en glass avec dot pulsant
 //
-// Tous les éléments respectent useReducedMotion() de motion/react.
-// Pattern LazyMotion strict : m.div / m.span / m.h1 uniquement.
-//
-// Couleurs : titre en `text-white` + gradient lumineux (lisible sur navy).
+// FIX 2026-05-15 (post-screenshot) : le H1 ligne 1 utilisait un gradient
+// `from-white via-gray-100 to-gray-300` qui rendait le texte quasi invisible
+// sur navy. Repassage en `text-white` solide pour la ligne 1 ; ligne 2 garde
+// le gradient vert/emerald/cyan vif. Animation simplifiée (delays calculés
+// inline, plus de variants imbriqués qui pouvaient bloquer en opacity:0).
 // ============================================================
 
 import Link from 'next/link'
@@ -36,30 +37,20 @@ import { BorderBeam } from '@/components/ui/border-beam'
 const HEADLINE_PART_1 = 'Vos prospects bilan carbone,'
 const HEADLINE_PART_2 = 'qualifiés pendant la nuit.'
 
-const containerVariants: Variants = {
-  hidden: { opacity: 0 },
-  visible: {
-    opacity: 1,
-    transition: { staggerChildren: 0.08, delayChildren: 0.1 },
-  },
-}
-
-const wordVariants: Variants = {
-  hidden: { opacity: 0, y: 18, filter: 'blur(6px)' },
-  visible: {
-    opacity: 1,
-    y: 0,
-    filter: 'blur(0px)',
-    transition: { duration: 0.55, ease: [0.34, 1.56, 0.64, 1] },
-  },
-}
-
 const fadeUpVariants: Variants = {
   hidden: { opacity: 0, y: 16 },
   visible: {
     opacity: 1,
     y: 0,
     transition: { duration: 0.55, ease: [0.22, 1, 0.36, 1] },
+  },
+}
+
+const containerVariants: Variants = {
+  hidden: { opacity: 0 },
+  visible: {
+    opacity: 1,
+    transition: { staggerChildren: 0.08, delayChildren: 0.1 },
   },
 }
 
@@ -144,6 +135,8 @@ export function GlanHero() {
   // Découpage du titre en mots pour le stagger.
   const part1Words = HEADLINE_PART_1.split(' ')
   const part2Words = HEADLINE_PART_2.split(' ')
+  const WORD_STAGGER_S = 0.08
+  const INIT_DELAY_S = 0.1
 
   return (
     <section
@@ -191,30 +184,29 @@ export function GlanHero() {
             </span>
           </m.div>
 
-          {/* H1 — révélation mot par mot, gradient lumineux lisible */}
-          <h1 className="mt-6 text-5xl font-extrabold leading-[1.05] tracking-tight sm:text-6xl lg:text-7xl">
-            <m.span
-              variants={containerVariants}
-              initial="hidden"
-              animate="visible"
-              className="block bg-gradient-to-br from-white via-gray-100 to-gray-300 bg-clip-text text-transparent"
-              style={{ WebkitTextFillColor: 'transparent' }}
-            >
+          {/* H1 — solide blanc + gradient vert vif sur ligne 2.
+              Animations inline (m.span par mot) avec delays calculés —
+              aucun variants imbriqué qui pourrait laisser opacity à 0. */}
+          <h1 className="mt-6 text-5xl font-extrabold leading-[1.05] tracking-tight text-white sm:text-6xl lg:text-7xl">
+            <span className="block text-white">
               {part1Words.map((word, i) => (
                 <m.span
                   key={`p1-${i}`}
-                  variants={wordVariants}
+                  initial={prefersReducedMotion ? false : { opacity: 0, y: 18 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{
+                    duration: 0.55,
+                    delay: INIT_DELAY_S + i * WORD_STAGGER_S,
+                    ease: [0.34, 1.56, 0.64, 1],
+                  }}
                   className="inline-block"
                 >
                   {word}
                   {i < part1Words.length - 1 && ' '}
                 </m.span>
               ))}
-            </m.span>
-            <m.span
-              variants={containerVariants}
-              initial="hidden"
-              animate="visible"
+            </span>
+            <span
               className="mt-2 block bg-gradient-to-r from-green-400 via-emerald-300 to-cyan-300 bg-clip-text text-transparent"
               style={{
                 WebkitTextFillColor: 'transparent',
@@ -227,14 +219,21 @@ export function GlanHero() {
               {part2Words.map((word, i) => (
                 <m.span
                   key={`p2-${i}`}
-                  variants={wordVariants}
+                  initial={prefersReducedMotion ? false : { opacity: 0, y: 18 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{
+                    duration: 0.55,
+                    delay:
+                      INIT_DELAY_S + (part1Words.length + i) * WORD_STAGGER_S,
+                    ease: [0.34, 1.56, 0.64, 1],
+                  }}
                   className="inline-block"
                 >
                   {word}
                   {i < part2Words.length - 1 && ' '}
                 </m.span>
               ))}
-            </m.span>
+            </span>
           </h1>
 
           {/* Description */}
@@ -313,10 +312,11 @@ export function GlanHeroFallback() {
             Agent IA — Prospection BEGES
           </span>
           <h1 className="mt-6 text-5xl font-extrabold leading-[1.05] tracking-tight text-white sm:text-6xl lg:text-7xl">
-            <span className="block bg-gradient-to-br from-white via-gray-100 to-gray-300 bg-clip-text text-transparent">
-              Vos prospects bilan carbone,
-            </span>
-            <span className="mt-2 block bg-gradient-to-r from-green-400 via-emerald-300 to-cyan-300 bg-clip-text text-transparent">
+            <span className="block text-white">Vos prospects bilan carbone,</span>
+            <span
+              className="mt-2 block bg-gradient-to-r from-green-400 via-emerald-300 to-cyan-300 bg-clip-text text-transparent"
+              style={{ WebkitTextFillColor: 'transparent' }}
+            >
               qualifiés pendant la nuit.
             </span>
           </h1>
