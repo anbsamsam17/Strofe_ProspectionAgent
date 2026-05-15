@@ -58,7 +58,7 @@ export default async function SettingsPage() {
         <div className="border-b border-white/[0.06] px-6 py-4 dark:border-gray-800/60">
           <h2
             id="account-title"
-            className="text-xs font-semibold uppercase tracking-widest text-gray-400 dark:text-gray-600"
+            className="text-xs font-semibold uppercase tracking-widest text-gray-400 dark:text-gray-400"
           >
             Compte
           </h2>
@@ -75,7 +75,7 @@ export default async function SettingsPage() {
             <div className="min-w-0 flex-1 space-y-2">
               {profile?.full_name && (
                 <div>
-                  <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-600">
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-400">
                     Nom
                   </p>
                   <p className="mt-0.5 text-sm font-medium text-gray-900 dark:text-white">
@@ -84,7 +84,7 @@ export default async function SettingsPage() {
                 </div>
               )}
               <div>
-                <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-600">
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-400">
                   Email
                 </p>
                 <p className="mt-0.5 text-sm text-gray-700 dark:text-gray-300">
@@ -93,7 +93,7 @@ export default async function SettingsPage() {
               </div>
               {profile?.company_name && (
                 <div>
-                  <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-600">
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-400">
                     Entreprise
                   </p>
                   <p className="mt-0.5 text-sm text-gray-700 dark:text-gray-300">

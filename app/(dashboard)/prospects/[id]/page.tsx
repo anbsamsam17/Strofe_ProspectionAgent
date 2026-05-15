@@ -33,7 +33,7 @@ function formatDate(dateStr: string | undefined, opts?: Intl.DateTimeFormatOptio
 function scoreBarColor(score: number): string {
   if (score >= 75) return 'bg-green-500'
   if (score >= 50) return 'bg-yellow-500'
-  return 'bg-gray-400'
+  return 'bg-white/30'
 }
 
 // ── Sous-composants UI ────────────────────────────────────────────────────────
@@ -48,8 +48,8 @@ function SectionCard({
   children: React.ReactNode
 }) {
   return (
-    <div className="overflow-hidden rounded-2xl border border-white/[0.08] bg-white/[0.03] backdrop-blur-md shadow-sm dark:border-gray-800 dark:bg-gray-900">
-      <div className="flex items-center justify-between gap-3 border-b border-white/[0.06] px-6 py-4 dark:border-gray-800">
+    <div className="overflow-hidden rounded-2xl border border-white/[0.08] bg-white/[0.03] backdrop-blur-md shadow-sm">
+      <div className="flex items-center justify-between gap-3 border-b border-white/[0.06] px-6 py-4">
         <h2 className="text-sm font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
           {title}
         </h2>

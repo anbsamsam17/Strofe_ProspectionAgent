@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
@@ -224,7 +224,7 @@ export function NewExchangeDialog({ prospectId }: NewExchangeDialogProps) {
                   required
                   value={form.occurred_at}
                   onChange={(e) => update('occurred_at', e.target.value)}
-                  className="w-full rounded-lg border border-white/[0.08] bg-white px-3 py-2 text-sm text-gray-900 transition focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-500/20 dark:border-gray-700 dark:bg-gray-800 dark:text-white"
+                  className="w-full rounded-lg border border-white/[0.08] bg-white/[0.04] backdrop-blur-md px-3 py-2 text-sm text-gray-900 transition focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-500/20 dark:border-gray-700 dark:bg-gray-800 dark:text-white"
                 />
               </div>
 
@@ -240,7 +240,7 @@ export function NewExchangeDialog({ prospectId }: NewExchangeDialogProps) {
                     id="exchange-type"
                     value={form.type}
                     onChange={(e) => update('type', e.target.value as ExchangeType)}
-                    className="w-full rounded-lg border border-white/[0.08] bg-white px-3 py-2 text-sm text-gray-900 transition focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-500/20 dark:border-gray-700 dark:bg-gray-800 dark:text-white"
+                    className="w-full rounded-lg border border-white/[0.08] bg-white/[0.04] backdrop-blur-md px-3 py-2 text-sm text-gray-900 transition focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-500/20 dark:border-gray-700 dark:bg-gray-800 dark:text-white"
                   >
                     {TYPE_OPTIONS.map((opt) => (
                       <option key={opt.value} value={opt.value}>
@@ -261,7 +261,7 @@ export function NewExchangeDialog({ prospectId }: NewExchangeDialogProps) {
                     id="exchange-result"
                     value={form.result}
                     onChange={(e) => update('result', e.target.value)}
-                    className="w-full rounded-lg border border-white/[0.08] bg-white px-3 py-2 text-sm text-gray-900 transition focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-500/20 dark:border-gray-700 dark:bg-gray-800 dark:text-white"
+                    className="w-full rounded-lg border border-white/[0.08] bg-white/[0.04] backdrop-blur-md px-3 py-2 text-sm text-gray-900 transition focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-500/20 dark:border-gray-700 dark:bg-gray-800 dark:text-white"
                   >
                     {RESULT_OPTIONS.map((opt) => (
                       <option key={opt.value} value={opt.value}>
@@ -285,7 +285,7 @@ export function NewExchangeDialog({ prospectId }: NewExchangeDialogProps) {
                   value={form.notes}
                   onChange={(e) => update('notes', e.target.value)}
                   placeholder="Contenu de l'échange, points abordés, prochaines étapes..."
-                  className="w-full rounded-lg border border-white/[0.08] bg-white px-3 py-2 text-sm text-gray-900 placeholder-gray-400 transition focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-500/20 dark:border-gray-700 dark:bg-gray-800 dark:text-white dark:placeholder-gray-600"
+                  className="w-full rounded-lg border border-white/[0.08] bg-white/[0.04] backdrop-blur-md px-3 py-2 text-sm text-gray-900 placeholder-gray-400 transition focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-500/20 dark:border-gray-700 dark:bg-gray-800 dark:text-white dark:placeholder-gray-500"
                 />
               </div>
 
@@ -301,7 +301,7 @@ export function NewExchangeDialog({ prospectId }: NewExchangeDialogProps) {
                   type="date"
                   value={form.callback_date}
                   onChange={(e) => update('callback_date', e.target.value)}
-                  className="w-full rounded-lg border border-white/[0.08] bg-white px-3 py-2 text-sm text-gray-900 transition focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-500/20 dark:border-gray-700 dark:bg-gray-800 dark:text-white"
+                  className="w-full rounded-lg border border-white/[0.08] bg-white/[0.04] backdrop-blur-md px-3 py-2 text-sm text-gray-900 transition focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-500/20 dark:border-gray-700 dark:bg-gray-800 dark:text-white"
                 />
               </div>
 
@@ -319,7 +319,7 @@ export function NewExchangeDialog({ prospectId }: NewExchangeDialogProps) {
                   type="button"
                   onClick={closeDialog}
                   disabled={pending}
-                  className="rounded-lg border border-white/[0.08] bg-white px-4 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-white/[0.06] disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
+                  className="rounded-lg border border-white/[0.08] bg-white/[0.04] backdrop-blur-md px-4 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-white/[0.06] disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
                 >
                   Annuler
                 </button>

@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
@@ -17,27 +17,25 @@ interface PriorityOption {
   badge: string
 }
 
+// Dark-forced theme : ring translucides uniquement.
 const PRIORITY_OPTIONS: PriorityOption[] = [
   {
     value: 'haute',
     label: 'Priorité haute',
-    dot: 'bg-red-500',
-    badge:
-      'bg-red-50 text-red-700 border border-red-200 dark:bg-red-950/50 dark:text-red-400 dark:border-red-800',
+    dot: 'bg-red-400',
+    badge: 'bg-red-500/15 text-red-200 ring-1 ring-red-500/30',
   },
   {
     value: 'moyenne',
     label: 'Priorité moyenne',
-    dot: 'bg-yellow-500',
-    badge:
-      'bg-yellow-50 text-yellow-700 border border-yellow-200 dark:bg-yellow-950/50 dark:text-yellow-400 dark:border-yellow-800',
+    dot: 'bg-yellow-400',
+    badge: 'bg-yellow-500/15 text-yellow-200 ring-1 ring-yellow-500/30',
   },
   {
     value: 'basse',
     label: 'Priorité basse',
     dot: 'bg-gray-400',
-    badge:
-      'bg-gray-100 text-gray-600 border border-white/[0.08] dark:bg-gray-800 dark:text-gray-400 dark:border-gray-700',
+    badge: 'bg-white/[0.06] text-gray-200 ring-1 ring-white/[0.08]',
   },
 ]
 
@@ -154,7 +152,7 @@ export function PriorityDropdown({ prospectId, currentPriorite }: PriorityDropdo
         <div
           role="listbox"
           aria-label="Sélectionner une priorité"
-          className="absolute right-0 z-30 mt-1 w-48 origin-top-right overflow-hidden rounded-xl border border-white/[0.08] bg-white py-1 shadow-lg dark:border-gray-700 dark:bg-gray-900"
+          className="absolute right-0 z-30 mt-1 w-48 origin-top-right overflow-hidden rounded-xl border border-white/[0.08] bg-[oklch(14%_0.02_240)]/95 py-1 shadow-2xl ring-1 ring-black/30 backdrop-blur-xl"
         >
           {PRIORITY_OPTIONS.map((opt) => {
             const isCurrent = opt.value === priorite
@@ -166,7 +164,7 @@ export function PriorityDropdown({ prospectId, currentPriorite }: PriorityDropdo
                 aria-selected={isCurrent}
                 disabled={pending}
                 onClick={() => handleSelect(opt.value)}
-                className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-gray-700 transition-colors hover:bg-white/[0.06] disabled:opacity-50 dark:text-gray-200 dark:hover:bg-gray-800"
+                className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-gray-200 transition-colors hover:bg-white/[0.06] disabled:opacity-50"
               >
                 <span className={`h-1.5 w-1.5 flex-shrink-0 rounded-full ${opt.dot}`} aria-hidden="true" />
                 <span className="flex-1">{opt.label}</span>
@@ -181,7 +179,7 @@ export function PriorityDropdown({ prospectId, currentPriorite }: PriorityDropdo
                     strokeWidth="2.5"
                     strokeLinecap="round"
                     strokeLinejoin="round"
-                    className="text-green-600 dark:text-green-400"
+                    className="text-green-400"
                     aria-hidden="true"
                   >
                     <polyline points="20 6 9 17 4 12" />
@@ -196,7 +194,7 @@ export function PriorityDropdown({ prospectId, currentPriorite }: PriorityDropdo
       {error && (
         <p
           role="alert"
-          className="absolute right-0 top-full z-30 mt-1 rounded-md bg-red-50 px-2.5 py-1 text-xs text-red-700 shadow-sm dark:bg-red-950/50 dark:text-red-400"
+          className="absolute right-0 top-full z-30 mt-1 rounded-md bg-red-500/15 px-2.5 py-1 text-xs text-red-300 ring-1 ring-red-500/30 shadow-sm"
         >
           {error}
         </p>

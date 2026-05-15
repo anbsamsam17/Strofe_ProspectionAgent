@@ -107,7 +107,7 @@ export async function AgentStats({ range }: AgentStatsProps) {
         <h2 className="text-sm font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
           Activité agent
         </h2>
-        <p className="text-xs text-gray-400 dark:text-gray-600">
+        <p className="text-xs text-gray-400 dark:text-gray-400">
           {runStats.length === 0
             ? 'Aucun run sur la période'
             : `${runStats.length} run${runStats.length > 1 ? 's' : ''} affichés`}
@@ -161,7 +161,7 @@ function RunsTimeSeries({ runs }: { runs: RunStat[] }) {
         <p className="font-medium text-gray-700 dark:text-gray-300">
           {runs.length} derniers runs · sourcés (clair) + qualifiés (foncé)
         </p>
-        <p className="text-gray-400 dark:text-gray-600">durée en sparkline</p>
+        <p className="text-gray-400 dark:text-gray-400">durée en sparkline</p>
       </div>
       <svg
         viewBox={`0 0 ${Math.max(totalWidth, 100)} ${totalHeight}`}

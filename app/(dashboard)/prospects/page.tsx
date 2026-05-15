@@ -545,7 +545,7 @@ export default async function ProspectsPage({
                   return (
                     <tr
                       key={prospect.id}
-                      className="group border-b border-white/[0.04] transition-colors duration-150 last:border-0 hover:bg-white/[0.06]/[0.03]"
+                      className="group relative border-b border-white/[0.04] transition-all duration-200 last:border-0 hover:bg-gradient-to-r hover:from-green-500/[0.04] hover:via-cyan-500/[0.03] hover:to-transparent hover:shadow-[inset_2px_0_0_0_oklch(70%_0.18_152_/_0.55)]"
                     >
                       {/* 1. Rang */}
                       <td className="px-4 py-3.5 font-mono text-xs tabular-nums text-gray-500">

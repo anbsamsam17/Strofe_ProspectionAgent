@@ -8,7 +8,8 @@
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
-import { GlanAvatar } from '@/components/glan/glan-avatar'
+import { GlanCharacterLoader } from '@/components/glan/glan-character-loader'
+import { BorderBeam } from '@/components/ui/border-beam'
 
 export const metadata = {
   title: 'Bienvenue — Glan',
@@ -41,13 +42,13 @@ export default async function OnboardingPage() {
             className="absolute -inset-6 rounded-full bg-green-500/8 blur-2xl"
             aria-hidden="true"
           />
-          <GlanAvatar state="working" size="lg" />
+          <GlanCharacterLoader state="working" size={200} fallbackSize="lg" />
         </div>
 
         <div className="space-y-2">
           {/* Label tech au-dessus du titre */}
           <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-cyan-400/80">
-            [Init] Première connexion
+            {'// Init · Première connexion'}
           </p>
           <h1 className="bg-gradient-to-br from-white to-green-200 bg-clip-text text-3xl font-bold tracking-tight text-transparent">
             Bienvenue. Je suis Glan.
@@ -93,8 +94,9 @@ export default async function OnboardingPage() {
         />
       </ul>
 
-      {/* CTA gradient + glow */}
+      {/* CTA gradient + glow + BorderBeam pour signaler l'action attendue. */}
       <div className="flex justify-center">
+        <BorderBeam color="brand" thickness={1.5} className="inline-flex">
         <Link
           href="/settings"
           className="group inline-flex items-center gap-2.5 rounded-xl bg-gradient-to-r from-green-500 to-emerald-500 px-7 py-3.5 text-base font-semibold text-white shadow-[0_0_20px_-4px_oklch(70%_0.19_152_/_0.5)] transition-all hover:shadow-[0_0_28px_-2px_oklch(70%_0.19_152_/_0.7)] active:scale-[0.98]"
@@ -117,6 +119,7 @@ export default async function OnboardingPage() {
             <polyline points="12 5 19 12 12 19" />
           </svg>
         </Link>
+        </BorderBeam>
       </div>
     </div>
   )
@@ -171,7 +174,7 @@ function ChecklistStep({
 }) {
   return (
     <li
-      className={`relative flex items-start gap-4 rounded-xl border bg-white/[0.03] p-4 backdrop-blur-sm transition-all hover:bg-white/[0.06]/[0.05] ${STEP_ACCENT_BORDER[accent]}`}
+      className={`relative flex items-start gap-4 rounded-xl border bg-white/[0.03] p-4 backdrop-blur-sm transition-all hover:bg-white/[0.06] ${STEP_ACCENT_BORDER[accent]}`}
     >
       {/* Badge numéro / check */}
       <span
@@ -204,7 +207,7 @@ function ChecklistStep({
       {!done && (
         <span
           aria-label="En attente"
-          className="mt-1 font-mono text-[9px] uppercase tracking-[0.14em] text-gray-600 shrink-0"
+          className="mt-1 font-mono text-[9px] uppercase tracking-[0.14em] text-gray-600 shrink-0 dark:text-gray-400"
         >
           À faire
         </span>

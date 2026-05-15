@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { createPortal } from 'react-dom'
@@ -468,7 +468,7 @@ export function SourcingModal({ isOpen, onClose }: SourcingModalProps) {
               >
                 {LOADING_MESSAGES[loadingMessageIndex]}
               </p>
-              <p className="mt-2 text-center text-xs text-gray-400 dark:text-gray-600">
+              <p className="mt-2 text-center text-xs text-gray-400 dark:text-gray-400">
                 Ne fermez pas cette fenêtre.<br />Le run peut durer jusqu&apos;à 5 minutes.
               </p>
             </div>
@@ -515,7 +515,7 @@ export function SourcingModal({ isOpen, onClose }: SourcingModalProps) {
                         <button
                           type="button"
                           onClick={resetToForm}
-                          className="mt-2 inline-flex items-center gap-1 rounded-md border border-amber-400 bg-white px-2.5 py-1 text-xs font-medium text-amber-800 hover:bg-amber-50 focus:outline-none focus:ring-2 focus:ring-amber-500 dark:border-amber-600 dark:bg-amber-950/60 dark:text-amber-200 dark:hover:bg-amber-900/50"
+                          className="mt-2 inline-flex items-center gap-1 rounded-md border border-amber-400 bg-white/[0.04] backdrop-blur-md px-2.5 py-1 text-xs font-medium text-amber-800 hover:bg-amber-50 focus:outline-none focus:ring-2 focus:ring-amber-500 dark:border-amber-600 dark:bg-amber-950/60 dark:text-amber-200 dark:hover:bg-amber-900/50"
                         >
                           Modifier les filtres
                         </button>
@@ -557,7 +557,7 @@ export function SourcingModal({ isOpen, onClose }: SourcingModalProps) {
                         <button
                           type="button"
                           onClick={resetToForm}
-                          className="mt-2 inline-flex items-center gap-1 rounded-md border border-orange-400 bg-white px-2.5 py-1 text-xs font-medium text-orange-800 hover:bg-orange-50 focus:outline-none focus:ring-2 focus:ring-orange-500 dark:border-orange-600 dark:bg-orange-950/60 dark:text-orange-200 dark:hover:bg-orange-900/50"
+                          className="mt-2 inline-flex items-center gap-1 rounded-md border border-orange-400 bg-white/[0.04] backdrop-blur-md px-2.5 py-1 text-xs font-medium text-orange-800 hover:bg-orange-50 focus:outline-none focus:ring-2 focus:ring-orange-500 dark:border-orange-600 dark:bg-orange-950/60 dark:text-orange-200 dark:hover:bg-orange-900/50"
                         >
                           Élargir les filtres
                         </button>
@@ -607,7 +607,7 @@ export function SourcingModal({ isOpen, onClose }: SourcingModalProps) {
                 <button
                   type="button"
                   onClick={resetToForm}
-                  className="rounded-lg border border-white/[0.08] bg-white px-4 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-white/[0.06] focus:outline-none focus:ring-2 focus:ring-gray-400 focus:ring-offset-2 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700 dark:focus:ring-offset-gray-900"
+                  className="rounded-lg border border-white/[0.08] bg-white/[0.04] backdrop-blur-md px-4 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-white/[0.06] focus:outline-none focus:ring-2 focus:ring-gray-400 focus:ring-offset-2 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700 dark:focus:ring-offset-gray-900"
                 >
                   Nouveau run
                 </button>
@@ -649,7 +649,7 @@ export function SourcingModal({ isOpen, onClose }: SourcingModalProps) {
                             setFormData((prev) => ({ ...prev, effectifMin: e.target.value }))
                           }
                           disabled={isLoading}
-                          className="w-full rounded-lg border border-white/[0.08] bg-white px-3 py-2 text-sm text-gray-900 placeholder-gray-400 transition-colors focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-500/20 disabled:cursor-not-allowed disabled:opacity-60 dark:border-gray-700 dark:bg-gray-800 dark:text-white dark:placeholder-gray-600 dark:focus:border-green-500"
+                          className="w-full rounded-lg border border-white/[0.08] bg-white/[0.04] backdrop-blur-md px-3 py-2 text-sm text-gray-900 placeholder-gray-400 transition-colors focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-500/20 disabled:cursor-not-allowed disabled:opacity-60 dark:border-gray-700 dark:bg-gray-800 dark:text-white dark:placeholder-gray-500 dark:focus:border-green-500"
                           required
                           aria-describedby="effectif-hint"
                         />
@@ -671,12 +671,12 @@ export function SourcingModal({ isOpen, onClose }: SourcingModalProps) {
                             setFormData((prev) => ({ ...prev, effectifMax: e.target.value }))
                           }
                           disabled={isLoading}
-                          className="w-full rounded-lg border border-white/[0.08] bg-white px-3 py-2 text-sm text-gray-900 placeholder-gray-400 transition-colors focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-500/20 disabled:cursor-not-allowed disabled:opacity-60 dark:border-gray-700 dark:bg-gray-800 dark:text-white dark:placeholder-gray-600 dark:focus:border-green-500"
+                          className="w-full rounded-lg border border-white/[0.08] bg-white/[0.04] backdrop-blur-md px-3 py-2 text-sm text-gray-900 placeholder-gray-400 transition-colors focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-500/20 disabled:cursor-not-allowed disabled:opacity-60 dark:border-gray-700 dark:bg-gray-800 dark:text-white dark:placeholder-gray-500 dark:focus:border-green-500"
                           required
                         />
                       </div>
                     </div>
-                    <p id="effectif-hint" className="mt-1.5 text-xs text-gray-400 dark:text-gray-600">
+                    <p id="effectif-hint" className="mt-1.5 text-xs text-gray-400 dark:text-gray-400">
                       Entre 1 et 10 000 salariés
                     </p>
                   </fieldset>
@@ -685,7 +685,7 @@ export function SourcingModal({ isOpen, onClose }: SourcingModalProps) {
                   <fieldset>
                     <legend className="mb-2 text-sm font-medium text-gray-700 dark:text-gray-300">
                       Secteurs cibles
-                      <span className="ml-1.5 text-xs font-normal text-gray-400 dark:text-gray-600">
+                      <span className="ml-1.5 text-xs font-normal text-gray-400 dark:text-gray-400">
                         (optionnel — tous si aucun coché)
                       </span>
                     </legend>
@@ -700,7 +700,7 @@ export function SourcingModal({ isOpen, onClose }: SourcingModalProps) {
                             className={`flex cursor-pointer items-center gap-2.5 rounded-lg border px-3 py-2 text-sm transition-colors ${
                               isChecked
                                 ? 'border-green-300 bg-green-50 text-green-800 dark:border-green-700 dark:bg-green-950/40 dark:text-green-300'
-                                : 'border-gray-200 bg-white text-gray-700 hover:border-gray-300 hover:bg-white/[0.06] dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700'
+                                : 'border-gray-200 bg-white/[0.04] backdrop-blur-md text-gray-700 hover:border-gray-300 hover:bg-white/[0.06] dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700'
                             } ${isLoading ? 'cursor-not-allowed opacity-60' : ''}`}
                           >
                             <input
@@ -726,7 +726,7 @@ export function SourcingModal({ isOpen, onClose }: SourcingModalProps) {
                       className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300"
                     >
                       Zone géographique
-                      <span className="ml-1.5 text-xs font-normal text-gray-400 dark:text-gray-600">
+                      <span className="ml-1.5 text-xs font-normal text-gray-400 dark:text-gray-400">
                         (optionnel)
                       </span>
                     </label>
@@ -739,11 +739,11 @@ export function SourcingModal({ isOpen, onClose }: SourcingModalProps) {
                       }
                       disabled={isLoading}
                       placeholder="Ex : France, IDF, 75, Nouvelle-Aquitaine (vide = France entière)"
-                      className="w-full rounded-lg border border-white/[0.08] bg-white px-3 py-2 text-sm text-gray-900 placeholder-gray-400 transition-colors focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-500/20 disabled:cursor-not-allowed disabled:opacity-60 dark:border-gray-700 dark:bg-gray-800 dark:text-white dark:placeholder-gray-600 dark:focus:border-green-500"
+                      className="w-full rounded-lg border border-white/[0.08] bg-white/[0.04] backdrop-blur-md px-3 py-2 text-sm text-gray-900 placeholder-gray-400 transition-colors focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-500/20 disabled:cursor-not-allowed disabled:opacity-60 dark:border-gray-700 dark:bg-gray-800 dark:text-white dark:placeholder-gray-500 dark:focus:border-green-500"
                       maxLength={30}
                       aria-describedby="region-hint"
                     />
-                    <p id="region-hint" className="mt-1.5 text-xs text-gray-400 dark:text-gray-600">
+                    <p id="region-hint" className="mt-1.5 text-xs text-gray-400 dark:text-gray-400">
                       Code département, label région, ou laisser vide pour France entière
                     </p>
                   </div>
@@ -784,7 +784,7 @@ export function SourcingModal({ isOpen, onClose }: SourcingModalProps) {
                   type="button"
                   onClick={onClose}
                   disabled={isLoading}
-                  className="rounded-lg border border-white/[0.08] bg-white px-4 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-white/[0.06] focus:outline-none focus:ring-2 focus:ring-gray-400 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700 dark:focus:ring-offset-gray-900"
+                  className="rounded-lg border border-white/[0.08] bg-white/[0.04] backdrop-blur-md px-4 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-white/[0.06] focus:outline-none focus:ring-2 focus:ring-gray-400 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700 dark:focus:ring-offset-gray-900"
                 >
                   Annuler
                 </button>

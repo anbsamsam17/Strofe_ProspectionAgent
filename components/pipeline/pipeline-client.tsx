@@ -17,7 +17,7 @@
 // Click sur une card : ouvre le KanbanSidePanel (détails + dropdowns).
 // ============================================================
 
-import { useCallback, useId, useMemo, useState } from 'react'
+import { useCallback, useEffect, useId, useMemo, useState } from 'react'
 import {
   DndContext,
   DragOverlay,
@@ -33,6 +33,7 @@ import {
 } from '@dnd-kit/core'
 import { sortableKeyboardCoordinates } from '@dnd-kit/sortable'
 import type { Prospect, ProspectStatus } from '@/lib/types'
+import { ProspectCard3D } from '@/components/ui/prospect-card-3d'
 import { KanbanSidePanel } from './kanban-side-panel'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -56,6 +57,8 @@ interface PipelineClientProps {
 
 // ── Config couleurs ───────────────────────────────────────────────────────────
 
+// Dark-forced theme : on n'utilise QUE des variantes translucides (glass).
+// Pas de `bg-{c}-50` ni `bg-{c}-100` (artefacts blancs persistants).
 const COLUMN_STYLES: Record<
   string,
   {
@@ -69,84 +72,84 @@ const COLUMN_STYLES: Record<
   }
 > = {
   gray: {
-    header: 'bg-gray-100 dark:bg-gray-800/60',
-    headerText: 'text-gray-700 dark:text-gray-300',
+    header: 'bg-white/[0.04] ring-1 ring-white/[0.06]',
+    headerText: 'text-gray-200',
     dot: 'bg-gray-400',
-    badge: 'bg-gray-200 text-gray-700 dark:bg-gray-700 dark:text-gray-300',
-    card: 'border-gray-200 dark:border-gray-800',
-    cardHover: 'hover:border-gray-300 hover:shadow-md dark:hover:border-gray-700',
+    badge: 'bg-white/[0.08] text-gray-200 ring-1 ring-white/[0.08]',
+    card: 'border-white/[0.06]',
+    cardHover: 'hover:border-white/[0.18] hover:shadow-md',
     accent: 'bg-gray-400',
   },
   blue: {
-    header: 'bg-blue-50 dark:bg-blue-950/40',
-    headerText: 'text-blue-800 dark:text-blue-300',
-    dot: 'bg-blue-500',
-    badge: 'bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-400',
-    card: 'border-blue-100 dark:border-blue-900/40',
-    cardHover: 'hover:border-blue-300 hover:shadow-md dark:hover:border-blue-700',
+    header: 'bg-blue-500/10 ring-1 ring-blue-500/20',
+    headerText: 'text-blue-200',
+    dot: 'bg-blue-400',
+    badge: 'bg-blue-500/15 text-blue-200 ring-1 ring-blue-500/25',
+    card: 'border-blue-500/15',
+    cardHover: 'hover:border-blue-400/40 hover:shadow-md',
     accent: 'bg-blue-500',
   },
   yellow: {
-    header: 'bg-yellow-50 dark:bg-yellow-950/30',
-    headerText: 'text-yellow-800 dark:text-yellow-300',
-    dot: 'bg-yellow-500',
-    badge: 'bg-yellow-100 text-yellow-700 dark:bg-yellow-950 dark:text-yellow-400',
-    card: 'border-yellow-100 dark:border-yellow-900/40',
-    cardHover: 'hover:border-yellow-300 hover:shadow-md dark:hover:border-yellow-700',
+    header: 'bg-yellow-500/10 ring-1 ring-yellow-500/20',
+    headerText: 'text-yellow-200',
+    dot: 'bg-yellow-400',
+    badge: 'bg-yellow-500/15 text-yellow-200 ring-1 ring-yellow-500/25',
+    card: 'border-yellow-500/15',
+    cardHover: 'hover:border-yellow-400/40 hover:shadow-md',
     accent: 'bg-yellow-500',
   },
   purple: {
-    header: 'bg-purple-50 dark:bg-purple-950/30',
-    headerText: 'text-purple-800 dark:text-purple-300',
-    dot: 'bg-purple-500',
-    badge: 'bg-purple-100 text-purple-700 dark:bg-purple-950 dark:text-purple-400',
-    card: 'border-purple-100 dark:border-purple-900/40',
-    cardHover: 'hover:border-purple-300 hover:shadow-md dark:hover:border-purple-700',
+    header: 'bg-purple-500/10 ring-1 ring-purple-500/20',
+    headerText: 'text-purple-200',
+    dot: 'bg-purple-400',
+    badge: 'bg-purple-500/15 text-purple-200 ring-1 ring-purple-500/25',
+    card: 'border-purple-500/15',
+    cardHover: 'hover:border-purple-400/40 hover:shadow-md',
     accent: 'bg-purple-500',
   },
   green: {
-    header: 'bg-green-50 dark:bg-green-950/30',
-    headerText: 'text-green-800 dark:text-green-300',
-    dot: 'bg-green-500',
-    badge: 'bg-green-100 text-green-700 dark:bg-green-950 dark:text-green-400',
-    card: 'border-green-100 dark:border-green-900/40',
-    cardHover: 'hover:border-green-300 hover:shadow-md dark:hover:border-green-700',
+    header: 'bg-green-500/10 ring-1 ring-green-500/20',
+    headerText: 'text-green-200',
+    dot: 'bg-green-400',
+    badge: 'bg-green-500/15 text-green-200 ring-1 ring-green-500/25',
+    card: 'border-green-500/15',
+    cardHover: 'hover:border-green-400/40 hover:shadow-md',
     accent: 'bg-green-500',
   },
   red: {
-    header: 'bg-red-50 dark:bg-red-950/30',
-    headerText: 'text-red-800 dark:text-red-300',
-    dot: 'bg-red-500',
-    badge: 'bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-400',
-    card: 'border-red-100 dark:border-red-900/40',
-    cardHover: 'hover:border-red-300 hover:shadow-md dark:hover:border-red-700',
+    header: 'bg-red-500/10 ring-1 ring-red-500/20',
+    headerText: 'text-red-200',
+    dot: 'bg-red-400',
+    badge: 'bg-red-500/15 text-red-200 ring-1 ring-red-500/25',
+    card: 'border-red-500/15',
+    cardHover: 'hover:border-red-400/40 hover:shadow-md',
     accent: 'bg-red-500',
   },
   orange: {
-    header: 'bg-orange-50 dark:bg-orange-950/30',
-    headerText: 'text-orange-800 dark:text-orange-300',
-    dot: 'bg-orange-500',
-    badge: 'bg-orange-100 text-orange-700 dark:bg-orange-950 dark:text-orange-400',
-    card: 'border-orange-100 dark:border-orange-900/40',
-    cardHover: 'hover:border-orange-300 hover:shadow-md dark:hover:border-orange-700',
+    header: 'bg-orange-500/10 ring-1 ring-orange-500/20',
+    headerText: 'text-orange-200',
+    dot: 'bg-orange-400',
+    badge: 'bg-orange-500/15 text-orange-200 ring-1 ring-orange-500/25',
+    card: 'border-orange-500/15',
+    cardHover: 'hover:border-orange-400/40 hover:shadow-md',
     accent: 'bg-orange-500',
   },
   indigo: {
-    header: 'bg-indigo-50 dark:bg-indigo-950/40',
-    headerText: 'text-indigo-800 dark:text-indigo-300',
-    dot: 'bg-indigo-500',
-    badge: 'bg-indigo-100 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-400',
-    card: 'border-indigo-100 dark:border-indigo-900/40',
-    cardHover: 'hover:border-indigo-300 hover:shadow-md dark:hover:border-indigo-700',
+    header: 'bg-indigo-500/10 ring-1 ring-indigo-500/20',
+    headerText: 'text-indigo-200',
+    dot: 'bg-indigo-400',
+    badge: 'bg-indigo-500/15 text-indigo-200 ring-1 ring-indigo-500/25',
+    card: 'border-indigo-500/15',
+    cardHover: 'hover:border-indigo-400/40 hover:shadow-md',
     accent: 'bg-indigo-500',
   },
   emerald: {
-    header: 'bg-emerald-50 dark:bg-emerald-950/40',
-    headerText: 'text-emerald-800 dark:text-emerald-300',
-    dot: 'bg-emerald-500',
-    badge: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-400',
-    card: 'border-emerald-100 dark:border-emerald-900/40',
-    cardHover: 'hover:border-emerald-300 hover:shadow-md dark:hover:border-emerald-700',
+    header: 'bg-emerald-500/10 ring-1 ring-emerald-500/20',
+    headerText: 'text-emerald-200',
+    dot: 'bg-emerald-400',
+    badge: 'bg-emerald-500/15 text-emerald-200 ring-1 ring-emerald-500/25',
+    card: 'border-emerald-500/15',
+    cardHover: 'hover:border-emerald-400/40 hover:shadow-md',
     accent: 'bg-emerald-500',
   },
 }
@@ -163,6 +166,17 @@ export function PipelineClient({
   const [activeDragId, setActiveDragId] = useState<string | null>(null)
   const [overColumn, setOverColumn] = useState<KanbanStatus | null>(null)
   const [dragError, setDragError] = useState<string | null>(null)
+
+  // Désactive le tilt 3D des cards si l'utilisateur préfère un mouvement réduit.
+  const [reducedMotion, setReducedMotion] = useState(false)
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const mq = window.matchMedia('(prefers-reduced-motion: reduce)')
+    setReducedMotion(mq.matches)
+    const onChange = (e: MediaQueryListEvent) => setReducedMotion(e.matches)
+    mq.addEventListener('change', onChange)
+    return () => mq.removeEventListener('change', onChange)
+  }, [])
 
   // Map id → Prospect pour retrouver rapidement la card draggée pendant l'overlay.
   const prospectsById = useMemo(() => {
@@ -259,7 +273,7 @@ export function PipelineClient({
       {dragError && (
         <div
           role="alert"
-          className="mb-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-400"
+          className="mb-3 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-300"
         >
           {dragError}
         </div>
@@ -352,7 +366,7 @@ function DroppableColumn({
       ref={setNodeRef}
       className={`flex w-[280px] flex-none flex-col gap-3 rounded-2xl p-2 transition-colors duration-150 sm:w-[300px] ${
         isOver
-          ? 'bg-green-50/30 ring-2 ring-green-400 dark:bg-green-950/20'
+          ? 'bg-green-500/10 ring-2 ring-green-400/60 shadow-[0_0_24px_rgba(34,197,94,0.2)]'
           : 'bg-transparent ring-2 ring-transparent'
       }`}
       role="group"
@@ -379,7 +393,7 @@ function DroppableColumn({
 
       <div className="flex flex-col gap-2">
         {items.length === 0 ? (
-          <div className="flex flex-col items-center gap-2 rounded-2xl border-2 border-dashed border-white/[0.08] px-4 py-8 text-center dark:border-gray-800">
+          <div className="flex flex-col items-center gap-2 rounded-2xl border-2 border-dashed border-white/[0.08] px-4 py-8 text-center">
             <svg
               xmlns="http://www.w3.org/2000/svg"
               width="20"
@@ -390,7 +404,7 @@ function DroppableColumn({
               strokeWidth="1.5"
               strokeLinecap="round"
               strokeLinejoin="round"
-              className="text-gray-300 dark:text-gray-700"
+              className="text-gray-500"
               aria-hidden="true"
             >
               <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
@@ -398,7 +412,7 @@ function DroppableColumn({
               <line x1="9" y1="12" x2="15" y2="12" />
               <line x1="9" y1="15" x2="12" y2="15" />
             </svg>
-            <p className="text-xs text-gray-400 dark:text-gray-600">Aucun prospect</p>
+            <p className="text-xs text-gray-500">Aucun prospect</p>
           </div>
         ) : (
           items.map((prospect) => (
@@ -423,6 +437,8 @@ interface DraggableCardProps {
   styles: (typeof COLUMN_STYLES)[string]
   isBeingDragged: boolean
   onSelect: (prospect: Prospect) => void
+  /** Intensité du tilt 3D au hover (0 = désactivé pour prefers-reduced-motion). */
+  tilt?: number
 }
 
 function DraggableCard({
@@ -430,6 +446,7 @@ function DraggableCard({
   styles,
   isBeingDragged,
   onSelect,
+  tilt,
 }: DraggableCardProps) {
   const labelId = useId()
   const { attributes, listeners, setNodeRef } = useDraggable({
@@ -444,7 +461,10 @@ function DraggableCard({
     onSelect(prospect)
   }
 
+  // Tilt 3D au hover via ProspectCard3D — tilt=0 désactive l'animation
+  // (respect prefers-reduced-motion piloté depuis PipelineClient).
   return (
+    <ProspectCard3D tilt={tilt}>
     <div
       ref={setNodeRef}
       {...listeners}
@@ -481,16 +501,16 @@ function DraggableCard({
       )}
 
       <div className="mt-3 flex items-center justify-between gap-2">
-        <span className="truncate text-xs text-gray-400 dark:text-gray-600">
+        <span className="truncate text-xs text-gray-400 dark:text-gray-400">
           {prospect.ville ?? '—'}
         </span>
         <span
           className={`flex-shrink-0 rounded-full px-2.5 py-0.5 text-xs font-bold tabular-nums ${
             prospect.score_priorite >= 75
-              ? 'bg-green-100 text-green-700 dark:bg-green-950 dark:text-green-400'
+              ? 'bg-green-500/15 text-green-300 ring-1 ring-green-500/25'
               : prospect.score_priorite >= 50
-                ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-950 dark:text-yellow-400'
-                : 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400'
+                ? 'bg-yellow-500/15 text-yellow-300 ring-1 ring-yellow-500/25'
+                : 'bg-white/[0.06] text-gray-300 ring-1 ring-white/10'
           }`}
           aria-label={`Score : ${prospect.score_priorite}`}
         >
@@ -498,6 +518,7 @@ function DraggableCard({
         </span>
       </div>
     </div>
+    </ProspectCard3D>
   )
 }
 
@@ -506,7 +527,7 @@ function DraggableCard({
 function ProspectCardPreview({ prospect }: { prospect: Prospect }) {
   return (
     <div
-      className="pointer-events-none w-[280px] rotate-2 rounded-2xl border border-white/[0.08] bg-white/[0.03] backdrop-blur-md p-4 shadow-2xl ring-1 ring-black/5 dark:border-gray-700 dark:bg-gray-900 dark:ring-white/10 sm:w-[300px]"
+      className="pointer-events-none w-[280px] rotate-2 rounded-2xl border border-white/[0.08] bg-white/[0.03] backdrop-blur-md p-4 shadow-2xl ring-1 ring-white/10 sm:w-[300px]"
       aria-hidden="true"
     >
       <p className="font-semibold leading-tight text-gray-900 line-clamp-1 dark:text-white">
@@ -518,16 +539,16 @@ function ProspectCardPreview({ prospect }: { prospect: Prospect }) {
         </span>
       )}
       <div className="mt-3 flex items-center justify-between gap-2">
-        <span className="truncate text-xs text-gray-400 dark:text-gray-600">
+        <span className="truncate text-xs text-gray-400 dark:text-gray-400">
           {prospect.ville ?? '—'}
         </span>
         <span
           className={`flex-shrink-0 rounded-full px-2.5 py-0.5 text-xs font-bold tabular-nums ${
             prospect.score_priorite >= 75
-              ? 'bg-green-100 text-green-700 dark:bg-green-950 dark:text-green-400'
+              ? 'bg-green-500/15 text-green-300 ring-1 ring-green-500/25'
               : prospect.score_priorite >= 50
-                ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-950 dark:text-yellow-400'
-                : 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400'
+                ? 'bg-yellow-500/15 text-yellow-300 ring-1 ring-yellow-500/25'
+                : 'bg-white/[0.06] text-gray-300 ring-1 ring-white/10'
           }`}
         >
           {prospect.score_priorite}

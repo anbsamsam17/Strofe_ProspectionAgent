@@ -102,7 +102,15 @@ export function GlanStatusBar({ className = '' }: GlanStatusBarProps) {
       role="status"
       aria-live="polite"
     >
-      <GlanAvatar state={glanState} size="sm" />
+      <span className="relative inline-flex">
+        <GlanAvatar state={glanState} size="sm" />
+        {glanState === 'working' && (
+          <span
+            aria-hidden="true"
+            className="absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full bg-cyan-400 shadow-[0_0_8px_rgba(34,211,238,0.8)] animate-pulse"
+          />
+        )}
+      </span>
 
       <div className="hidden flex-col leading-tight sm:flex">
         <span className="text-sm font-medium text-white">

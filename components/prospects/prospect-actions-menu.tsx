@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
@@ -142,7 +142,7 @@ export function ProspectActionsMenu({
         aria-expanded={open}
         aria-label={`Actions pour ${prospectName}`}
         disabled={pending}
-        className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-white/[0.08] bg-white text-gray-500 transition-colors hover:border-gray-300 hover:bg-white/[0.06] hover:text-gray-700 disabled:opacity-60 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-200"
+        className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-white/[0.08] bg-white/[0.04] backdrop-blur-md text-gray-500 transition-colors hover:border-gray-300 hover:bg-white/[0.06] hover:text-gray-700 disabled:opacity-60 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-200"
       >
         <svg
           xmlns="http://www.w3.org/2000/svg"
@@ -165,7 +165,7 @@ export function ProspectActionsMenu({
       {open && (
         <div
           role="menu"
-          className="absolute right-0 z-20 mt-1 w-56 origin-top-right overflow-hidden rounded-lg border border-white/[0.08] bg-white py-1 shadow-lg dark:border-gray-700 dark:bg-gray-900"
+          className="absolute right-0 z-20 mt-1 w-56 origin-top-right overflow-hidden rounded-lg border border-white/[0.08] bg-white/[0.04] backdrop-blur-md py-1 shadow-lg dark:border-gray-700 dark:bg-gray-900"
         >
           {/* Statut */}
           <button
@@ -213,7 +213,7 @@ export function ProspectActionsMenu({
           </button>
 
           {statusOpen && (
-            <div className="border-t border-white/[0.06] bg-gray-50/60 py-1 dark:border-gray-800 dark:bg-gray-800/30">
+            <div className="border-t border-white/[0.06] bg-white/[0.02] py-1">
               {STATUS_OPTIONS.map((opt) => {
                 const isCurrent = opt.value === currentStatut
                 return (

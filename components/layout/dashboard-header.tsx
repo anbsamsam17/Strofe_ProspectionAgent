@@ -5,6 +5,7 @@ import type { AgentRun } from '@/lib/types'
 import { SourcingModal } from '@/components/dashboard/sourcing-modal'
 import { useAgentRunStatus } from '@/lib/hooks/use-agent-run-status'
 import { GlanStatusBar } from '@/components/glan/glan-status-bar'
+import { BorderBeam } from '@/components/ui/border-beam'
 
 interface DashboardHeaderProps {
   userName: string
@@ -42,6 +43,7 @@ export function DashboardHeader({ userName, agentRun }: DashboardHeaderProps) {
 
       {/* Droite : bouton lancer + avatar user */}
       <div className="flex items-center gap-3">
+        <BorderBeam color="brand" thickness={1.5} paused={isAgentRunning}>
         <button
           onClick={handleLaunchAgent}
           disabled={isDisabled}
@@ -99,6 +101,7 @@ export function DashboardHeader({ userName, agentRun }: DashboardHeaderProps) {
             </>
           )}
         </button>
+        </BorderBeam>
 
         {/* Avatar utilisateur tech */}
         <div

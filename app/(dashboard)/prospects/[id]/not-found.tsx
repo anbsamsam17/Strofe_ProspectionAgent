@@ -14,7 +14,7 @@ export default function ProspectNotFound() {
           strokeWidth="1.5"
           strokeLinecap="round"
           strokeLinejoin="round"
-          className="text-gray-400 dark:text-gray-600"
+          className="text-gray-400 dark:text-gray-400"
           aria-hidden="true"
         >
           <circle cx="11" cy="11" r="8" />

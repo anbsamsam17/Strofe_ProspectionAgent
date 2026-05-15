@@ -45,61 +45,62 @@ interface TimelineItem {
 
 // ── Constantes ────────────────────────────────────────────────────────────────
 
+// Dark-forced theme : variantes translucides (glass) — pas de bg-{c}-50/100.
 const TYPE_LABELS: Record<ExchangeType, { label: string; className: string }> = {
   appel: {
     label: 'Appel',
-    className: 'bg-green-50 text-green-700 dark:bg-green-950/40 dark:text-green-400',
+    className: 'bg-green-500/15 text-green-200 ring-1 ring-green-500/25',
   },
   email: {
     label: 'Email',
-    className: 'bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-400',
+    className: 'bg-blue-500/15 text-blue-200 ring-1 ring-blue-500/25',
   },
   linkedin: {
     label: 'LinkedIn',
-    className: 'bg-sky-50 text-sky-700 dark:bg-sky-950/40 dark:text-sky-400',
+    className: 'bg-sky-500/15 text-sky-200 ring-1 ring-sky-500/25',
   },
   rdv: {
     label: 'RDV',
-    className: 'bg-purple-50 text-purple-700 dark:bg-purple-950/40 dark:text-purple-400',
+    className: 'bg-purple-500/15 text-purple-200 ring-1 ring-purple-500/25',
   },
   autre: {
     label: 'Autre',
-    className: 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300',
+    className: 'bg-white/[0.06] text-gray-200 ring-1 ring-white/[0.08]',
   },
 }
 
 const CALL_RESULT_LABELS: Record<CallResult, { label: string; className: string }> = {
   interested: {
     label: 'Intéressé',
-    className: 'bg-green-50 text-green-700 dark:bg-green-950/40 dark:text-green-400',
+    className: 'bg-green-500/15 text-green-200 ring-1 ring-green-500/25',
   },
   callback: {
     label: 'Rappel demandé',
-    className: 'bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-400',
+    className: 'bg-blue-500/15 text-blue-200 ring-1 ring-blue-500/25',
   },
   not_interested: {
     label: 'Pas intéressé',
-    className: 'bg-red-50 text-red-700 dark:bg-red-950/40 dark:text-red-400',
+    className: 'bg-red-500/15 text-red-200 ring-1 ring-red-500/25',
   },
   wrong_contact: {
     label: 'Mauvais contact',
-    className: 'bg-orange-50 text-orange-700 dark:bg-orange-950/40 dark:text-orange-400',
+    className: 'bg-orange-500/15 text-orange-200 ring-1 ring-orange-500/25',
   },
   no_answer: {
     label: 'Pas de réponse',
-    className: 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400',
+    className: 'bg-white/[0.06] text-gray-300 ring-1 ring-white/[0.08]',
   },
   voicemail: {
     label: 'Répondeur',
-    className: 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400',
+    className: 'bg-white/[0.06] text-gray-300 ring-1 ring-white/[0.08]',
   },
   email_sent: {
     label: 'Email envoyé',
-    className: 'bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-400',
+    className: 'bg-blue-500/15 text-blue-200 ring-1 ring-blue-500/25',
   },
   no_contact_point: {
     label: 'Pas de point de contact',
-    className: 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400',
+    className: 'bg-white/[0.06] text-gray-300 ring-1 ring-white/[0.08]',
   },
 }
 
@@ -131,7 +132,7 @@ function resultLabel(item: TimelineItem): { label: string; className: string } |
   if (known) return known
   return {
     label: item.result,
-    className: 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300',
+    className: 'bg-white/[0.06] text-gray-200 ring-1 ring-white/[0.08]',
   }
 }
 
@@ -219,7 +220,7 @@ export function ExchangesPanel({ prospectId, exchanges, calls }: ExchangesPanelP
             })}
           </ul>
         ) : (
-          <p className="text-sm text-gray-400 dark:text-gray-600">
+          <p className="text-sm text-gray-400 dark:text-gray-400">
             Aucun échange enregistré pour ce prospect.
           </p>
         )}

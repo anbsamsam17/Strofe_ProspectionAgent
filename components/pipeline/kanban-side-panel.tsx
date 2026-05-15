@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 // ============================================================
 // Kanban Side Panel — drawer latéral droit pour les détails
@@ -30,6 +30,7 @@ import type {
 } from '@/lib/types'
 import { buildBegesUrl } from '@/lib/utils/beges-url'
 import { ProspectNotes } from '@/components/prospects/prospect-notes'
+import { Confetti } from '@/components/ui/confetti'
 import {
   STATUS_LABELS,
   STATUS_STYLES_SOLID,
@@ -63,7 +64,7 @@ const PRIORITY_LABELS: Record<Priority, { label: string; badge: string }> = {
   },
   basse: {
     label: 'Basse',
-    badge: 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-400',
+    badge: 'bg-white/[0.06] text-gray-300 border border-white/10',
   },
 }
 
@@ -251,7 +252,7 @@ function StatusInlineDropdown({
         aria-haspopup="listbox"
         aria-expanded={open}
         aria-label={`Changer le statut (actuel : ${currentLabel})`}
-        className="inline-flex w-full items-center justify-between gap-2 rounded-lg border border-white/[0.08] bg-white px-3 py-2 text-sm font-medium text-gray-900 transition-colors hover:border-gray-300 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-700 dark:bg-gray-900 dark:text-white dark:hover:border-gray-600"
+        className="inline-flex w-full items-center justify-between gap-2 rounded-lg border border-white/[0.08] bg-white/[0.04] backdrop-blur-md px-3 py-2 text-sm font-medium text-gray-900 transition-colors hover:border-gray-300 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-700 dark:bg-gray-900 dark:text-white dark:hover:border-gray-600"
       >
         <span className="flex items-center gap-2">
           <span className={`h-2 w-2 rounded-full ${currentStyle.dot}`} aria-hidden="true" />
@@ -278,7 +279,7 @@ function StatusInlineDropdown({
         <ul
           role="listbox"
           aria-label="Statuts disponibles"
-          className="absolute left-0 right-0 top-full z-10 mt-1 max-h-60 overflow-auto rounded-lg border border-white/[0.08] bg-white py-1 shadow-lg dark:border-gray-700 dark:bg-gray-900"
+          className="absolute left-0 right-0 top-full z-10 mt-1 max-h-60 overflow-auto rounded-lg border border-white/[0.08] bg-white/[0.04] backdrop-blur-md py-1 shadow-lg dark:border-gray-700 dark:bg-gray-900"
         >
           {STATUS_OPTIONS.map((opt) => {
             const optLabel = STATUS_LABELS[opt]
@@ -350,7 +351,7 @@ function PriorityInlineDropdown({ priorite }: { priorite: Priority }) {
         <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs ${current.badge}`}>
           {current.label}
         </span>
-        <span className="text-[10px] uppercase tracking-wide text-gray-400 dark:text-gray-600">
+        <span className="text-[10px] uppercase tracking-wide text-gray-400 dark:text-gray-400">
           dérivée du score
         </span>
       </div>
@@ -472,7 +473,7 @@ function ContactSection({ prospect }: { prospect: Prospect }) {
   if (!hasContact) {
     return (
       <Section title="Contact">
-        <p className="text-sm italic text-gray-400 dark:text-gray-600">
+        <p className="text-sm italic text-gray-400 dark:text-gray-400">
           Aucun contact identifié
         </p>
       </Section>
@@ -668,6 +669,17 @@ export function KanbanSidePanel({
     return () => document.removeEventListener('keydown', onKey)
   }, [open, onClose])
 
+  // Confetti déclenché ponctuellement quand on passe un prospect à "converted"
+  // (affaire conclue). Reset à false après ~2.5s pour permettre un nouveau trigger.
+  const [confettiTrigger, setConfettiTrigger] = useState(false)
+  function handleStatusChange(id: string, newStatus: ProspectStatus) {
+    onStatusChange(id, newStatus)
+    if (newStatus === 'converted') {
+      setConfettiTrigger(true)
+      setTimeout(() => setConfettiTrigger(false), 2500)
+    }
+  }
+
   const status = prospect.statut
   const statusLabel = STATUS_LABELS[status]
   const statusStyle = STATUS_STYLES_SOLID[status]
@@ -681,6 +693,9 @@ export function KanbanSidePanel({
       aria-hidden={!open}
       className="pointer-events-none fixed inset-0 z-40"
     >
+      {/* Confetti — déclenché quand statut bascule sur "converted". */}
+      <Confetti trigger={confettiTrigger} />
+
       {/* Overlay */}
       <div
         onClick={onClose}
@@ -748,17 +763,17 @@ export function KanbanSidePanel({
           <Section title="Pipeline">
             <div className="space-y-3">
               <div>
-                <p className="mb-1.5 text-[11px] font-medium uppercase tracking-wider text-gray-400 dark:text-gray-600">
+                <p className="mb-1.5 text-[11px] font-medium uppercase tracking-wider text-gray-400 dark:text-gray-400">
                   Statut
                 </p>
                 <StatusInlineDropdown
                   prospectId={prospect.id}
                   currentStatut={status}
-                  onChange={onStatusChange}
+                  onChange={handleStatusChange}
                 />
               </div>
               <div>
-                <p className="mb-1.5 text-[11px] font-medium uppercase tracking-wider text-gray-400 dark:text-gray-600">
+                <p className="mb-1.5 text-[11px] font-medium uppercase tracking-wider text-gray-400 dark:text-gray-400">
                   Priorité
                 </p>
                 <PriorityInlineDropdown priorite={priorite} />

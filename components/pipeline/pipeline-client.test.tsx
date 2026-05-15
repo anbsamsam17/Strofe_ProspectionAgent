@@ -249,12 +249,12 @@ describe('PipelineClient — rendu', () => {
     const mid = screen.getByLabelText('Score : 60')
     const low = screen.getByLabelText('Score : 20')
 
-    // Palier ≥75 → vert.
-    expect(high.className).toMatch(/bg-green-100/)
+    // Palier ≥75 → vert (glass translucide en dark forced).
+    expect(high.className).toMatch(/bg-green-500\/15/)
     // Palier ≥50 et <75 → jaune.
-    expect(mid.className).toMatch(/bg-yellow-100/)
-    // Palier <50 → gris.
-    expect(low.className).toMatch(/bg-gray-100/)
+    expect(mid.className).toMatch(/bg-yellow-500\/15/)
+    // Palier <50 → glass neutre.
+    expect(low.className).toMatch(/bg-white\/\[0\.06\]/)
   })
 
   it('chaque card a aria-roledescription="Carte prospect déplaçable"', () => {

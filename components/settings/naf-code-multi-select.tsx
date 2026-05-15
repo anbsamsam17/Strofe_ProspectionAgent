@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import {
@@ -182,7 +182,7 @@ export function NafCodeMultiSelect({
     <div className="space-y-4" aria-labelledby={labelledBy}>
       {/* ── Groupes suggérés ────────────────────────────────────────── */}
       {showSuggestedGroups && (
-        <div className="rounded-2xl border border-white/[0.06] bg-gray-50/60 px-4 py-4 dark:border-gray-800 dark:bg-gray-800/30">
+        <div className="rounded-2xl border border-white/[0.06] bg-white/[0.02] px-4 py-4">
           <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
             <p className="text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
               Suggérés (prospection B2B BEGES)
@@ -192,7 +192,7 @@ export function NafCodeMultiSelect({
                 type="button"
                 onClick={selectAllSuggested}
                 disabled={disabled}
-                className="rounded-lg border border-white/[0.08] bg-white px-2.5 py-1 text-xs font-medium text-gray-700 transition-colors duration-150 hover:border-green-300 hover:bg-green-50 hover:text-green-700 focus:outline-none focus:ring-2 focus:ring-green-500/30 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-green-950/40 dark:hover:text-green-300"
+                className="rounded-lg border border-white/[0.08] bg-white/[0.04] backdrop-blur-md px-2.5 py-1 text-xs font-medium text-gray-700 transition-colors duration-150 hover:border-green-300 hover:bg-green-50 hover:text-green-700 focus:outline-none focus:ring-2 focus:ring-green-500/30 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-green-950/40 dark:hover:text-green-300"
               >
                 Tout sélectionner
               </button>
@@ -200,7 +200,7 @@ export function NafCodeMultiSelect({
                 type="button"
                 onClick={deselectAllSuggested}
                 disabled={disabled}
-                className="rounded-lg border border-white/[0.08] bg-white px-2.5 py-1 text-xs font-medium text-gray-700 transition-colors duration-150 hover:border-gray-300 hover:bg-white/[0.06] focus:outline-none focus:ring-2 focus:ring-green-500/30 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
+                className="rounded-lg border border-white/[0.08] bg-white/[0.04] backdrop-blur-md px-2.5 py-1 text-xs font-medium text-gray-700 transition-colors duration-150 hover:border-gray-300 hover:bg-white/[0.06] focus:outline-none focus:ring-2 focus:ring-green-500/30 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
               >
                 Désélectionner tout
               </button>
@@ -222,8 +222,8 @@ export function NafCodeMultiSelect({
                       allSelected
                         ? 'border-green-200 bg-green-100 text-green-700 ring-1 ring-green-200 hover:bg-green-200/60 dark:border-green-800 dark:bg-green-950/60 dark:text-green-300 dark:ring-green-900'
                         : someSelected
-                          ? 'border-green-200 bg-white text-green-700 hover:bg-green-50 dark:border-green-800/60 dark:bg-gray-900 dark:text-green-300'
-                          : 'border-gray-200 bg-white text-gray-700 hover:border-gray-300 hover:bg-white/[0.06] dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 dark:hover:bg-gray-800'
+                          ? 'border-green-200 bg-white/[0.04] backdrop-blur-md text-green-700 hover:bg-green-50 dark:border-green-800/60 dark:bg-gray-900 dark:text-green-300'
+                          : 'border-gray-200 bg-white/[0.04] backdrop-blur-md text-gray-700 hover:border-gray-300 hover:bg-white/[0.06] dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 dark:hover:bg-gray-800'
                     }`}
                   >
                     {allSelected && (
@@ -294,7 +294,7 @@ export function NafCodeMultiSelect({
             aria-activedescendant={
               activeIndex >= 0 ? `${listboxId}-opt-${activeIndex}` : undefined
             }
-            className="w-full rounded-lg border border-white/[0.08] bg-white py-2.5 pl-10 pr-3 text-sm text-gray-900 placeholder-gray-400 transition-colors duration-150 focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-500/20 disabled:cursor-not-allowed disabled:opacity-60 dark:border-gray-700 dark:bg-gray-800 dark:text-white dark:placeholder-gray-500"
+            className="w-full rounded-lg border border-white/[0.08] bg-white/[0.04] backdrop-blur-md py-2.5 pl-10 pr-3 text-sm text-gray-900 placeholder-gray-400 transition-colors duration-150 focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-500/20 disabled:cursor-not-allowed disabled:opacity-60 dark:border-gray-700 dark:bg-gray-800 dark:text-white dark:placeholder-gray-500"
           />
           {search.length > 0 && (
             <button
@@ -337,7 +337,7 @@ export function NafCodeMultiSelect({
         role="listbox"
         aria-multiselectable="true"
         aria-label="Codes NAF disponibles"
-        className="max-h-72 overflow-y-auto rounded-lg border border-white/[0.08] bg-white dark:border-gray-700 dark:bg-gray-900"
+        className="max-h-72 overflow-y-auto rounded-lg border border-white/[0.08] bg-white/[0.04] backdrop-blur-md dark:border-gray-700 dark:bg-gray-900"
       >
         {filtered.length === 0 && (
           <li className="px-4 py-6 text-center text-sm text-gray-500 dark:text-gray-400">
@@ -368,7 +368,7 @@ export function NafCodeMultiSelect({
                 className={`mt-0.5 flex h-4 w-4 flex-shrink-0 items-center justify-center rounded border-2 transition-colors duration-150 ${
                   isSelected
                     ? 'border-green-600 bg-green-600'
-                    : 'border-gray-300 bg-white dark:border-gray-600 dark:bg-gray-800'
+                    : 'border-gray-300 bg-white/[0.04] backdrop-blur-md dark:border-gray-600 dark:bg-gray-800'
                 }`}
                 aria-hidden="true"
               >
@@ -393,7 +393,7 @@ export function NafCodeMultiSelect({
                   <span className="font-mono tabular-nums text-gray-700 dark:text-gray-300">
                     {entry.code}
                   </span>
-                  <span className="mx-1.5 text-gray-300 dark:text-gray-600">—</span>
+                  <span className="mx-1.5 text-gray-300 dark:text-gray-500">—</span>
                   {entry.libelle}
                 </p>
                 <p className="mt-0.5 text-xs text-gray-400 dark:text-gray-500">

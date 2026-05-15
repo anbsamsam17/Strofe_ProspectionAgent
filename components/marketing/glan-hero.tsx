@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 // ============================================================
 // GlanHero — bloc hero du landing avec orbe 3D R3F
@@ -72,13 +72,13 @@ export function GlanHero() {
             </Link>
             <Link
               href="/login"
-              className="inline-flex items-center gap-2 rounded-xl border border-white/[0.08] bg-white px-6 py-3 text-base font-semibold text-gray-700 transition-colors hover:bg-white/[0.06] dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-800"
+              className="inline-flex items-center gap-2 rounded-xl border border-white/[0.08] bg-white/[0.04] backdrop-blur-md px-6 py-3 text-base font-semibold text-gray-700 transition-colors hover:bg-white/[0.06] dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-800"
             >
               Se connecter
             </Link>
           </div>
 
-          <p className="mt-6 animate-fade-in-up text-xs text-gray-400 opacity-0 animation-delay-500 dark:text-gray-600">
+          <p className="mt-6 animate-fade-in-up text-xs text-gray-400 opacity-0 animation-delay-500 dark:text-gray-400">
             — Glan, votre agent de sourcing
           </p>
         </div>

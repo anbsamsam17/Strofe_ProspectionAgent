@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import { useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
@@ -245,7 +245,7 @@ export function SettingsForm({ initialSettings }: SettingsFormProps) {
                 setSettings((prev) => ({ ...prev, target_city: e.target.value }))
               }
               placeholder="Ex : Lyon, Île-de-France, Rhône-Alpes..."
-              className="w-full rounded-lg border border-white/[0.08] bg-white px-4 py-2.5 text-sm text-gray-900 placeholder-gray-400 transition focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-500/20 dark:border-gray-700 dark:bg-gray-800 dark:text-white dark:placeholder-gray-600"
+              className="w-full rounded-lg border border-white/[0.08] bg-white/[0.04] backdrop-blur-md px-4 py-2.5 text-sm text-gray-900 placeholder-gray-400 transition focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-500/20 dark:border-gray-700 dark:bg-gray-800 dark:text-white dark:placeholder-gray-500"
             />
           </div>
 
@@ -275,7 +275,7 @@ export function SettingsForm({ initialSettings }: SettingsFormProps) {
                   }
                 }}
                 placeholder="69001"
-                className="flex-1 rounded-lg border border-white/[0.08] bg-white px-4 py-2.5 text-sm tabular-nums text-gray-900 placeholder-gray-400 transition focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-500/20 dark:border-gray-700 dark:bg-gray-800 dark:text-white dark:placeholder-gray-600"
+                className="flex-1 rounded-lg border border-white/[0.08] bg-white/[0.04] backdrop-blur-md px-4 py-2.5 text-sm tabular-nums text-gray-900 placeholder-gray-400 transition focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-500/20 dark:border-gray-700 dark:bg-gray-800 dark:text-white dark:placeholder-gray-500"
                 aria-describedby={postalCodeError ? 'postal-code-error' : undefined}
               />
               <button
@@ -419,14 +419,14 @@ export function SettingsForm({ initialSettings }: SettingsFormProps) {
                 type="button"
                 onClick={normalizeWeights}
                 disabled={isWeightsBalanced}
-                className="rounded-lg border border-white/[0.08] bg-white px-3 py-1.5 text-xs font-medium text-gray-700 transition hover:border-gray-300 hover:bg-white/[0.06] focus:outline-none focus:ring-2 focus:ring-green-500/20 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
+                className="rounded-lg border border-white/[0.08] bg-white/[0.04] backdrop-blur-md px-3 py-1.5 text-xs font-medium text-gray-700 transition hover:border-gray-300 hover:bg-white/[0.06] focus:outline-none focus:ring-2 focus:ring-green-500/20 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
               >
                 Normaliser
               </button>
               <button
                 type="button"
                 onClick={resetWeights}
-                className="rounded-lg border border-white/[0.08] bg-white px-3 py-1.5 text-xs font-medium text-gray-700 transition hover:border-gray-300 hover:bg-white/[0.06] focus:outline-none focus:ring-2 focus:ring-green-500/20 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
+                className="rounded-lg border border-white/[0.08] bg-white/[0.04] backdrop-blur-md px-3 py-1.5 text-xs font-medium text-gray-700 transition hover:border-gray-300 hover:bg-white/[0.06] focus:outline-none focus:ring-2 focus:ring-green-500/20 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
               >
                 Réinitialiser aux défauts (30 / 30 / 40)
               </button>
@@ -466,7 +466,7 @@ export function SettingsForm({ initialSettings }: SettingsFormProps) {
               setSettings((prev) => ({ ...prev, notification_email: e.target.value }))
             }
             placeholder="prenom.nom@exemple.com"
-            className="w-full rounded-lg border border-white/[0.08] bg-white px-4 py-2.5 text-sm text-gray-900 placeholder-gray-400 transition focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-500/20 dark:border-gray-700 dark:bg-gray-800 dark:text-white dark:placeholder-gray-600"
+            className="w-full rounded-lg border border-white/[0.08] bg-white/[0.04] backdrop-blur-md px-4 py-2.5 text-sm text-gray-900 placeholder-gray-400 transition focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-500/20 dark:border-gray-700 dark:bg-gray-800 dark:text-white dark:placeholder-gray-500"
           />
         </div>
       </section>
@@ -501,11 +501,11 @@ export function SettingsForm({ initialSettings }: SettingsFormProps) {
               placeholder="Ex : Nous accompagnons les ETI dans la réalisation de leur bilan carbone réglementaire (BEGES Scope 1+2+3) et dans la construction de leur plan de décarbonation..."
               rows={6}
               maxLength={2000}
-              className="w-full resize-none rounded-lg border border-white/[0.08] bg-white px-4 py-3 text-sm text-gray-900 placeholder-gray-400 transition focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-500/20 dark:border-gray-700 dark:bg-gray-800 dark:text-white dark:placeholder-gray-600"
+              className="w-full resize-none rounded-lg border border-white/[0.08] bg-white/[0.04] backdrop-blur-md px-4 py-3 text-sm text-gray-900 placeholder-gray-400 transition focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-500/20 dark:border-gray-700 dark:bg-gray-800 dark:text-white dark:placeholder-gray-500"
             />
             <span
               className={`absolute bottom-3 right-3 text-xs tabular-nums ${
-                charCount > 1800 ? 'text-orange-500' : 'text-gray-400 dark:text-gray-600'
+                charCount > 1800 ? 'text-orange-500' : 'text-gray-400 dark:text-gray-400'
               }`}
             >
               {charCount} / 2000

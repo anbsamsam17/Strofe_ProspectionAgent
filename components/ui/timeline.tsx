@@ -26,7 +26,7 @@ interface TimelineProps {
 }
 
 const TONE_DOT: Record<TimelineTone, string> = {
-  default: 'bg-gray-400 ring-gray-200 dark:ring-gray-800',
+  default: 'bg-gray-400 ring-white/10',
   success: 'bg-green-500 ring-green-500/30',
   warning: 'bg-amber-500 ring-amber-500/30',
   danger: 'bg-red-500 ring-red-500/30',
@@ -47,7 +47,7 @@ function formatDate(iso: string): string {
 export function Timeline({ items, className = '' }: TimelineProps) {
   if (items.length === 0) {
     return (
-      <p className="text-sm italic text-gray-400 dark:text-gray-600">
+      <p className="text-sm italic text-gray-400 dark:text-gray-400">
         Aucun échange enregistré.
       </p>
     )
@@ -74,7 +74,7 @@ export function Timeline({ items, className = '' }: TimelineProps) {
                 <p className="text-sm font-semibold text-gray-900 dark:text-white">
                   {item.title}
                 </p>
-                <span className="font-mono text-[11px] text-gray-400 tabular-nums dark:text-gray-600">
+                <span className="font-mono text-[11px] text-gray-400 tabular-nums dark:text-gray-400">
                   {formatDate(item.date)}
                 </span>
               </div>

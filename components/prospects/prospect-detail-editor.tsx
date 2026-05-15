@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
@@ -154,7 +154,7 @@ export function ProspectDetailEditor({
         <button
           type="button"
           onClick={() => setIsEditing(true)}
-          className="absolute right-0 top-0 inline-flex items-center gap-1.5 rounded-md border border-white/[0.08] bg-white px-2.5 py-1 text-xs font-medium text-gray-600 transition-colors hover:border-green-300 hover:bg-green-50 hover:text-green-700 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-400 dark:hover:border-green-700 dark:hover:bg-green-950/40 dark:hover:text-green-400"
+          className="absolute right-0 top-0 inline-flex items-center gap-1.5 rounded-md border border-white/[0.08] bg-white/[0.04] backdrop-blur-md px-2.5 py-1 text-xs font-medium text-gray-600 transition-colors hover:border-green-300 hover:bg-green-50 hover:text-green-700 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-400 dark:hover:border-green-700 dark:hover:bg-green-950/40 dark:hover:text-green-400"
           aria-label={SECTION_TITLES[section]}
         >
           <svg
@@ -207,7 +207,7 @@ export function ProspectDetailEditor({
           type="button"
           onClick={handleCancel}
           disabled={isSaving}
-          className="inline-flex items-center rounded-lg border border-white/[0.08] bg-white px-3.5 py-1.5 text-sm font-medium text-gray-600 transition-colors hover:border-gray-300 hover:bg-white/[0.06] disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
+          className="inline-flex items-center rounded-lg border border-white/[0.08] bg-white/[0.04] backdrop-blur-md px-3.5 py-1.5 text-sm font-medium text-gray-600 transition-colors hover:border-gray-300 hover:bg-white/[0.06] disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
         >
           Annuler
         </button>
@@ -256,7 +256,7 @@ function TextInput({
         value={strVal}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
-        className="w-full rounded-lg border border-white/[0.08] bg-white px-3 py-2 text-sm text-gray-900 placeholder-gray-400 transition focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-500/20 dark:border-gray-700 dark:bg-gray-800 dark:text-white dark:placeholder-gray-600"
+        className="w-full rounded-lg border border-white/[0.08] bg-white/[0.04] backdrop-blur-md px-3 py-2 text-sm text-gray-900 placeholder-gray-400 transition focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-500/20 dark:border-gray-700 dark:bg-gray-800 dark:text-white dark:placeholder-gray-500"
       />
     </div>
   )
@@ -453,7 +453,7 @@ function StatutField({
         id="field-statut"
         value={current}
         onChange={(e) => onChange('statut', e.target.value)}
-        className="w-full rounded-lg border border-white/[0.08] bg-white px-3 py-2 text-sm text-gray-900 transition focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-500/20 dark:border-gray-700 dark:bg-gray-800 dark:text-white"
+        className="w-full rounded-lg border border-white/[0.08] bg-white/[0.04] backdrop-blur-md px-3 py-2 text-sm text-gray-900 transition focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-500/20 dark:border-gray-700 dark:bg-gray-800 dark:text-white"
       >
         {STATUS_OPTIONS.map((opt) => (
           <option key={opt.value} value={opt.value}>

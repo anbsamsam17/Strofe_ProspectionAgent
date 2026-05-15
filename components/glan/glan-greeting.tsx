@@ -13,9 +13,10 @@
 // Le nouveau message parle de "X prospects ajoutés cette nuit" + "pipeline commercial".
 // ============================================================
 
-import { useEffect, useState } from 'react'
-import { GlanAvatar } from './glan-avatar'
+import { useEffect, useState, type ReactNode } from 'react'
+import { GlanCharacterLoader } from './glan-character-loader'
 import { useGlanStatus } from '@/lib/hooks/use-glan-status'
+import { AnimatedCounter } from '@/components/ui/animated-counter'
 
 interface GlanGreetingProps {
   userName: string
@@ -74,8 +75,9 @@ export function GlanGreeting({
   const countdown = useCountdownTo(target)
   const firstName = getFirstName(userName)
 
-  // Phrase contextuelle selon l'état + le nombre de prospects ajoutés cette nuit
-  let primary: string
+  // Phrase contextuelle selon l'état + le nombre de prospects ajoutés cette nuit.
+  // `primary` peut contenir un <AnimatedCounter /> pour les variantes numériques.
+  let primary: ReactNode
   let secondary: string
 
   if (glanState === 'working') {
@@ -85,7 +87,14 @@ export function GlanGreeting({
     if (newProspectsCount === 1) {
       primary = `J'ai ajouté 1 prospect à votre liste cette nuit, ${firstName}.`
     } else {
-      primary = `J'ai ajouté ${newProspectsCount} prospects à votre liste cette nuit, ${firstName}.`
+      // key={newProspectsCount} re-déclenche l'animation 0 → N au changement.
+      primary = (
+        <>
+          J&apos;ai ajouté{' '}
+          <AnimatedCounter key={newProspectsCount} value={newProspectsCount} />{' '}
+          prospects à votre liste cette nuit, {firstName}.
+        </>
+      )
     }
     secondary = highPriorityCount && highPriorityCount > 0
       ? `${highPriorityCount} en haute priorité (score ≥ 75).`
@@ -119,7 +128,12 @@ export function GlanGreeting({
       />
 
       <div className="relative flex flex-col items-center gap-5 sm:flex-row sm:items-center sm:gap-8 sm:text-left">
-        <GlanAvatar state={glanState} size="lg" className="flex-shrink-0" />
+        <GlanCharacterLoader
+          state={glanState}
+          size={180}
+          fallbackSize="lg"
+          className="flex-shrink-0"
+        />
 
         <div className="flex flex-col gap-1.5 text-center sm:text-left">
           <span className="font-mono text-[10px] uppercase tracking-[0.2em] text-green-400/80">

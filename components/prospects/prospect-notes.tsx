@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import { useEffect, useRef, useState } from 'react'
 
@@ -78,7 +78,7 @@ export function ProspectNotes({ prospectId, initialNotes }: ProspectNotesProps) 
         rows={5}
         placeholder="Notes libres sur ce prospect (contexte, historique, prochaines actions...)"
         aria-label="Notes sur le prospect"
-        className="w-full rounded-lg border border-white/[0.08] bg-white px-3 py-2 text-sm text-gray-900 placeholder-gray-400 transition focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-500/20 dark:border-gray-700 dark:bg-gray-800 dark:text-white dark:placeholder-gray-600"
+        className="w-full rounded-lg border border-white/[0.08] bg-white/[0.04] backdrop-blur-md px-3 py-2 text-sm text-gray-900 placeholder-gray-400 transition focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-500/20 dark:border-gray-700 dark:bg-gray-800 dark:text-white dark:placeholder-gray-500"
       />
       <div className="flex items-center justify-between text-xs">
         <span className="flex items-center gap-2 text-gray-500 dark:text-gray-400">
@@ -111,7 +111,7 @@ export function ProspectNotes({ prospectId, initialNotes }: ProspectNotesProps) 
             </span>
           )}
           {status === 'idle' && (
-            <span className="text-gray-400 dark:text-gray-600">
+            <span className="text-gray-400 dark:text-gray-400">
               Sauvegarde automatique
             </span>
           )}
@@ -120,7 +120,7 @@ export function ProspectNotes({ prospectId, initialNotes }: ProspectNotesProps) 
           className={`tabular-nums ${
             isNearLimit
               ? 'font-semibold text-orange-600 dark:text-orange-400'
-              : 'text-gray-400 dark:text-gray-600'
+              : 'text-gray-400 dark:text-gray-400'
           }`}
         >
           {charCount}/{NOTES_MAX_LENGTH}

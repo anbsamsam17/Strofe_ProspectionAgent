@@ -2,6 +2,7 @@ import { createClient } from '@/lib/supabase/server'
 import type { PipelineRange } from '@/lib/pipeline/range'
 import { rangeStartISO } from '@/lib/pipeline/range'
 import { BentoCell } from '@/components/ui/bento-grid'
+import { AnimatedCounter } from '@/components/ui/animated-counter'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -183,6 +184,7 @@ export async function KpiCards({ range }: KpiCardsProps) {
         accent="brand"
         label="Prospects actifs"
         value={kpis.activeCount.toLocaleString('fr-FR')}
+        numericValue={kpis.activeCount}
         sublabel={
           range === 'all'
             ? 'Tous statuts hors archive'
@@ -198,6 +200,8 @@ export async function KpiCards({ range }: KpiCardsProps) {
         accent="cyan"
         label="Taux qualification"
         value={`${kpis.qualifiedRate}%`}
+        numericValue={kpis.qualifiedRate}
+        numericSuffix="%"
         sublabel="Statut qualified ou plus"
         icon={<IconTarget />}
       />
@@ -206,6 +210,8 @@ export async function KpiCards({ range }: KpiCardsProps) {
         accent="violet"
         label="Taux contact réussi"
         value={`${kpis.contactSuccessRate}%`}
+        numericValue={kpis.contactSuccessRate}
+        numericSuffix="%"
         sublabel="Résultat saisi / appels passés"
         icon={<IconPhone />}
       />
@@ -214,6 +220,7 @@ export async function KpiCards({ range }: KpiCardsProps) {
         accent="amber"
         label="RDV pris"
         value={kpis.rdvCount.toLocaleString('fr-FR')}
+        numericValue={kpis.rdvCount}
         sublabel="Statut rdv ou converted"
         icon={<IconCalendar />}
       />
@@ -231,6 +238,8 @@ export async function KpiCards({ range }: KpiCardsProps) {
         accent="cyan"
         label="BEGES coverage"
         value={`${kpis.begesCoverage}%`}
+        numericValue={kpis.begesCoverage}
+        numericSuffix="%"
         sublabel="Prospects avec bilan publié"
         icon={<IconLeaf />}
       />
@@ -270,12 +279,41 @@ interface KpiCardProps {
   icon: React.ReactNode
   deltaPositive?: boolean
   inverted?: boolean
+  /** Si fourni, anime un compteur 0 → numericValue (avec suffixe optionnel). */
+  numericValue?: number
+  /** Suffixe (ex. "%") rendu après le compteur. */
+  numericSuffix?: string
 }
 
-function KpiCard({ index, accent, label, value, sublabel, icon, deltaPositive, inverted }: KpiCardProps) {
+// Stagger d'apparition : 6 cards échelonnées toutes les 100ms (~0 à 500ms).
+const STAGGER_DELAY: Record<number, string> = {
+  1: 'animation-delay-100',
+  2: 'animation-delay-200',
+  3: 'animation-delay-300',
+  4: 'animation-delay-400',
+  5: 'animation-delay-500',
+  6: 'animation-delay-500',
+}
+
+function KpiCard({
+  index,
+  accent,
+  label,
+  value,
+  sublabel,
+  icon,
+  deltaPositive,
+  inverted,
+  numericValue,
+  numericSuffix,
+}: KpiCardProps) {
   const paddedIndex = String(index).padStart(2, '0')
+  const staggerClass = STAGGER_DELAY[index] ?? ''
   return (
-    <BentoCell accent={accent} className="p-4">
+    <BentoCell
+      accent={accent}
+      className={`p-4 opacity-0 animate-fade-in-up ${staggerClass}`}
+    >
       <div className="flex items-start justify-between">
         <span className={`font-mono text-[10px] uppercase tracking-[0.18em] ${ACCENT_LABEL[accent]}`}>
           [{paddedIndex}] {label}
@@ -288,7 +326,15 @@ function KpiCard({ index, accent, label, value, sublabel, icon, deltaPositive, i
         </span>
       </div>
       <p className={`mt-3 text-4xl font-bold tracking-tight tabular-nums ${ACCENT_VALUE_GRADIENT[accent]}`}>
-        {value}
+        {numericValue !== undefined ? (
+          <>
+            {/* key={numericValue} pour rejouer l'animation quand la valeur change. */}
+            <AnimatedCounter key={numericValue} value={numericValue} />
+            {numericSuffix ?? ''}
+          </>
+        ) : (
+          value
+        )}
       </p>
       <p
         className={

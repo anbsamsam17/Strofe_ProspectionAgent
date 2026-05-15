@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import type { ProspectStatus } from '@/lib/types'
+import { Confetti } from '@/components/ui/confetti'
 
 // ── Constantes ────────────────────────────────────────────────────────────────
 
@@ -14,54 +15,55 @@ interface StatusOption {
 }
 
 // Labels alignés sur les conventions UI partagées avec Agent C.
+// Dark-forced theme : variantes translucides (glass) uniquement, pas de bg-{c}-50/100.
 const STATUS_OPTIONS: StatusOption[] = [
   {
     value: 'sourced',
     label: 'Pas de contact identifié',
     dot: 'bg-gray-400',
-    badge: 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300',
+    badge: 'bg-white/[0.06] text-gray-200 ring-1 ring-white/[0.08]',
   },
   {
     value: 'qualified',
     label: 'Qualifié',
-    dot: 'bg-blue-500',
-    badge: 'bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-400',
+    dot: 'bg-blue-400',
+    badge: 'bg-blue-500/15 text-blue-200 ring-1 ring-blue-500/25',
   },
   {
     value: 'contacted',
     label: 'Contacté',
-    dot: 'bg-yellow-500',
-    badge: 'bg-yellow-50 text-yellow-700 dark:bg-yellow-950 dark:text-yellow-400',
+    dot: 'bg-yellow-400',
+    badge: 'bg-yellow-500/15 text-yellow-200 ring-1 ring-yellow-500/25',
   },
   {
     value: 'interested',
     label: 'Intéressé',
-    dot: 'bg-green-500',
-    badge: 'bg-green-50 text-green-700 dark:bg-green-950 dark:text-green-400',
+    dot: 'bg-green-400',
+    badge: 'bg-green-500/15 text-green-200 ring-1 ring-green-500/25',
   },
   {
     value: 'offer_sent',
     label: 'Offre envoyée',
-    dot: 'bg-indigo-500',
-    badge: 'bg-indigo-50 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-400',
+    dot: 'bg-indigo-400',
+    badge: 'bg-indigo-500/15 text-indigo-200 ring-1 ring-indigo-500/25',
   },
   {
     value: 'converted',
     label: 'Affaire conclue',
-    dot: 'bg-emerald-500',
-    badge: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-400',
+    dot: 'bg-emerald-400',
+    badge: 'bg-emerald-500/15 text-emerald-200 ring-1 ring-emerald-500/25',
   },
   {
     value: 'rejected',
     label: 'Sans suite',
-    dot: 'bg-red-500',
-    badge: 'bg-red-50 text-red-700 dark:bg-red-950 dark:text-red-400',
+    dot: 'bg-red-400',
+    badge: 'bg-red-500/15 text-red-200 ring-1 ring-red-500/25',
   },
   {
     value: 'on_hold',
     label: 'En stand-by',
-    dot: 'bg-orange-500',
-    badge: 'bg-orange-50 text-orange-700 dark:bg-orange-950 dark:text-orange-400',
+    dot: 'bg-orange-400',
+    badge: 'bg-orange-500/15 text-orange-200 ring-1 ring-orange-500/25',
   },
 ]
 
@@ -81,6 +83,8 @@ export function StatusDropdown({ prospectId, currentStatut }: StatusDropdownProp
   const [error, setError] = useState<string | null>(null)
   // Optimistic state — l'UI bascule au clic, puis se cale sur le serveur via router.refresh().
   const [statut, setStatut] = useState<ProspectStatus>(currentStatut)
+  // Confetti — trigger ponctuel quand on bascule en "converted" (affaire conclue).
+  const [confettiTrigger, setConfettiTrigger] = useState(false)
   const containerRef = useRef<HTMLDivElement | null>(null)
   const buttonRef = useRef<HTMLButtonElement | null>(null)
 
@@ -134,6 +138,11 @@ export function StatusDropdown({ prospectId, currentStatut }: StatusDropdownProp
             : data.error?.message ?? 'Erreur lors de la mise à jour du statut'
         throw new Error(msg)
       }
+      // Confetti uniquement quand on entre dans "converted" (et que ce n'était pas le cas avant).
+      if (next === 'converted' && previous !== 'converted') {
+        setConfettiTrigger(true)
+        setTimeout(() => setConfettiTrigger(false), 2500)
+      }
       router.refresh()
     } catch (err) {
       // Rollback optimistic update.
@@ -148,6 +157,8 @@ export function StatusDropdown({ prospectId, currentStatut }: StatusDropdownProp
 
   return (
     <div ref={containerRef} className="relative inline-block text-left">
+      {/* Confetti — célèbre une conversion (passage en "converted"). */}
+      <Confetti trigger={confettiTrigger} />
       <button
         ref={buttonRef}
         type="button"
@@ -181,7 +192,7 @@ export function StatusDropdown({ prospectId, currentStatut }: StatusDropdownProp
         <div
           role="listbox"
           aria-label="Sélectionner un statut CRM"
-          className="absolute right-0 z-30 mt-1 w-56 origin-top-right overflow-hidden rounded-xl border border-white/[0.08] bg-white py-1 shadow-lg dark:border-gray-700 dark:bg-gray-900"
+          className="absolute right-0 z-30 mt-1 w-56 origin-top-right overflow-hidden rounded-xl border border-white/[0.08] bg-[oklch(14%_0.02_240)]/95 py-1 shadow-2xl ring-1 ring-black/30 backdrop-blur-xl"
         >
           {STATUS_OPTIONS.map((opt) => {
             const isCurrent = opt.value === statut
@@ -193,7 +204,7 @@ export function StatusDropdown({ prospectId, currentStatut }: StatusDropdownProp
                 aria-selected={isCurrent}
                 disabled={pending}
                 onClick={() => handleSelect(opt.value)}
-                className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-gray-700 transition-colors hover:bg-white/[0.06] disabled:opacity-50 dark:text-gray-200 dark:hover:bg-gray-800"
+                className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-gray-200 transition-colors hover:bg-white/[0.06] disabled:opacity-50"
               >
                 <span className={`h-1.5 w-1.5 flex-shrink-0 rounded-full ${opt.dot}`} aria-hidden="true" />
                 <span className="flex-1">{opt.label}</span>
@@ -208,7 +219,7 @@ export function StatusDropdown({ prospectId, currentStatut }: StatusDropdownProp
                     strokeWidth="2.5"
                     strokeLinecap="round"
                     strokeLinejoin="round"
-                    className="text-green-600 dark:text-green-400"
+                    className="text-green-400"
                     aria-hidden="true"
                   >
                     <polyline points="20 6 9 17 4 12" />
@@ -223,7 +234,7 @@ export function StatusDropdown({ prospectId, currentStatut }: StatusDropdownProp
       {error && (
         <p
           role="alert"
-          className="absolute right-0 top-full z-30 mt-1 rounded-md bg-red-50 px-2.5 py-1 text-xs text-red-700 shadow-sm dark:bg-red-950/50 dark:text-red-400"
+          className="absolute right-0 top-full z-30 mt-1 rounded-md bg-red-500/15 px-2.5 py-1 text-xs text-red-300 ring-1 ring-red-500/30 shadow-sm"
         >
           {error}
         </p>

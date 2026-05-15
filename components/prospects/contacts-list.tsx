@@ -90,7 +90,7 @@ export function ContactsList({ prospect, contacts }: ContactsListProps) {
             ))}
           </ul>
         ) : (
-          <p className="text-sm text-gray-400 dark:text-gray-600">
+          <p className="text-sm text-gray-400 dark:text-gray-400">
             Aucun contact identifié pour cette entreprise.
           </p>
         )}
@@ -106,21 +106,21 @@ function ContactCard({ contact }: { contact: ProspectContact }) {
   const hasIdentity = fullName.length > 0 || Boolean(contact.poste)
 
   return (
-    <div className="rounded-xl border border-white/[0.06] bg-gray-50/50 px-4 py-3 dark:border-gray-800 dark:bg-gray-800/30">
+    <div className="rounded-xl border border-white/[0.06] bg-white/[0.04] backdrop-blur-md px-4 py-3">
       {hasIdentity && (
         <div className="flex flex-wrap items-center gap-2">
           {fullName && (
-            <p className="text-sm font-semibold text-gray-900 dark:text-white">{fullName}</p>
+            <p className="text-sm font-semibold text-white">{fullName}</p>
           )}
           {contact.is_primary && (
-            <span className="inline-flex items-center rounded-full bg-green-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-green-700 dark:bg-green-950/40 dark:text-green-400">
+            <span className="inline-flex items-center rounded-full bg-green-500/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-green-300 ring-1 ring-green-500/25">
               Primaire
             </span>
           )}
         </div>
       )}
       {contact.poste && (
-        <p className="text-sm text-gray-500 dark:text-gray-400">{contact.poste}</p>
+        <p className="text-sm text-gray-300">{contact.poste}</p>
       )}
 
       <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1.5">

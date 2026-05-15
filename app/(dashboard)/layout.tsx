@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { Sidebar } from '@/components/layout/sidebar'
 import { DashboardHeader } from '@/components/layout/dashboard-header'
+import { PageTransition } from '@/components/layout/page-transition'
 import type { AgentRun } from '@/lib/types'
 
 // Force le rendu dynamique sur TOUT le layout dashboard :
@@ -66,7 +67,7 @@ export default async function DashboardLayout({
 
         <main className="flex-1 overflow-y-auto">
           <div className="p-4 pb-24 sm:p-6 lg:pb-8">
-            {children}
+            <PageTransition>{children}</PageTransition>
           </div>
         </main>
       </div>

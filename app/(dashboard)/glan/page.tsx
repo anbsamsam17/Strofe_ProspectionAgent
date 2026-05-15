@@ -11,7 +11,7 @@
 
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
-import { GlanAvatar } from '@/components/glan/glan-avatar'
+import { GlanCharacterLoader } from '@/components/glan/glan-character-loader'
 import { GlanTimeline } from '@/components/glan/glan-timeline'
 import { GlanLogStream } from '@/components/glan/glan-log-stream'
 import { GlassCard } from '@/components/ui/glass-card'
@@ -73,8 +73,8 @@ export default async function GlanPage() {
   return (
     <div className="mx-auto max-w-5xl space-y-6">
       {/* En-tête */}
-      <header className="flex flex-col items-center gap-4 rounded-2xl border border-white/[0.08] bg-white/[0.03] backdrop-blur-md p-8 text-center shadow-sm dark:border-gray-800 dark:bg-gray-900 sm:flex-row sm:text-left">
-        <GlanAvatar
+      <header className="flex flex-col items-center gap-4 rounded-2xl border border-white/[0.08] bg-white/[0.03] backdrop-blur-md p-8 text-center shadow-sm sm:flex-row sm:text-left">
+        <GlanCharacterLoader
           state={
             lastRun?.status === 'running'
               ? 'working'
@@ -84,7 +84,8 @@ export default async function GlanPage() {
                   ? 'done'
                   : 'dormant'
           }
-          size="lg"
+          size={320}
+          fallbackSize="lg"
           className="flex-shrink-0"
         />
         <div className="flex flex-col gap-1.5">
@@ -96,7 +97,7 @@ export default async function GlanPage() {
             ADEME pour identifier les entreprises soumises à l&apos;obligation
             BEGES et les ajouter à votre liste.
           </p>
-          <p className="text-xs text-gray-400 dark:text-gray-600">
+          <p className="text-xs text-gray-400 dark:text-gray-400">
             — Glan
           </p>
         </div>
@@ -107,7 +108,7 @@ export default async function GlanPage() {
         <GlassCard variant="elevated" className="space-y-5">
           <div className="flex flex-wrap items-baseline justify-between gap-3">
             <div>
-              <p className="text-xs font-semibold uppercase tracking-widest text-gray-400 dark:text-gray-600">
+              <p className="text-xs font-semibold uppercase tracking-widest text-gray-400 dark:text-gray-400">
                 Dernier run
               </p>
               <h2 className="mt-1 text-lg font-semibold text-gray-900 dark:text-white">
@@ -142,13 +143,13 @@ export default async function GlanPage() {
           {/* Timeline + Logs côte à côte */}
           <div className="grid gap-5 lg:grid-cols-2">
             <div>
-              <p className="mb-3 text-xs font-semibold uppercase tracking-widest text-gray-400 dark:text-gray-600">
+              <p className="mb-3 text-xs font-semibold uppercase tracking-widest text-gray-400 dark:text-gray-400">
                 Phases
               </p>
               <GlanTimeline run={lastRun} />
             </div>
             <div>
-              <p className="mb-3 text-xs font-semibold uppercase tracking-widest text-gray-400 dark:text-gray-600">
+              <p className="mb-3 text-xs font-semibold uppercase tracking-widest text-gray-400 dark:text-gray-400">
                 Logs
               </p>
               <GlanLogStream
@@ -171,7 +172,7 @@ export default async function GlanPage() {
       {/* Historique des runs précédents */}
       {runs.length > 1 && (
         <section>
-          <h2 className="mb-3 text-sm font-semibold uppercase tracking-widest text-gray-400 dark:text-gray-600">
+          <h2 className="mb-3 text-sm font-semibold uppercase tracking-widest text-gray-400 dark:text-gray-400">
             Historique récent
           </h2>
           <ol className="space-y-2">
@@ -183,7 +184,7 @@ export default async function GlanPage() {
               return (
                 <li
                   key={run.id}
-                  className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-white/[0.08] bg-white px-4 py-3 dark:border-gray-800 dark:bg-gray-900"
+                  className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-white/[0.08] bg-white/[0.03] backdrop-blur-md px-4 py-3"
                 >
                   <div className="flex items-baseline gap-3">
                     <p className="font-mono text-sm tabular-nums text-gray-900 dark:text-white">

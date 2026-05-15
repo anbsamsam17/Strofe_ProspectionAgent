@@ -299,6 +299,28 @@
   51%, 100% { opacity: 0; }
 }
 
+@keyframes shimmer {
+  0%   { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+/* Particules orbitales GlanPortrait — tournent autour du centre du portrait.
+   Utilise CSS vars --glan-radius (% du conteneur) et --glan-angle (offset deg). */
+@keyframes glan-portrait-orbit {
+  0% {
+    transform: translate(-50%, -50%) rotate(calc(var(--glan-angle, 0deg) + 0deg))
+      translateX(var(--glan-radius, 48%)) rotate(0deg);
+  }
+  100% {
+    transform: translate(-50%, -50%) rotate(calc(var(--glan-angle, 0deg) + 360deg))
+      translateX(var(--glan-radius, 48%)) rotate(-360deg);
+  }
+}
+.glan-portrait-particle {
+  animation: glan-portrait-orbit 10s linear infinite;
+  will-change: transform;
+}
+
 .animate-gradient {
   background-size: 200% 200%;
   animation: gradient-shift 4s ease infinite;
@@ -323,6 +345,9 @@
 }
 .animate-border-beam {
   animation: border-beam 4s linear infinite;
+}
+.animate-shimmer {
+  animation: shimmer 2s linear infinite;
 }
 
 /* Délais d'animation pour les éléments en séquence */

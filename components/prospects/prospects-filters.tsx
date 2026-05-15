@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import { useRouter, usePathname, useSearchParams } from 'next/navigation'
 import { useState, useTransition } from 'react'
@@ -208,7 +208,7 @@ export function ProspectsFilters({
                     className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition-all duration-150 ${
                       isActive
                         ? 'border-green-500 bg-green-50 text-green-700 shadow-sm dark:border-green-600 dark:bg-green-950/50 dark:text-green-400'
-                        : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300 hover:bg-white/[0.06] dark:border-gray-700 dark:bg-transparent dark:text-gray-400 dark:hover:border-gray-600 dark:hover:bg-gray-800/50'
+                        : 'border-gray-200 bg-white/[0.04] backdrop-blur-md text-gray-600 hover:border-gray-300 hover:bg-white/[0.06] dark:border-gray-700 dark:bg-transparent dark:text-gray-400 dark:hover:border-gray-600 dark:hover:bg-gray-800/50'
                     }`}
                   >
                     <span
@@ -261,7 +261,7 @@ export function ProspectsFilters({
                 onKeyDown={handleSecteurKeyDown}
                 onBlur={() => applyFilters(statuts, secteur, scoreMin, archived, contactTypes, begesFilter)}
                 placeholder="ex : Transport..."
-                className="w-full rounded-lg border border-white/[0.08] bg-white py-2 pl-9 pr-3 text-sm text-gray-900 placeholder-gray-400 transition focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-500/20 dark:border-gray-700 dark:bg-gray-800 dark:text-white dark:placeholder-gray-600"
+                className="w-full rounded-lg border border-white/[0.08] bg-white/[0.04] backdrop-blur-md py-2 pl-9 pr-3 text-sm text-gray-900 placeholder-gray-400 transition focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-500/20 dark:border-gray-700 dark:bg-gray-800 dark:text-white dark:placeholder-gray-500"
               />
               {isPending && (
                 <svg
@@ -315,7 +315,7 @@ export function ProspectsFilters({
               className="mt-1 w-full accent-green-600"
               aria-label={`Score minimum : ${scoreMin}`}
             />
-            <div className="flex justify-between text-xs text-gray-400 dark:text-gray-600">
+            <div className="flex justify-between text-xs text-gray-400 dark:text-gray-400">
               <span>0</span>
               <span>100</span>
             </div>
@@ -342,7 +342,7 @@ export function ProspectsFilters({
                     className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition-all duration-150 ${
                       isActive
                         ? 'border-green-500 bg-green-50 text-green-700 shadow-sm dark:border-green-600 dark:bg-green-950/50 dark:text-green-400'
-                        : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300 hover:bg-white/[0.06] dark:border-gray-700 dark:bg-transparent dark:text-gray-400 dark:hover:border-gray-600 dark:hover:bg-gray-800/50'
+                        : 'border-gray-200 bg-white/[0.04] backdrop-blur-md text-gray-600 hover:border-gray-300 hover:bg-white/[0.06] dark:border-gray-700 dark:bg-transparent dark:text-gray-400 dark:hover:border-gray-600 dark:hover:bg-gray-800/50'
                     }`}
                   >
                     {label}
@@ -362,7 +362,7 @@ export function ProspectsFilters({
               className={`inline-flex w-full items-center justify-between rounded-lg border px-3 py-2 text-xs font-medium transition-colors ${
                 begesFilter === 'missing'
                   ? 'border-red-300 bg-red-50 text-red-700 dark:border-red-700 dark:bg-red-950/40 dark:text-red-400'
-                  : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300 hover:bg-white/[0.06] dark:border-gray-700 dark:bg-transparent dark:text-gray-400 dark:hover:bg-gray-800/50'
+                  : 'border-gray-200 bg-white/[0.04] backdrop-blur-md text-gray-600 hover:border-gray-300 hover:bg-white/[0.06] dark:border-gray-700 dark:bg-transparent dark:text-gray-400 dark:hover:bg-gray-800/50'
               }`}
             >
               <span className="inline-flex items-center gap-2">
@@ -386,12 +386,12 @@ export function ProspectsFilters({
               </span>
               <span
                 className={`relative inline-block h-4 w-7 rounded-full transition-colors ${
-                  begesFilter === 'missing' ? 'bg-red-500' : 'bg-gray-300 dark:bg-gray-700'
+                  begesFilter === 'missing' ? 'bg-red-500' : 'bg-white/[0.1] ring-1 ring-white/15'
                 }`}
                 aria-hidden="true"
               >
                 <span
-                  className={`absolute top-0.5 h-3 w-3 rounded-full bg-white/[0.03] backdrop-blur-md shadow-sm transition-transform ${
+                  className={`absolute top-0.5 h-3 w-3 rounded-full bg-white shadow-sm transition-transform ${
                     begesFilter === 'missing' ? 'translate-x-3.5' : 'translate-x-0.5'
                   }`}
                 />
@@ -408,7 +408,7 @@ export function ProspectsFilters({
               className={`inline-flex w-full items-center justify-between rounded-lg border px-3 py-2 text-xs font-medium transition-colors ${
                 archived
                   ? 'border-orange-300 bg-orange-50 text-orange-700 dark:border-orange-700 dark:bg-orange-950/40 dark:text-orange-400'
-                  : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300 hover:bg-white/[0.06] dark:border-gray-700 dark:bg-transparent dark:text-gray-400 dark:hover:bg-gray-800/50'
+                  : 'border-gray-200 bg-white/[0.04] backdrop-blur-md text-gray-600 hover:border-gray-300 hover:bg-white/[0.06] dark:border-gray-700 dark:bg-transparent dark:text-gray-400 dark:hover:bg-gray-800/50'
               }`}
             >
               <span className="inline-flex items-center gap-2">
@@ -432,12 +432,12 @@ export function ProspectsFilters({
               </span>
               <span
                 className={`relative inline-block h-4 w-7 rounded-full transition-colors ${
-                  archived ? 'bg-orange-500' : 'bg-gray-300 dark:bg-gray-700'
+                  archived ? 'bg-orange-500' : 'bg-white/[0.1] ring-1 ring-white/15'
                 }`}
                 aria-hidden="true"
               >
                 <span
-                  className={`absolute top-0.5 h-3 w-3 rounded-full bg-white/[0.03] backdrop-blur-md shadow-sm transition-transform ${
+                  className={`absolute top-0.5 h-3 w-3 rounded-full bg-white shadow-sm transition-transform ${
                     archived ? 'translate-x-3.5' : 'translate-x-0.5'
                   }`}
                 />

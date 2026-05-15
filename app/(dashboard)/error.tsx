@@ -55,7 +55,7 @@ export default function DashboardError({ error, reset }: DashboardErrorProps) {
           </button>
           <a
             href="/prospects"
-            className="inline-flex items-center gap-1.5 rounded-lg border border-red-300 bg-white px-3 py-1.5 text-xs font-semibold text-red-700 transition-colors hover:bg-red-100 dark:border-red-800 dark:bg-transparent dark:text-red-400 dark:hover:bg-red-950/30"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-red-800 bg-white/[0.03] backdrop-blur-md px-3 py-1.5 text-xs font-semibold text-red-400 transition-colors hover:bg-red-950/30"
           >
             Retour aux prospects
           </a>

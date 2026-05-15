@@ -1,6 +1,8 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { GlanHeroLoader } from '@/components/marketing/glan-hero-loader'
+import { BorderBeam } from '@/components/ui/border-beam'
+import { ScrollReveal } from '@/components/ui/scroll-reveal'
 
 // GlanHero contient un canvas React Three Fiber. Next.js 15 interdit
 // `ssr: false` dans un Server Component → le dynamic import est encapsulé
@@ -536,27 +538,29 @@ function CtaSection() {
             </p>
 
             <div className="mt-10 flex flex-col justify-center gap-4 sm:flex-row">
-              {/* Bouton primary glow */}
-              <Link
-                href="/signup"
-                className="inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-green-500 to-emerald-500 px-7 py-3.5 font-bold text-white shadow-[0_0_20px_-4px_oklch(70%_0.19_152_/_0.55)] transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_0_28px_-2px_oklch(70%_0.19_152_/_0.70)] active:scale-95"
-              >
-                Activer l&apos;agent
-                <svg
-                  className="h-4 w-4"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                  strokeWidth={2.5}
-                  aria-hidden="true"
+              {/* Bouton primary glow + BorderBeam rotatif (signal "agent vivant"). */}
+              <BorderBeam color="brand" thickness={1.5} className="inline-flex">
+                <Link
+                  href="/signup"
+                  className="inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-green-500 to-emerald-500 px-7 py-3.5 font-bold text-white shadow-[0_0_20px_-4px_oklch(70%_0.19_152_/_0.55)] transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_0_28px_-2px_oklch(70%_0.19_152_/_0.70)] active:scale-95"
                 >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    d="M5 12h14m-7-7 7 7-7 7"
-                  />
-                </svg>
-              </Link>
+                  Activer l&apos;agent
+                  <svg
+                    className="h-4 w-4"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                    strokeWidth={2.5}
+                    aria-hidden="true"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d="M5 12h14m-7-7 7 7-7 7"
+                    />
+                  </svg>
+                </Link>
+              </BorderBeam>
               {/* Bouton ghost glass */}
               <Link
                 href="/login"
@@ -602,13 +606,13 @@ function Footer() {
           <span className="bg-gradient-to-r from-green-400 to-emerald-300 bg-clip-text text-sm font-bold text-transparent">
             Glan
           </span>
-          <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-gray-600">
+          <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-gray-600 dark:text-gray-400">
             by STROFE
           </span>
         </div>
 
         {/* Copyright */}
-        <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-gray-600">
+        <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-gray-600 dark:text-gray-400">
           &copy; 2026 STROFE
         </p>
 
@@ -641,9 +645,16 @@ export default function HomePage() {
       {/* Hero refondu — orbe 3D R3F + copy persona Glan. */}
       <GlanHeroLoader />
       <StatsSection />
-      <HowItWorksSection />
-      <FeaturesSection />
-      <CtaSection />
+      {/* Scroll-reveal : chaque section monte de 24px + fade au scroll. */}
+      <ScrollReveal>
+        <HowItWorksSection />
+      </ScrollReveal>
+      <ScrollReveal>
+        <FeaturesSection />
+      </ScrollReveal>
+      <ScrollReveal>
+        <CtaSection />
+      </ScrollReveal>
       <Footer />
     </div>
   )

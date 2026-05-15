@@ -20,11 +20,11 @@ interface GlassCardProps extends HTMLAttributes<HTMLDivElement> {
 
 const VARIANT_CLASSES: Record<NonNullable<GlassCardProps['variant']>, string> = {
   default:
-    'bg-white/70 backdrop-blur-md border border-gray-200/60 dark:bg-white/5 dark:border-white/10',
+    'bg-white/[0.03] backdrop-blur-md border border-white/[0.08]',
   elevated:
-    'bg-white/80 backdrop-blur-md border border-gray-200/60 shadow-lg shadow-black/5 dark:bg-white/5 dark:border-white/10 dark:shadow-black/40',
+    'bg-white/[0.04] backdrop-blur-md border border-white/[0.08] shadow-lg shadow-black/40',
   outlined:
-    'bg-transparent backdrop-blur-sm border border-white/[0.08] dark:border-white/10',
+    'bg-transparent backdrop-blur-sm border border-white/[0.08]',
 }
 
 export function GlassCard({
