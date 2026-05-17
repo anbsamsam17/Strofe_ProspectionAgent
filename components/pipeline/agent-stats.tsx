@@ -12,6 +12,7 @@ import {
 } from '@/lib/pipeline/analytics'
 import type { PipelineRange } from '@/lib/pipeline/range'
 import { rangeStartISO } from '@/lib/pipeline/range'
+import { NAF_SECTION_KEYWORD } from '@/lib/agent/naf-labels'
 
 // ── Constantes de dessin ────────────────────────────────────────────────────
 
@@ -308,30 +309,33 @@ function NafSectionsChart({ sections }: { sections: NafSectionStat[] }) {
         {sections.length > 1 ? 's' : ''})
       </p>
       <ul className="space-y-1.5" aria-label="Répartition des prospects par section NAF">
-        {sections.map((s) => (
-          <li key={s.code} className="flex items-center gap-2">
-            <span
-              className="w-5 flex-shrink-0 text-center font-mono text-xs font-semibold text-gray-400"
-              aria-hidden="true"
-            >
-              {s.code}
-            </span>
-            <div
-              className="h-1.5 flex-1 overflow-hidden rounded-full bg-white/[0.05] dark:bg-gray-800"
-              role="img"
-              aria-label={`${s.libelle} : ${s.count} prospect${s.count > 1 ? 's' : ''} (${Math.round(s.sharePct)} %)`}
-              title={`${s.code} — ${s.libelle}`}
-            >
+        {sections.map((s) => {
+          const keyword = NAF_SECTION_KEYWORD[s.code] ?? s.code
+          return (
+            <li key={s.code} className="flex items-center gap-2">
+              <span
+                className="w-28 flex-shrink-0 truncate text-xs font-medium text-gray-300"
+                title={`${s.code} — ${s.libelle}`}
+              >
+                {keyword}
+              </span>
               <div
-                className="h-full bg-cyan-500"
-                style={{ width: `${(s.count / maxCount) * 100}%` }}
-              />
-            </div>
-            <span className="w-7 flex-shrink-0 text-right text-xs tabular-nums text-gray-200">
-              {s.count}
-            </span>
-          </li>
-        ))}
+                className="h-1.5 flex-1 overflow-hidden rounded-full bg-white/[0.05] dark:bg-gray-800"
+                role="img"
+                aria-label={`${s.libelle} : ${s.count} prospect${s.count > 1 ? 's' : ''} (${Math.round(s.sharePct)} %)`}
+                title={`${s.code} — ${s.libelle}`}
+              >
+                <div
+                  className="h-full bg-cyan-500"
+                  style={{ width: `${(s.count / maxCount) * 100}%` }}
+                />
+              </div>
+              <span className="w-7 flex-shrink-0 text-right text-xs tabular-nums text-gray-200">
+                {s.count}
+              </span>
+            </li>
+          )
+        })}
       </ul>
     </div>
   )

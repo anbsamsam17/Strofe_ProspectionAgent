@@ -994,6 +994,46 @@ export function sectionLabel(code: NafSection | null | undefined): string | null
 }
 
 /**
+ * Mot-cle court (1-2 mots) par section, pour affichage dans les graphes
+ * (axe X, legende compacte) ou puces UI. La lettre seule (A, B, C...) ne
+ * porte aucune information lisible pour l'utilisateur final ; ce mapping
+ * fournit un label concis mais parlant.
+ *
+ * Choix lexicaux courants en B2B francais (parametre acceptes : Industrie
+ * vs Manufacturier, HCR vs Hotellerie, etc.). En cas d'ambiguite, garder
+ * le mot le plus universel (Commerce > Distribution).
+ */
+export const NAF_SECTION_KEYWORD: Readonly<Record<NafSection, string>> = {
+  A: 'Agriculture',
+  B: 'Extraction',
+  C: 'Industrie',
+  D: 'Énergie',
+  E: 'Eau & déchets',
+  F: 'Construction',
+  G: 'Commerce',
+  H: 'Transports',
+  I: 'Hôtellerie',
+  J: 'Information',
+  K: 'Finance',
+  L: 'Immobilier',
+  M: 'Conseil & R&D',
+  N: 'Services admin.',
+  O: 'Administration',
+  P: 'Enseignement',
+  Q: 'Santé',
+  R: 'Loisirs',
+  S: 'Services pers.',
+  T: 'Ménages',
+  U: 'Extra-territorial',
+}
+
+/** Mot-cle court a partir du code de section, ou null si code inconnu. */
+export function sectionKeyword(code: NafSection | null | undefined): string | null {
+  if (!code) return null
+  return NAF_SECTION_KEYWORD[code] ?? null
+}
+
+/**
  * Resout le libelle secteur + categorie BEGES a partir d'un code NAF.
  *
  * Cascade :
