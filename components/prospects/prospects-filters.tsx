@@ -283,39 +283,40 @@ export function ProspectsFilters({
       className={`rounded-2xl border border-white/[0.08] bg-white/[0.03] backdrop-blur-md shadow-sm transition-opacity ${isPending ? 'opacity-60' : ''}`}
       aria-label="Filtres des prospects"
     >
-      {/* ── Ribbon horizontal — légèrement élargi (py-3 sm:py-4) ──────────────
+      {/* ── Bloc statuts — placé AU-DESSUS du ribbon pour visibilité maximale.
+          Flex-wrap : toutes les étiquettes restent visibles et cliquables
+          sans scroll horizontal (vs. ancienne version qui tronquait à droite). */}
+      <fieldset className="border-b border-white/[0.06] p-3 sm:p-4">
+        <legend className="mb-2 block font-mono text-[10px] uppercase tracking-[0.18em] text-cyan-400/80">
+          Statut
+        </legend>
+        <div className="flex flex-wrap items-center gap-1.5">
+          {ALL_STATUTS.map(({ value, label, dot }) => {
+            const isActive = statuts.includes(value)
+            return (
+              <button
+                key={value}
+                type="button"
+                onClick={() => toggleStatut(value)}
+                aria-pressed={isActive}
+                className={`${pillBase} ${isActive ? pillActive : pillInactive}`}
+              >
+                <span
+                  className={`h-1.5 w-1.5 flex-shrink-0 rounded-full ${dot}`}
+                  aria-hidden="true"
+                />
+                {label}
+              </button>
+            )
+          })}
+        </div>
+      </fieldset>
+
+      {/* ── Ribbon horizontal — secteur, score, tri, toggles ────────────────
           Mobile : empile en colonnes (flex-col).
           Desktop ≥ sm : 1 ligne via flex-wrap, gap-4 confortable.
       */}
       <div className="flex flex-col gap-3 p-3 sm:flex-row sm:flex-wrap sm:items-center sm:gap-4 sm:p-4">
-        {/* Pills statut — scroll horizontal si dépassement.
-            Le fieldset+legend porte déjà la sémantique group ; on évite le
-            double role="group" sur le div interne (sinon Testing Library
-            trouve 2 éléments matching le même nom). */}
-        <fieldset className="min-w-0 flex-1">
-          <legend className="sr-only">Filtrer par statut</legend>
-          <div className="-mx-0.5 flex items-center gap-1.5 overflow-x-auto px-0.5 [scrollbar-width:thin]">
-            {ALL_STATUTS.map(({ value, label, dot }) => {
-              const isActive = statuts.includes(value)
-              return (
-                <button
-                  key={value}
-                  type="button"
-                  onClick={() => toggleStatut(value)}
-                  aria-pressed={isActive}
-                  className={`${pillBase} ${isActive ? pillActive : pillInactive}`}
-                >
-                  <span
-                    className={`h-1.5 w-1.5 flex-shrink-0 rounded-full ${dot}`}
-                    aria-hidden="true"
-                  />
-                  {label}
-                </button>
-              )
-            })}
-          </div>
-        </fieldset>
-
         {/* Secteur — input compact */}
         <div className="relative w-full sm:w-48">
           <label htmlFor="filter-secteur" className="sr-only">
@@ -382,8 +383,13 @@ export function ProspectsFilters({
               }}
               aria-hidden="true"
             />
-            {/* Thumb MIN — input range superposé, opacity-0, z-index plus haut
-                quand min approche le max pour rester saisissable. */}
+            {/* Double-thumb range : 2 inputs range superposés.
+                Pattern critique pour rendre les 2 thumbs cliquables alors
+                qu'ils occupent la même zone géométrique :
+                  - input lui-même : pointer-events: none (laisse passer les clics)
+                  - thumb uniquement : pointer-events: auto (capture le clic)
+                Sans ça, l'input supérieur (z-20) bloque l'accès au thumb du
+                second input. */}
             <input
               id="filter-score-min"
               type="range"
@@ -393,10 +399,8 @@ export function ProspectsFilters({
               value={scoreMin}
               onChange={handleScoreMinChange}
               aria-label={`Score minimum : ${scoreMin}`}
-              className="absolute inset-0 z-20 h-5 w-full cursor-pointer appearance-none bg-transparent opacity-0"
-              style={{ pointerEvents: 'auto' }}
+              className="pointer-events-none absolute inset-0 z-20 h-5 w-full appearance-none bg-transparent opacity-0 [&::-moz-range-thumb]:pointer-events-auto [&::-moz-range-thumb]:h-5 [&::-moz-range-thumb]:w-5 [&::-moz-range-thumb]:cursor-pointer [&::-moz-range-thumb]:appearance-none [&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:bg-transparent [&::-webkit-slider-thumb]:pointer-events-auto [&::-webkit-slider-thumb]:h-5 [&::-webkit-slider-thumb]:w-5 [&::-webkit-slider-thumb]:cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:bg-transparent"
             />
-            {/* Thumb MAX — second input range. */}
             <input
               id="filter-score-max"
               type="range"
@@ -406,8 +410,7 @@ export function ProspectsFilters({
               value={scoreMax}
               onChange={handleScoreMaxChange}
               aria-label={`Score maximum : ${scoreMax}`}
-              className="absolute inset-0 z-10 h-5 w-full cursor-pointer appearance-none bg-transparent opacity-0"
-              style={{ pointerEvents: 'auto' }}
+              className="pointer-events-none absolute inset-0 z-20 h-5 w-full appearance-none bg-transparent opacity-0 [&::-moz-range-thumb]:pointer-events-auto [&::-moz-range-thumb]:h-5 [&::-moz-range-thumb]:w-5 [&::-moz-range-thumb]:cursor-pointer [&::-moz-range-thumb]:appearance-none [&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:bg-transparent [&::-webkit-slider-thumb]:pointer-events-auto [&::-webkit-slider-thumb]:h-5 [&::-webkit-slider-thumb]:w-5 [&::-webkit-slider-thumb]:cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:bg-transparent"
             />
             {/* Bullets visuelles aux positions des thumbs (purement décoratifs). */}
             <span

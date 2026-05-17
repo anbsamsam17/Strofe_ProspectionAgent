@@ -250,10 +250,10 @@ export function NewExchangeDialog({ prospectId }: NewExchangeDialogProps) {
                     id="exchange-type"
                     value={form.type}
                     onChange={(e) => update('type', e.target.value as ExchangeType)}
-                    className="w-full rounded-lg border border-white/[0.08] bg-white/[0.04] backdrop-blur-md px-3 py-2.5 text-sm text-white placeholder:text-gray-400 transition focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-500/20"
+                    className="w-full rounded-lg border border-white/[0.08] bg-white/[0.04] backdrop-blur-md px-3 py-2.5 text-sm text-white placeholder:text-gray-400 transition focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-500/20 [color-scheme:dark]"
                   >
                     {TYPE_OPTIONS.map((opt) => (
-                      <option key={opt.value} value={opt.value}>
+                      <option key={opt.value} value={opt.value} className="bg-[oklch(14%_0.02_240)] text-white">
                         {opt.label}
                       </option>
                     ))}
@@ -271,10 +271,10 @@ export function NewExchangeDialog({ prospectId }: NewExchangeDialogProps) {
                     id="exchange-result"
                     value={form.result}
                     onChange={(e) => update('result', e.target.value)}
-                    className="w-full rounded-lg border border-white/[0.08] bg-white/[0.04] backdrop-blur-md px-3 py-2.5 text-sm text-white placeholder:text-gray-400 transition focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-500/20"
+                    className="w-full rounded-lg border border-white/[0.08] bg-white/[0.04] backdrop-blur-md px-3 py-2.5 text-sm text-white placeholder:text-gray-400 transition focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-500/20 [color-scheme:dark]"
                   >
                     {RESULT_OPTIONS.map((opt) => (
-                      <option key={opt.value} value={opt.value}>
+                      <option key={opt.value} value={opt.value} className="bg-[oklch(14%_0.02_240)] text-white">
                         {opt.label}
                       </option>
                     ))}
