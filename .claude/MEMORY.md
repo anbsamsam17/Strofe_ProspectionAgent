@@ -18,6 +18,7 @@ Index des notes de contexte. Une entrée = un fichier ciblé. Le contenu vit dan
 
 ## Operations
 - [Crons Vercel](context/crons.md) — 22h + 7h30, Bearer CRON_SECRET, retry, test local
+- [Bulk SIRENE — cron mensuel GH Actions](context/sirene-bulk-cron.md) — résolution dynamique data.gouv.fr, filtre BEGES, ~11k lignes en cache, ~4 MB
 - [Sécurité](context/security.md) — RLS, service_role, secrets, Sentry PII, SSRF, Zod
 
 ## Initiatives en cours

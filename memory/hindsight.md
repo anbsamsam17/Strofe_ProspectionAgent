@@ -722,4 +722,43 @@ sur le score pondéré final, avec clamp [0, 100].
 - `lib/types.ts` — `ScoringWeights` + `ProfileSettings.scoring_weights?` +
   refonte `ScoreDetails` (édition minimale, en coordination avec Agent A).
 
+---
+
+## 2026-05-17 — Bulk SIRENE en prod via GitHub Actions (Plan C)
+
+**Contexte** : l'API Sirene INSEE v3.11 reste instable (HTTP 400 Solr récurrents, OAuth2 → API Key sept. 2025 mal documentée, quotas). Décision de pivoter vers un cache local rafraîchi mensuellement.
+
+**Ce qui a bien marché** :
+- Pipeline ETL stream (download → unzip → csv-parse → upsert batch 500) tient en 35 min sur runner GH Actions free, **3.6 MB final** pour ~11k entreprises BEGES (siège actif + ≥10 salariés + sections A/C/D/E/F/H).
+- Garde-fou storage (`MAX_STORAGE_MB=100`) : abort propre si dépassé → on reste sous le cap Supabase Free tier 500 MB.
+- Mode `SIRENE_DRYRUN=1` + `SIRENE_DRYRUN_LIMIT` : diagnostic en 1-3 min sans toucher Supabase. A sauvé la session — sans lui, on aurait re-bouclé 23 min par tentative.
+- Compteurs de rejet par cause (`rejection_counts.etat/siege/tranche_*/naf_*/...`) : identification instantanée du bug.
+
+**Ce qui n'a pas marché** :
+1. **Hardcoder un resource ID data.gouv.fr** — l'id `0835cd60-...` qu'on a écrit en dur pointait initialement sur `StockEtablissement` puis a migré vers `StockUniteLegaleHistorique_utf8.csv` (69M lignes, schéma totalement différent : pas d'`etablissementSiege`). Résultat : 23 min de parse pour 0 entreprise gardée.
+2. **Matcher trop strict du titre** — la 1ère version utilisait `startsWith('StockEtablissement_utf8')`, mais les titres réels sont `"Sirene : Fichier StockEtablissement du 01 Mai 2026"`. Match KO sur le préfixe "Sirene : Fichier".
+
+**Décision prise** :
+- **Résolution dynamique** via API métadonnée `https://www.data.gouv.fr/api/1/datasets/base-sirene-des-entreprises-et-de-leurs-etablissements-siren-siret/`. Filtre par `title.includes('StockEtablissement')` ET exclude `[Historique, LiensSuccession, Doublons, UniteLegale, parquet, .pdf, .csv]`. Robuste à la rotation mensuelle.
+- **Garde-fou unzip** : après ouverture du ZIP, vérifier que `csvEntry.path.startsWith('StockEtablissement_utf8')`. Sinon, échec immédiat — on ne paie plus 30 min de parse à perte.
+- **Override env** : `SIRENE_DOWNLOAD_URL` reste utilisable pour tests/CI déterministes.
+
+**À ne pas répéter** :
+- Ne **jamais** hardcoder un resource ID data.gouv.fr — toujours résoudre via l'API métadonnée du dataset (le slug du dataset, lui, est stable).
+- Quand on parse N millions de lignes avec un filtre stratifié, **toujours** instrumenter des compteurs par cause de rejet. Sans `rejection_counts`, "0 kept sur 69M" est indébuggable.
+- Ne pas faire confiance au nom `source_file` calculé côté code (`buildSourceFile()` génère "StockEtablissement_utf8_YYYYMM.zip" automatiquement) — vérifier le **nom réel** du CSV après unzip.
+
+**À refaire** :
+- Le pattern dryrun (env-flag → parse limité → log diagnostic structuré → exit propre). Coût négligeable, gain énorme en debug.
+- Cron externe (GH Actions) pour tout job > 60s — Vercel Hobby ne sert qu'au runtime web et aux 1 cron/jour léger.
+- Environment Secrets GitHub (pas Repository Secrets) avec `environment: 'Production – ...'` dans le job — sépare prod/staging proprement.
+
+**Fichiers** :
+- `scripts/import-sirene-bulk.ts` — ETL Node 22 (`--experimental-strip-types`).
+- `.github/workflows/sirene-import.yml` — workflow mensuel + dispatch.
+- `app/api/admin/sirene-{status,import}/route.ts` — status + sanity check.
+- `lib/agent/sirene-cache.ts` — accès depuis l'orchestrator.
+- `supabase/migrations/018_*.sql` + `019_*.sql` — table + fonction + vue.
+- Fiche détaillée : `.claude/context/sirene-bulk-cron.md`.
+
 <!-- Les entrées suivantes seront ajoutées automatiquement par Claude après chaque session -->

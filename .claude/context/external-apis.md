@@ -79,15 +79,17 @@ Hypothèses classées par fréquence observée (session debug 2026-05-17) :
 - **`scripts/test-insee-sirene.ps1`** — test minimal d'une `INSEE_API_KEY` contre l'endpoint v3.11 (1 requête, NAF unique, Gironde). Sortie : HTTP status + nb résultats. À lancer après chaque rotation de clé.
 - **`scripts/test-sirene-queries.ps1`** — bench de 14 variantes de query Lucene (quoting, ranges, OR multiples, codes NAF mixtes, etc.) pour identifier précisément ce qui passe et ce qui retourne 400. Utilisé lors de la session debug 2026-05-17.
 
-### Plan B : bulk SIRENE download (POC)
+### Bulk SIRENE — sourcing primaire depuis 2026-05-17 (Plan C en prod)
 
-Quand l'API live pose problème de manière persistante (rate-limit chronique, panne INSEE, quotas dépassés en prod), un import bulk mensuel reste possible :
+L'API Sirene live INSEE étant chroniquement instable (HTTP 400 Solr, quotas, OAuth2 → API Key sept. 2025), le sourcing est passé sur un cache local rafraîchi mensuellement par GitHub Actions. Détails complets : [sirene-bulk-cron.md](./sirene-bulk-cron.md).
 
-- **Source** : https://files.data.gouv.fr/insee-sirene/
-- **Fichier** : `StockEtablissementHistorique_utf8.zip` (~3 GB décompressé)
-- **Cadence** : mensuelle (snapshot du 1er du mois)
-- **Setup en cours** : `scripts/import-sirene-bulk.ts` (POC d'ingestion vers une table miroir Postgres). Non encore en prod.
-- **Trade-off** : pas de fraîcheur intra-mois sur créations/cessations, mais 0 dépendance API.
+- **Source** : `https://www.data.gouv.fr/api/1/datasets/base-sirene-des-entreprises-et-de-leurs-etablissements-siren-siret/` → résolution dynamique de la resource `StockEtablissement_utf8` (l'id change chaque mois).
+- **Backend storage** : `object.files.data.gouv.fr/data-pipeline-open/siren/stock/StockEtablissement_utf8.zip` (~1.1 GB ZIP, ~3 GB décompressé, 43M lignes).
+- **Cadence** : cron mensuel GH Actions le 1er du mois 04:00 UTC. Trigger manuel via `gh workflow run sirene-import.yml -f force=true`.
+- **Table cible** : `sirene_cache` (~11k lignes, ~4 MB après filtre BEGES).
+- **Trade-off** : pas de fraîcheur intra-mois sur créations/cessations, mais 0 dépendance API, 0 clé, 0 quota.
+- **Lecture côté app** : `lib/agent/sirene-cache.ts` → `searchSireneCache()` (fonction PL/pgSQL avec index composite).
+- **Whitelist SSRF à maintenir** : `www.data.gouv.fr` ET `object.files.data.gouv.fr`.
 
 ## Recherche Entreprises (data.gouv.fr) — fallback gratuit
 
