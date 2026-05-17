@@ -16,6 +16,10 @@ on:
 jobs:
   import-sirene:
     runs-on: ubuntu-latest
+    # Environment "Production – strofe-prospection-agent" : les secrets
+    # de cet environnement (APP_URL, CRON_SECRET, NEXT_PUBLIC_SUPABASE_URL,
+    # SUPABASE_SERVICE_ROLE_KEY) sont automatiquement injectés dans le job.
+    environment: 'Production – strofe-prospection-agent'
     timeout-minutes: 60  # 1h max (largement plus que les 30 min attendues)
 
     env:

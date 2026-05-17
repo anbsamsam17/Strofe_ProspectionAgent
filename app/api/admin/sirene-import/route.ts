@@ -38,8 +38,9 @@ import { isCronRequest } from '@/lib/auth/cron'
 import { createAdminClient } from '@/lib/supabase/server'
 
 export const dynamic = 'force-dynamic'
-// Vercel Pro max ; insuffisant pour 15-30 min mais on n'exécute pas l'ETL ici.
-export const maxDuration = 800
+// Vercel Hobby max = 300s. On n'exécute pas l'ETL ici (15-30 min impossible
+// sur Vercel), juste le sanity check + retour des instructions de trigger.
+export const maxDuration = 60
 
 /** Row de la vue `sirene_cache_size` (migration 019, pas encore régénérée). */
 type SireneCacheSizeRow = {
