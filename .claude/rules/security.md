@@ -57,6 +57,7 @@
   - `api.resend.com`
   - `bodacc-datadila.opendatasoft.com`
   - `registre-national-entreprises.inpi.fr`
+  - `www.data.gouv.fr` (bulk SIRENE download — script ETL `scripts/import-sirene-bulk.ts`)
 - **Jamais** d'URL user-controlled passée à `fetch()`. Pas de `fetch(req.body.url)`.
 - Pas de proxy générique sortant.
 

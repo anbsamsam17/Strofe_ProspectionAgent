@@ -59,8 +59,14 @@ import unzipper from 'unzipper'
 // CONFIG — variables d'environnement + constantes
 // ---------------------------------------------------------------------------
 
+// URL mise à jour 2026-05-17 : INSEE a migré les fichiers SIRENE depuis
+// files.data.gouv.fr/insee-sirene/ (404 depuis août 2025) vers l'API
+// data.gouv.fr datasets. URLs trouvées sur :
+// https://www.data.gouv.fr/datasets/base-sirene-des-entreprises-et-de-leurs-etablissements-siren-siret/
+//
+// Stock Établissements (~1.1 GB ZIP, ~30M lignes, MAJ mensuelle) :
 const DEFAULT_SIRENE_URL =
-  'https://files.data.gouv.fr/insee-sirene/StockEtablissement_utf8.zip'
+  'https://www.data.gouv.fr/api/1/datasets/r/0835cd60-2c2a-497b-bc64-404de704ce89'
 
 const SIRENE_DOWNLOAD_URL =
   process.env.SIRENE_DOWNLOAD_URL ?? DEFAULT_SIRENE_URL
@@ -329,11 +335,18 @@ async function getStorageStat(supabase: SupabaseClient): Promise<StorageStat | n
 }
 
 class StorageLimitReachedError extends Error {
-  constructor(public readonly currentMb: number, public readonly limitMb: number) {
+  readonly currentMb: number
+  readonly limitMb: number
+  constructor(currentMb: number, limitMb: number) {
+    // Note: pas de "parameter property" (public readonly x: type) car Node
+    // --experimental-strip-types ne supporte que les annotations type pures,
+    // pas la syntaxe TS qui génère du code (parameter properties, enums, etc.).
     super(
       `Garde-fou storage : sirene_cache atteint ${currentMb.toFixed(2)} MB, limite ${limitMb} MB`,
     )
     this.name = 'StorageLimitReachedError'
+    this.currentMb = currentMb
+    this.limitMb = limitMb
   }
 }
 
