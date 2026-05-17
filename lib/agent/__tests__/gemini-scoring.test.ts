@@ -326,6 +326,210 @@ describe('scoreLeadAvecGemini — PII absente du prompt', () => {
 })
 
 // ------------------------------------------------------------
+// CATÉGORISATION SECTEUR — categoriserSecteurAvecGemini
+// ------------------------------------------------------------
+
+function mockSecteurOk(overrides: Record<string, unknown> = {}) {
+  const payload = {
+    secteur_libelle: 'Transport routier de marchandises',
+    secteur_categorie: 'transport',
+    confidence: 'high',
+    ...overrides,
+  }
+  return {
+    response: {
+      text: () => JSON.stringify(payload),
+    },
+  }
+}
+
+describe('categoriserSecteurAvecGemini — cas nominal', () => {
+  it('retourne un libellé + catégorie + confidence validés', async () => {
+    _generateContentMock.mockResolvedValue(mockSecteurOk())
+    const { categoriserSecteurAvecGemini } = await import('../gemini-scoring')
+
+    const result = await categoriserSecteurAvecGemini({
+      nafCode: '49.41A',
+      raisonSociale: 'Transports Dupont SAS',
+      effectifMin: 50,
+    })
+
+    expect(result).not.toBeNull()
+    expect(result?.secteur_libelle).toBe('Transport routier de marchandises')
+    expect(result?.secteur_categorie).toBe('transport')
+    expect(result?.confidence).toBe('high')
+  })
+
+  it('inclut le code NAF et la raison sociale dans le prompt', async () => {
+    _generateContentMock.mockResolvedValue(mockSecteurOk())
+    const { categoriserSecteurAvecGemini } = await import('../gemini-scoring')
+
+    await categoriserSecteurAvecGemini({
+      nafCode: '49.41A',
+      raisonSociale: 'Transports Dupont SAS',
+      effectifMin: 50,
+    })
+
+    const prompt = String(_generateContentMock.mock.calls[0]?.[0] ?? '')
+    expect(prompt).toMatch(/49\.41A/)
+    expect(prompt).toMatch(/Transports Dupont SAS/)
+    expect(prompt).toMatch(/50\+/)
+  })
+})
+
+describe('categoriserSecteurAvecGemini — graceful degradation', () => {
+  it('retourne null sur JSON malformé (pas de crash)', async () => {
+    _generateContentMock.mockResolvedValue({
+      response: { text: () => '{not-valid-json:::' },
+    })
+    const { categoriserSecteurAvecGemini } = await import('../gemini-scoring')
+
+    const result = await categoriserSecteurAvecGemini({
+      nafCode: '49.41A',
+      raisonSociale: 'Transports Dupont SAS',
+    })
+
+    expect(result).toBeNull()
+  })
+
+  it('retourne null sur catégorie hors enum (validation Zod KO)', async () => {
+    _generateContentMock.mockResolvedValue(
+      mockSecteurOk({ secteur_categorie: 'inconnu_invalide' }),
+    )
+    const { categoriserSecteurAvecGemini } = await import('../gemini-scoring')
+
+    const result = await categoriserSecteurAvecGemini({
+      nafCode: '49.41A',
+      raisonSociale: 'Transports Dupont SAS',
+    })
+
+    expect(result).toBeNull()
+  })
+
+  it('retourne null sur quota dépassé (429) sans crasher le pipeline', async () => {
+    const err429 = Object.assign(new Error('Too Many Requests (429)'), { status: 429 })
+    _generateContentMock.mockRejectedValue(err429)
+    const { categoriserSecteurAvecGemini } = await import('../gemini-scoring')
+
+    const result = await categoriserSecteurAvecGemini({
+      nafCode: '49.41A',
+      raisonSociale: 'Transports Dupont SAS',
+    })
+
+    expect(result).toBeNull()
+  })
+
+  it('retourne null sans appeler le SDK quand GEMINI_API_KEY absente', async () => {
+    delete process.env.GEMINI_API_KEY
+    _generateContentMock.mockResolvedValue(mockSecteurOk())
+    const { categoriserSecteurAvecGemini } = await import('../gemini-scoring')
+
+    const result = await categoriserSecteurAvecGemini({
+      nafCode: '49.41A',
+      raisonSociale: 'Transports Dupont SAS',
+    })
+
+    expect(result).toBeNull()
+    expect(_generateContentMock).not.toHaveBeenCalled()
+  })
+
+  it('retourne null sur contenu vide', async () => {
+    _generateContentMock.mockResolvedValue({
+      response: { text: () => '' },
+    })
+    const { categoriserSecteurAvecGemini } = await import('../gemini-scoring')
+
+    const result = await categoriserSecteurAvecGemini({
+      nafCode: '49.41A',
+      raisonSociale: 'Transports Dupont SAS',
+    })
+
+    expect(result).toBeNull()
+  })
+})
+
+describe('categoriserSecteurAvecGemini — cache LRU', () => {
+  it('ne refait pas d\'appel Gemini pour le même (nafCode, raisonSociale)', async () => {
+    _generateContentMock.mockResolvedValue(mockSecteurOk())
+    const { categoriserSecteurAvecGemini, _internal } = await import('../gemini-scoring')
+
+    expect(_internal._secteurCacheSize()).toBe(0)
+
+    const r1 = await categoriserSecteurAvecGemini({
+      nafCode: '49.41A',
+      raisonSociale: 'Transports Dupont SAS',
+    })
+    expect(r1).not.toBeNull()
+    expect(_generateContentMock).toHaveBeenCalledTimes(1)
+    expect(_internal._secteurCacheSize()).toBe(1)
+
+    // 2e appel identique → cache hit, pas d'appel Gemini.
+    const r2 = await categoriserSecteurAvecGemini({
+      nafCode: '49.41A',
+      raisonSociale: 'Transports Dupont SAS',
+    })
+    expect(r2).not.toBeNull()
+    expect(r2?.secteur_libelle).toBe(r1?.secteur_libelle)
+    expect(_generateContentMock).toHaveBeenCalledTimes(1) // toujours 1
+  })
+
+  it('normalise la raison sociale (casse + espaces) pour le hit cache', async () => {
+    _generateContentMock.mockResolvedValue(mockSecteurOk())
+    const { categoriserSecteurAvecGemini } = await import('../gemini-scoring')
+
+    await categoriserSecteurAvecGemini({
+      nafCode: '49.41A',
+      raisonSociale: 'Transports Dupont SAS',
+    })
+    await categoriserSecteurAvecGemini({
+      nafCode: '49.41A',
+      raisonSociale: '  TRANSPORTS  Dupont   sas  ',
+    })
+
+    // Normalisation casse+espaces → même clé → 1 seul appel
+    expect(_generateContentMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('ne mélange pas deux NAF différents dans le cache', async () => {
+    _generateContentMock
+      .mockResolvedValueOnce(mockSecteurOk({ secteur_libelle: 'Transport routier' }))
+      .mockResolvedValueOnce(mockSecteurOk({ secteur_libelle: 'Fabrication métallurgique', secteur_categorie: 'industrie' }))
+    const { categoriserSecteurAvecGemini } = await import('../gemini-scoring')
+
+    const r1 = await categoriserSecteurAvecGemini({
+      nafCode: '49.41A',
+      raisonSociale: 'Société Anonyme',
+    })
+    const r2 = await categoriserSecteurAvecGemini({
+      nafCode: '24.10Z',
+      raisonSociale: 'Société Anonyme',
+    })
+
+    expect(r1?.secteur_libelle).toBe('Transport routier')
+    expect(r2?.secteur_libelle).toBe('Fabrication métallurgique')
+    expect(_generateContentMock).toHaveBeenCalledTimes(2)
+  })
+})
+
+describe('categoriserSecteurAvecGemini — PII', () => {
+  it('le prompt ne contient ni email ni téléphone', async () => {
+    _generateContentMock.mockResolvedValue(mockSecteurOk())
+    const { categoriserSecteurAvecGemini } = await import('../gemini-scoring')
+
+    await categoriserSecteurAvecGemini({
+      nafCode: '49.41A',
+      raisonSociale: 'Transports Dupont SAS',
+      effectifMin: 50,
+    })
+
+    const prompt = String(_generateContentMock.mock.calls[0]?.[0] ?? '')
+    expect(prompt).not.toMatch(/[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}/i)
+    expect(prompt).not.toMatch(/0\s?\d(?:[\s.-]?\d{2}){4}/)
+    expect(prompt).not.toMatch(/contact_/i)
+  })
+})
+
+// ------------------------------------------------------------
 // HELPERS INTERNES (isRetriableGeminiError)
 // ------------------------------------------------------------
 

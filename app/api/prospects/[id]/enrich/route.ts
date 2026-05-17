@@ -1,36 +1,52 @@
 // ============================================================
 // POST /api/prospects/[id]/enrich — re-trigger enrichissement contact
 //
-// Endpoint user-déclenché (bouton "Vérifier maintenant" sur la fiche
-// prospect). Appelle la cascade `enrichirContact` (lib/agent/contact-enrichment)
-// pour un seul prospect, identique à ce que fait l'orchestrator cron mais à
-// la demande.
+// Endpoint user-déclenché (bouton "Chercher un contact" sur la fiche prospect).
+// Appelle la cascade `enrichirContact` (lib/agent/contact-enrichment) pour
+// un seul prospect, identique à ce que fait l'orchestrator cron mais à la
+// demande.
+//
+// Body (optionnel) :
+//   { forceReplace?: boolean }
+//
+// Quand `forceReplace=true` :
+//   1. SELECT les contacts masqués (placeholder [Masqué], email_is_pro=false,
+//      email_status='invalid', etc.) via `isMaskedContact()`
+//   2. DELETE ces lignes de `prospect_contacts`
+//   3. RESET les colonnes legacy `prospects.contact_*` si elles pointent vers
+//      un masqué (sinon on les garde — la cascade est additive)
+//   4. PUIS lance la cascade normale avec un contact existant "vide"
 //
 // Différences vs orchestrator :
 //   - Pas de tier hot/cold (l'utilisateur demande explicitement)
-//   - Pas de filtre opt-out (l'utilisateur sait ce qu'il fait — il pourra
-//     opt-out par ailleurs)
-//   - Réponse synchrone JSON : { added: [...], sources: [...] }
+//   - Pas de filtre opt-out (l'utilisateur sait ce qu'il fait)
+//   - Réponse synchrone JSON : { added: [...], sources: [...], replaced?: number }
 //   - Timeout 25s (Vercel function timeout 30s, on garde une marge)
 //
 // Sécurité :
 //   - getUser() obligatoire → session valide.
 //   - RLS via session SSR : un user ne peut enrichir que ses prospects.
-//   - Pas de service_role (le pipeline cron utilise lui-même service_role,
-//     mais ici on est dans une session user — RLS suffit).
+//   - Pas de service_role (le pipeline cron utilise service_role, mais ici
+//     on est en session user — RLS suffit).
 //
 // Erreurs :
 //   - 401 UNAUTHENTICATED  : pas de session
-//   - 400 INVALID_INPUT    : id non UUID
+//   - 400 INVALID_INPUT    : id non UUID / body malformé
 //   - 404 NOT_FOUND        : prospect introuvable / pas owné
 //   - 503 EXTERNAL_API_ERROR : Pappers/Hunter quotas épuisés
 //   - 500 INTERNAL_ERROR   : erreur inattendue
 // ============================================================
 
 import { NextRequest, NextResponse } from 'next/server'
+import { z } from 'zod'
+
 import { createClient } from '@/lib/supabase/server'
 import { enrichirContact, type EnrichedContact } from '@/lib/agent/contact-enrichment'
 import { isProfessionalEmail } from '@/lib/agent/email-is-pro'
+import {
+  isMaskedContact,
+  type MaskedDetectableContact,
+} from '@/lib/agent/contact-masked-detector'
 
 export const dynamic = 'force-dynamic'
 
@@ -42,6 +58,12 @@ export const dynamic = 'force-dynamic'
 const ENRICH_TIMEOUT_MS = 25_000
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+const bodySchema = z
+  .object({
+    forceReplace: z.boolean().optional(),
+  })
+  .strict()
 
 // ------------------------------------------------------------
 // HELPERS
@@ -71,12 +93,25 @@ function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
   })
 }
 
+/**
+ * Tente de parser le body JSON. Body absent OU vide = `{}` (le param est optionnel).
+ */
+async function safeParseBody(req: NextRequest): Promise<unknown> {
+  try {
+    const text = await req.text()
+    if (!text || text.trim().length === 0) return {}
+    return JSON.parse(text)
+  } catch {
+    return null
+  }
+}
+
 // ------------------------------------------------------------
 // HANDLER
 // ------------------------------------------------------------
 
 export async function POST(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
   const supabase = await createClient()
@@ -101,7 +136,24 @@ export async function POST(
     )
   }
 
-  // 3. Charger le prospect (RLS filtre par user_id)
+  // 3. Validation body (optionnel)
+  const rawBody = await safeParseBody(request)
+  if (rawBody === null) {
+    return NextResponse.json(
+      { error: { code: 'INVALID_INPUT', message: 'Body JSON malformé' } },
+      { status: 400 },
+    )
+  }
+  const parsed = bodySchema.safeParse(rawBody)
+  if (!parsed.success) {
+    return NextResponse.json(
+      { error: { code: 'INVALID_INPUT', message: parsed.error.message } },
+      { status: 400 },
+    )
+  }
+  const forceReplace = parsed.data.forceReplace === true
+
+  // 4. Charger le prospect (RLS filtre par user_id)
   const { data: prospect, error: fetchError } = await supabase
     .from('prospects')
     .select(
@@ -135,7 +187,84 @@ export async function POST(
     )
   }
 
-  // 4. Construire le contact existant (champs déjà présents — la cascade ne
+  // 5. Cleanup contacts masqués si demandé.
+  // ----------------------------------------------------------
+  // On lit les contacts associés, on filtre les masqués via `isMaskedContact`,
+  // puis on les supprime de `prospect_contacts`. On reset également les colonnes
+  // legacy `prospects.contact_*` si le contact "primaire legacy" est masqué.
+  // Tout cela AVANT la cascade, pour qu'elle ne soit plus court-circuitée.
+  let replacedCount = 0
+  let legacyReset = false
+  if (forceReplace) {
+    const { data: existingContacts, error: contactsErr } = await supabase
+      .from('prospect_contacts')
+      .select('id, nom, prenom, email, telephone, email_is_pro, email_status')
+      .eq('prospect_id', id)
+
+    if (contactsErr) {
+      return NextResponse.json(
+        { error: { code: 'DB_ERROR', message: contactsErr.message } },
+        { status: 500 },
+      )
+    }
+
+    const maskedIds = (existingContacts ?? [])
+      .filter((c) => isMaskedContact(c as MaskedDetectableContact))
+      .map((c) => c.id as string)
+
+    if (maskedIds.length > 0) {
+      const { error: deleteErr } = await supabase
+        .from('prospect_contacts')
+        .delete()
+        .in('id', maskedIds)
+      if (deleteErr) {
+        return NextResponse.json(
+          { error: { code: 'DB_ERROR', message: deleteErr.message } },
+          { status: 500 },
+        )
+      }
+      replacedCount = maskedIds.length
+    }
+
+    // Reset legacy si le contact stocké sur la ligne `prospects` est lui-même
+    // masqué — sinon on conserve les données (la cascade est additive et ne
+    // doit pas effacer un contact valide).
+    const legacyContactView: MaskedDetectableContact = {
+      nom: prospect.contact_nom ?? null,
+      prenom: prospect.contact_prenom ?? null,
+      email: prospect.contact_email ?? null,
+      telephone: prospect.contact_telephone ?? null,
+    }
+    if (isMaskedContact(legacyContactView)) {
+      const { error: legacyErr } = await supabase
+        .from('prospects')
+        .update({
+          contact_nom: null,
+          contact_prenom: null,
+          contact_poste: null,
+          contact_telephone: null,
+          contact_email: null,
+          contact_linkedin: null,
+        })
+        .eq('id', id)
+      if (legacyErr) {
+        return NextResponse.json(
+          { error: { code: 'DB_ERROR', message: legacyErr.message } },
+          { status: 500 },
+        )
+      }
+      legacyReset = true
+      // Repartir avec un état "vide" pour la cascade.
+      prospect.contact_nom = null
+      prospect.contact_prenom = null
+      prospect.contact_poste = null
+      prospect.contact_telephone = null
+      prospect.contact_email = null
+      prospect.contact_linkedin = null
+    }
+  }
+
+  // 6. Construire le contact existant (champs déjà présents — la cascade ne
   // les ré-enrichit pas, garde sa sémantique additive).
   const existingContact: Partial<EnrichedContact> = {
     contact_nom: prospect.contact_nom ?? undefined,
@@ -147,7 +276,7 @@ export async function POST(
     contact_linkedin_entreprise: prospect.contact_linkedin_entreprise ?? undefined,
   }
 
-  // 5. Appel cascade avec timeout dur (Vercel cap 30s).
+  // 7. Appel cascade avec timeout dur (Vercel cap 30s).
   let nouveauxChamps: Partial<EnrichedContact>
   try {
     nouveauxChamps = await withTimeout(
@@ -191,7 +320,7 @@ export async function POST(
     )
   }
 
-  // 6. Filtre email_is_pro : un email perso (gmail, hotmail, …) ne doit jamais
+  // 8. Filtre email_is_pro : un email perso (gmail, hotmail, …) ne doit jamais
   // écraser le primary. Aligné sur la logique de l'orchestrator cron.
   let emailPersoSkipped = false
   if (
@@ -202,21 +331,27 @@ export async function POST(
     emailPersoSkipped = true
   }
 
-  // 7. Rien à mettre à jour → réponse no-op.
+  // 9. Rien à mettre à jour → réponse no-op.
   if (Object.keys(nouveauxChamps).length === 0) {
     return NextResponse.json(
       {
         data: {
           added: [],
           sources: [],
-          reason: emailPersoSkipped ? 'email_perso_filtered' : 'no_new_data',
+          replaced: replacedCount,
+          legacyReset,
+          reason: emailPersoSkipped
+            ? 'email_perso_filtered'
+            : replacedCount > 0 || legacyReset
+              ? 'replaced_no_new_data'
+              : 'no_new_data',
         },
       },
       { status: 200 },
     )
   }
 
-  // 8. UPDATE — on n'écrase JAMAIS les champs existants côté DB (la cascade
+  // 10. UPDATE — on n'écrase JAMAIS les champs existants côté DB (la cascade
   // a déjà filtré, mais on sécurise une seconde fois en ne passant que les
   // champs réellement nouveaux). RLS filtre via session.
   const updatePayload: Record<string, string | null> = {}
@@ -236,7 +371,7 @@ export async function POST(
     )
   }
 
-  // 9. Déterminer les sources qui ont contribué — heuristique simple basée
+  // 11. Déterminer les sources qui ont contribué — heuristique simple basée
   // sur quels champs ont été remplis. Le détail fin est dans les logs serveur
   // (cf. logSummary dans contact-enrichment.ts).
   const sources: string[] = []
@@ -255,6 +390,8 @@ export async function POST(
       data: {
         added: Object.keys(nouveauxChamps),
         sources: uniqueSources,
+        replaced: replacedCount,
+        legacyReset,
       },
     },
     { status: 200 },

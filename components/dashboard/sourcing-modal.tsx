@@ -4,7 +4,14 @@ import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { createPortal } from 'react-dom'
 import { useAgentRunStatus } from '@/lib/hooks/use-agent-run-status'
 import { NAF_GROUPS_SUGGESTED, type NafGroup } from '@/lib/constants/naf-codes'
+import {
+  NAF_BEGES_PRIORITY,
+  NAF_BEGES_PRIORITY_SET,
+} from '@/lib/constants/naf-beges-priority'
 import { NafCodeMultiSelect } from '@/components/settings/naf-code-multi-select'
+
+// Codes BEGES prioritaires (sections A/C/D/E/F/H) — univers du multi-select.
+const NAF_BEGES_CODES: readonly string[] = NAF_BEGES_PRIORITY.map((c) => c.code)
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -108,7 +115,9 @@ export function SourcingModal({ isOpen, onClose }: SourcingModalProps) {
     effectifMax: '500',
     targetRegion: '',
   })
-  const [selectedSectors, setSelectedSectors] = useState<Set<number>>(new Set())
+  // State : ensemble de codes NAF directs (format `XX.XXX`). On a abandonné
+  // l'indexation par groupe pour permettre la sélection fine code par code.
+  const [selectedCodes, setSelectedCodes] = useState<Set<string>>(new Set())
   const [view, setView] = useState<ViewMode>('form')
   const [error, setError] = useState<string | null>(null)
   const [stats, setStats] = useState<RunStats | null>(null)
@@ -122,6 +131,26 @@ export function SourcingModal({ isOpen, onClose }: SourcingModalProps) {
   const abortRef = useRef<AbortController | null>(null)
 
   const isLoading = view === 'running'
+
+  // Tableau ordonné des codes sélectionnés (utile pour <NafCodeMultiSelect>
+  // qui veut `selectedCodes: string[]`). On dérive du Set pour garder
+  // l'unicité, l'ordre n'importe pas côté API.
+  const selectedCodesArray = useMemo(
+    () => Array.from(selectedCodes),
+    [selectedCodes],
+  )
+
+  // Nombre de codes sélectionnés appartenant à l'univers BEGES affiché.
+  // Sert au compteur « X / N secteurs sélectionnés » et reste cohérent
+  // si un code hors univers (ajouté via raccourci G/I) est aussi dans
+  // `selectedCodes`.
+  const selectedInUniverseCount = useMemo(() => {
+    let n = 0
+    for (const c of selectedCodes) {
+      if (NAF_BEGES_PRIORITY_SET.has(c)) n++
+    }
+    return n
+  }, [selectedCodes])
 
   // Détection « run global déjà en cours » (ex. lancé depuis un autre onglet).
   // On utilise la même source de vérité que les autres déclencheurs : le hook
@@ -188,7 +217,7 @@ export function SourcingModal({ isOpen, onClose }: SourcingModalProps) {
   useEffect(() => {
     if (!isOpen) {
       setFormData({ effectifMin: '50', effectifMax: '500', targetRegion: '' })
-      setSelectedSectors(new Set())
+      setSelectedCodes(new Set())
       setError(null)
       setStats(null)
       setView('form')
@@ -219,11 +248,9 @@ export function SourcingModal({ isOpen, onClose }: SourcingModalProps) {
           const profileCodes = d.targetSectors.filter(
             (c): c is string => typeof c === 'string',
           )
-          const sel = new Set<number>()
-          SECTOR_OPTIONS.forEach((opt, idx) => {
-            if (opt.codes.some((c) => profileCodes.includes(c))) sel.add(idx)
-          })
-          if (sel.size > 0) setSelectedSectors(sel)
+          if (profileCodes.length > 0) {
+            setSelectedCodes(new Set(profileCodes))
+          }
         }
       })
       .catch(() => {
@@ -241,13 +268,32 @@ export function SourcingModal({ isOpen, onClose }: SourcingModalProps) {
     }
   }
 
-  function toggleSector(index: number) {
-    setSelectedSectors((prev) => {
+  /**
+   * Toggle d'un quick-pick (groupe NAF pré-défini) :
+   *   - si TOUS les codes du groupe sont déjà sélectionnés → on les retire,
+   *   - sinon → on ajoute tous ceux qui manquent.
+   * Idempotent et sans doublon (Set).
+   */
+  function toggleGroup(group: NafGroup) {
+    setSelectedCodes((prev) => {
       const next = new Set(prev)
-      if (next.has(index)) next.delete(index)
-      else next.add(index)
+      const allSelected = group.codes.every((c) => next.has(c))
+      if (allSelected) {
+        group.codes.forEach((c) => next.delete(c))
+      } else {
+        group.codes.forEach((c) => next.add(c))
+      }
       return next
     })
+  }
+
+  /**
+   * Callback unique du `NafCodeMultiSelect` : remplace l'ensemble courant
+   * par la nouvelle liste. On reconstruit un Set à partir d'un tableau pour
+   * dédupliquer une éventuelle duplication côté caller.
+   */
+  function handleMultiSelectChange(codes: string[]) {
+    setSelectedCodes(new Set(codes))
   }
 
   function resetToForm() {
@@ -289,11 +335,8 @@ export function SourcingModal({ isOpen, onClose }: SourcingModalProps) {
       return
     }
 
-    // Aplatir les codes NAF des secteurs sélectionnés
-    const flatNafCodes: string[] = []
-    selectedSectors.forEach((idx) => {
-      SECTOR_OPTIONS[idx]?.codes.forEach((code) => flatNafCodes.push(code))
-    })
+    // Codes NAF sélectionnés (déjà aplatis dans le state : un Set<string>).
+    const flatNafCodes: string[] = Array.from(selectedCodes)
 
     // AbortController : permet le cleanup propre + un timeout client de sécurité.
     const controller = new AbortController()
@@ -679,41 +722,99 @@ export function SourcingModal({ isOpen, onClose }: SourcingModalProps) {
                     </p>
                   </fieldset>
 
-                  {/* Secteurs cibles */}
+                  {/* Secteurs cibles — 2 niveaux : raccourcis + liste détaillée BEGES */}
                   <fieldset>
-                    <legend className="mb-2.5 text-sm font-medium text-gray-200">
-                      Secteurs cibles
-                      <span className="ml-1.5 text-xs font-normal text-gray-400 dark:text-gray-400">
-                        (optionnel — tous si aucun coché)
-                      </span>
-                    </legend>
-                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                      {SECTOR_OPTIONS.map((sector, index) => {
-                        const isChecked = selectedSectors.has(index)
-                        const checkboxId = `sector-${index}`
-                        return (
-                          <label
-                            key={checkboxId}
-                            htmlFor={checkboxId}
-                            className={`flex cursor-pointer items-center gap-3 rounded-lg border px-3 py-2.5 text-sm transition-colors ${
-                              isChecked
-                                ? 'border-green-300 bg-green-50 text-green-800 dark:border-green-700 dark:bg-green-950/40 dark:text-green-300'
-                                : 'border-white/10 bg-white/[0.04] backdrop-blur-md text-gray-200 hover:border-white/20 hover:bg-white/[0.06]'
-                            } ${isLoading ? 'cursor-not-allowed opacity-60' : ''}`}
-                          >
-                            <input
-                              id={checkboxId}
-                              type="checkbox"
-                              checked={isChecked}
-                              onChange={() => toggleSector(index)}
-                              disabled={isLoading}
-                              className="h-4 w-4 flex-shrink-0 rounded border-gray-300 text-green-600 accent-green-600 focus:ring-green-500 dark:border-gray-600"
-                              aria-label={sector.label}
-                            />
-                            <span className="select-none leading-tight">{sector.label}</span>
-                          </label>
-                        )
-                      })}
+                    <div className="mb-2.5 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+                      <legend className="text-sm font-medium text-gray-200">
+                        Secteurs cibles
+                        <span className="ml-1.5 text-xs font-normal text-gray-400 dark:text-gray-400">
+                          (optionnel — tous si aucun coché)
+                        </span>
+                      </legend>
+                      <p
+                        className="text-xs tabular-nums text-gray-400"
+                        aria-live="polite"
+                        role="status"
+                      >
+                        {selectedInUniverseCount} / {NAF_BEGES_CODES.length} secteurs
+                        sélectionnés
+                      </p>
+                    </div>
+
+                    {/* Raccourcis : 9 groupes prêts à l'emploi (toggle complet) */}
+                    <div>
+                      <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-gray-400">
+                        Raccourcis
+                      </p>
+                      <ul className="flex flex-wrap gap-1.5">
+                        {SECTOR_OPTIONS.map((sector) => {
+                          const allSelected = sector.codes.every((c) =>
+                            selectedCodes.has(c),
+                          )
+                          const someSelected =
+                            !allSelected &&
+                            sector.codes.some((c) => selectedCodes.has(c))
+                          return (
+                            <li key={sector.label}>
+                              <button
+                                type="button"
+                                onClick={() => toggleGroup(sector)}
+                                disabled={isLoading}
+                                aria-pressed={allSelected}
+                                aria-label={sector.label}
+                                title={sector.codes.join(', ')}
+                                className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition-colors duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/40 disabled:cursor-not-allowed disabled:opacity-50 ${
+                                  allSelected
+                                    ? 'border-green-200 bg-green-100 text-green-700 ring-1 ring-green-200 hover:bg-green-200/60 dark:border-green-800 dark:bg-green-950/60 dark:text-green-300 dark:ring-green-900'
+                                    : someSelected
+                                      ? 'border-green-200 bg-white/[0.04] backdrop-blur-md text-green-700 hover:bg-green-50 dark:border-green-800/60 dark:bg-gray-900 dark:text-green-300'
+                                      : 'border-white/10 bg-white/[0.04] backdrop-blur-md text-gray-200 hover:border-white/20 hover:bg-white/[0.06]'
+                                }`}
+                              >
+                                {allSelected && (
+                                  <svg
+                                    xmlns="http://www.w3.org/2000/svg"
+                                    width="11"
+                                    height="11"
+                                    viewBox="0 0 24 24"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    strokeWidth="3"
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    aria-hidden="true"
+                                  >
+                                    <polyline points="20 6 9 17 4 12" />
+                                  </svg>
+                                )}
+                                {sector.label}
+                                <span className="tabular-nums text-[10px] opacity-70">
+                                  ({sector.codes.length})
+                                </span>
+                              </button>
+                            </li>
+                          )
+                        })}
+                      </ul>
+                    </div>
+
+                    {/* Liste détaillée recherchable : ~110 codes BEGES prioritaires */}
+                    <div className="mt-4">
+                      <p
+                        id="naf-beges-detail-label"
+                        className="mb-2 text-xs font-semibold uppercase tracking-wider text-gray-400"
+                      >
+                        Liste détaillée (sections A · C · D · E · F · H)
+                      </p>
+                      <NafCodeMultiSelect
+                        selectedCodes={selectedCodesArray}
+                        onChange={handleMultiSelectChange}
+                        disabled={isLoading}
+                        showSuggestedGroups={false}
+                        availableCodes={NAF_BEGES_CODES}
+                        labelledBy="naf-beges-detail-label"
+                        searchPlaceholder="Rechercher par code (ex. 23.51) ou libellé (ex. ciment)..."
+                      />
                     </div>
                   </fieldset>
 

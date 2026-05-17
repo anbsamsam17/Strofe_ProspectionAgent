@@ -242,6 +242,12 @@ function BegesBadge({ prospect }: { prospect: Prospect }) {
 
 interface SearchParams {
   page?: string
+  /**
+   * Nouveau format compact (post-pivot) : `score_desc` / `score_asc`
+   * / `created_desc` / `created_asc`. Défaut côté serveur = `score_desc`.
+   * Le format historique `?sort=score_priorite&order=desc` reste supporté
+   * via mapping rétrocompat (cf. `mapLegacySort` ci-dessous).
+   */
   sort?: string
   order?: string
   statut?: string
@@ -252,6 +258,44 @@ interface SearchParams {
   contact_type?: string
   /** "missing" pour ne lister que les entreprises avec BEGES absent OU expiré. */
   beges?: string
+}
+
+// ── Sort (pills inline) ──────────────────────────────────────────────────────
+
+/** Valeurs valides du tri compact (UI pills). */
+const SORT_VALUES = ['score_desc', 'score_asc', 'created_desc', 'created_asc'] as const
+type SortValue = (typeof SORT_VALUES)[number]
+const DEFAULT_SORT: SortValue = 'score_desc'
+
+/**
+ * Mapping tri → colonne Supabase + sens.
+ * Source de vérité unique partagée entre la query DB et l'UI.
+ */
+const SORT_TO_ORDER: Record<SortValue, { column: SortableColumn; ascending: boolean }> = {
+  score_desc: { column: 'score_priorite', ascending: false },
+  score_asc: { column: 'score_priorite', ascending: true },
+  created_desc: { column: 'created_at', ascending: false },
+  created_asc: { column: 'created_at', ascending: true },
+}
+
+/**
+ * Parse `?sort=` avec fallback vers le défaut.
+ * Anti-fuzzing : toute valeur hors liste → défaut silencieusement.
+ * Rétrocompat : ?sort=score_priorite&order=desc/asc → score_desc/asc.
+ */
+function parseSort(rawSort: string | undefined, rawOrder: string | undefined): SortValue {
+  if (rawSort && (SORT_VALUES as readonly string[]).includes(rawSort)) {
+    return rawSort as SortValue
+  }
+  // Rétrocompat : ancien format `?sort=<col>&order=<asc|desc>`.
+  // On ne migre que les colonnes encore exposées en UI compact (score, created).
+  if (rawSort === 'score_priorite') {
+    return rawOrder === 'asc' ? 'score_asc' : 'score_desc'
+  }
+  if (rawSort === 'created_at') {
+    return rawOrder === 'asc' ? 'created_asc' : 'created_desc'
+  }
+  return DEFAULT_SORT
 }
 
 export default async function ProspectsPage({
@@ -269,9 +313,38 @@ export default async function ProspectsPage({
 
   const params = await searchParams
   const page = Math.max(1, parseInt(params.page ?? '1', 10))
-  // Tri par défaut : score décroissant — c'est l'axe principal de l'app.
-  const sortCol = (params.sort as SortableColumn) ?? 'score_priorite'
-  const sortOrderAsc = params.order === 'asc'
+
+  // Tri — deux formats supportés en parallèle :
+  //   1) Compact pills UI : ?sort=score_desc / score_asc / created_desc / created_asc
+  //   2) Legacy column-header : ?sort=raison_sociale&order=asc (toujours utilisé
+  //      pour les colonnes Entreprise / Statut / Dernière action).
+  // On essaie d'abord la résolution legacy par nom de colonne ; sinon on
+  // bascule sur parseSort (compact + défaut).
+  const LEGACY_SORT_COLUMNS: readonly SortableColumn[] = [
+    'raison_sociale',
+    'score_priorite',
+    'statut',
+    'updated_at',
+    'created_at',
+  ]
+  let sortCol: SortableColumn
+  let sortOrderAsc: boolean
+  let sortValue: SortValue = DEFAULT_SORT
+  if (
+    params.sort &&
+    (LEGACY_SORT_COLUMNS as readonly string[]).includes(params.sort) &&
+    params.sort !== 'score_priorite' &&
+    params.sort !== 'created_at'
+  ) {
+    // Format legacy strict (col qui n'a pas d'équivalent pill) : on respecte.
+    sortCol = params.sort as SortableColumn
+    sortOrderAsc = params.order === 'asc'
+  } else {
+    sortValue = parseSort(params.sort, params.order)
+    const mapping = SORT_TO_ORDER[sortValue]
+    sortCol = mapping.column
+    sortOrderAsc = mapping.ascending
+  }
   // Statuts valides post-migration 017 (ENUM prospect_status).
   // Filtre defensive : on retire silencieusement les valeurs URL qui ne
   // correspondent pas à un statut connu (anti-fuzzing).
@@ -401,11 +474,18 @@ export default async function ProspectsPage({
     beges: begesFilters as BulkBegesFilter[],
   }
 
+  // Si l'URL a été générée par les pills (sort=score_desc...), on préserve la
+  // forme compacte. Sinon on garde le legacy ?sort=<col>&order=<dir>.
+  const isCompactSort =
+    params.sort !== undefined && (SORT_VALUES as readonly string[]).includes(params.sort)
+  const sortDefaults: Record<string, string> = isCompactSort
+    ? { sort: params.sort as string }
+    : { sort: sortCol, order: params.order ?? 'desc' }
+
   function buildHref(newParams: Record<string, string>) {
     const merged: Record<string, string> = {
       page: String(page),
-      sort: sortCol,
-      order: params.order ?? 'desc',
+      ...sortDefaults,
       ...(params.statut ? { statut: params.statut } : {}),
       ...(secteurFilter ? { secteur: secteurFilter } : {}),
       ...(scoreMin > 0 ? { score_min: String(scoreMin) } : {}),
@@ -472,6 +552,7 @@ export default async function ProspectsPage({
             currentArchived={showArchived}
             currentContactTypes={contactTypes}
             currentBegesFilters={begesFilters}
+            currentSort={sortValue}
           />
         </div>
       </div>

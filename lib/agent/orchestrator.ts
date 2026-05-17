@@ -25,6 +25,7 @@ import { enrichirContact, getCreditsUsed } from './contact-enrichment'
 import { isProfessionalEmail } from './email-is-pro'
 import { filterOptedOutSirens } from './opt-out-checker'
 import {
+  categoriserSecteurAvecGemini,
   isGeminiAvailable,
   scoreLeadAvecGemini,
   type GeminiProspectInput,
@@ -282,6 +283,119 @@ async function phaseSourcingAdaptive(
   })
 
   return { output, outcome: output.outcome }
+}
+
+// ------------------------------------------------------------
+// PHASE 3.5 : CATÉGORISATION SECTEUR via Gemini Flash 2.0
+// ------------------------------------------------------------
+
+/** Nombre maximum de prospects catégorisés par run (préserver le quota Gemini gratuit). */
+const SECTEUR_MAX_PER_RUN = 50
+
+/** Parallélisme du batch catégorisation (rate-limit Gemini Flash 30 req/min). */
+const SECTEUR_BATCH_PARALLELISM = 5
+
+/**
+ * Complète `prospects.secteur_libelle` quand il est NULL ou vide via Gemini Flash 2.0.
+ *
+ * Phase NON-FATALE — n'impacte ni le scoring numérique (déjà calculé) ni la suite
+ * du pipeline. Si `GEMINI_API_KEY` est absente, la phase est skippée silencieusement.
+ *
+ * PII : aucune donnée contact n'est envoyée à Gemini (uniquement code NAF +
+ * raison sociale, qui sont publiques via Sirene).
+ */
+async function phaseSecteurCategorisation(
+  run: AgentRun,
+  supabase: SupabaseServerClient,
+): Promise<void> {
+  run.phase = 'secteur_categorisation'
+
+  if (!isGeminiAvailable()) {
+    log(run, 'secteur_categorisation', 'GEMINI_API_KEY absente — phase skippée', 'info')
+    return
+  }
+
+  log(run, 'secteur_categorisation', 'Démarrage catégorisation secteur via Gemini', 'info')
+
+  // Charger les prospects sans secteur_libelle exploitable (NULL ou chaîne vide
+  // après trim). Sirene NAF doit être présent pour permettre la classification.
+  const { data: prospects, error } = await supabase
+    .from('prospects')
+    .select('id, siren, raison_sociale, secteur_naf, secteur_libelle, effectif_min')
+    .eq('user_id', run.user_id)
+    .is('archived_at', null)
+    .or('secteur_libelle.is.null,secteur_libelle.eq.')
+    .not('secteur_naf', 'is', null)
+    .order('score_priorite', { ascending: false })
+    .limit(SECTEUR_MAX_PER_RUN)
+
+  if (error) {
+    log(run, 'secteur_categorisation', 'Lecture prospects à catégoriser impossible', 'warn', {
+      error: error.message,
+    })
+    return
+  }
+
+  if (!prospects || prospects.length === 0) {
+    log(run, 'secteur_categorisation', 'Aucun prospect à catégoriser', 'info')
+    return
+  }
+
+  let categorisesCount = 0
+  let echecsCount = 0
+
+  for (
+    let groupStart = 0;
+    groupStart < prospects.length;
+    groupStart += SECTEUR_BATCH_PARALLELISM
+  ) {
+    const groupEnd = Math.min(groupStart + SECTEUR_BATCH_PARALLELISM, prospects.length)
+    const group = prospects.slice(groupStart, groupEnd)
+
+    const results = await Promise.all(
+      group.map(async (p) => {
+        const id = p.id as string
+        const result = await categoriserSecteurAvecGemini({
+          nafCode: (p.secteur_naf as string | null) ?? null,
+          raisonSociale: (p.raison_sociale as string | null) ?? '',
+          effectifMin: (p.effectif_min as number | null) ?? null,
+        })
+        return { id, result }
+      }),
+    )
+
+    for (const { id, result } of results) {
+      if (!result) {
+        echecsCount += 1
+        continue
+      }
+
+      const { error: updateError } = await supabase
+        .from('prospects')
+        .update({ secteur_libelle: result.secteur_libelle })
+        .eq('id', id)
+
+      if (updateError) {
+        echecsCount += 1
+        log(
+          run,
+          'secteur_categorisation',
+          `Échec UPDATE secteur_libelle prospect ${id}`,
+          'warn',
+          { prospect_id: id, error: updateError.message },
+        )
+        continue
+      }
+      categorisesCount += 1
+    }
+  }
+
+  log(run, 'secteur_categorisation', 'Catégorisation secteur terminée', 'info', {
+    prospects_analyses: prospects.length,
+    prospects_categorises: categorisesCount,
+    prospects_echec: echecsCount,
+    source: 'gemini-2.0-flash',
+  })
 }
 
 // ------------------------------------------------------------
@@ -756,6 +870,21 @@ export async function runAgentNocturne(
     run.completed_at = new Date().toISOString()
     await updateRunInDB(run, supabaseAdmin)
     return run
+  }
+
+  // --------------------------------------------------------
+  // PHASE 3.5 : CATÉGORISATION SECTEUR (Gemini Flash 2.0)
+  // Phase NON-FATALE — complète `prospects.secteur_libelle` quand vide.
+  // Skippe silencieusement si GEMINI_API_KEY absente.
+  // PII : aucune donnée contact envoyée à Gemini.
+  // --------------------------------------------------------
+  try {
+    await phaseSecteurCategorisation(run, supabaseAdmin)
+    await updateRunInDB(run, supabaseAdmin)
+  } catch (err) {
+    log(run, 'secteur_categorisation', 'Catégorisation secteur échouée — pipeline non bloqué', 'warn', {
+      error: err instanceof Error ? err.message : String(err),
+    })
   }
 
   // --------------------------------------------------------

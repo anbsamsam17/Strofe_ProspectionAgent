@@ -27,7 +27,7 @@ vi.mock('./add-contact-dialog', () => ({
 vi.mock('./enrich-contact-button', () => ({
   EnrichContactButton: ({ prospectId }: { prospectId: string }) => (
     <button type="button" data-testid={`enrich-contact-mock-${prospectId}`}>
-      Vérifier maintenant
+      Chercher un contact
     </button>
   ),
 }))

@@ -52,6 +52,13 @@ const defaultProps = {
   currentContactTypes: [] as ('phone' | 'email' | 'linkedin')[],
 }
 
+// Helper : ouvre le drawer "Plus de filtres" (où se trouvent désormais les
+// pills `Contact disponible` après le compactage en ribbon). Indispensable
+// dans tous les tests qui ciblent les boutons de canal de contact.
+function openMoreDrawer() {
+  fireEvent.click(screen.getByRole('button', { name: /Plus de filtres/i }))
+}
+
 // Helper : la dernière URL pushée (string complète relative à /prospects).
 function lastPushedUrl(): string {
   expect(mockPush).toHaveBeenCalled()
@@ -85,16 +92,18 @@ describe('ProspectsFilters — rendu nominal', () => {
     // Assert : input score (range)
     expect(screen.getByLabelText(/Score minimum/i)).toBeInTheDocument()
 
-    // Assert : 3 boutons de type de contact
+    // Assert : toggle archives (visible directement dans le ribbon — icône)
+    expect(
+      screen.getByRole('button', { name: /Voir les archivés/i }),
+    ).toBeInTheDocument()
+
+    // Assert : 3 boutons de type de contact — repliés derrière "Plus de filtres".
+    // Le ribbon compact masque les filtres rares pour gagner de la place verticale.
+    openMoreDrawer()
     const contactGroup = screen.getByRole('group', {
       name: /Filtrer par canal de contact disponible/i,
     })
     expect(within(contactGroup).getAllByRole('button')).toHaveLength(3)
-
-    // Assert : toggle archives
-    expect(
-      screen.getByRole('button', { name: /Voir les archivés/i }),
-    ).toBeInTheDocument()
   })
 
   it('affiche les labels statuts conformes à la spec (libellés localisés)', () => {
@@ -173,6 +182,7 @@ describe('ProspectsFilters — filtre type de contact', () => {
   it('click sur "Téléphone" pousse ?contact_type=phone', () => {
     // Arrange
     render(<ProspectsFilters {...defaultProps} />)
+    openMoreDrawer()
     const contactGroup = screen.getByRole('group', {
       name: /Filtrer par canal de contact disponible/i,
     })
@@ -187,6 +197,7 @@ describe('ProspectsFilters — filtre type de contact', () => {
   it('multi-select : phone + email → ?contact_type=phone,email', () => {
     // Arrange
     render(<ProspectsFilters {...defaultProps} />)
+    openMoreDrawer()
     const contactGroup = screen.getByRole('group', {
       name: /Filtrer par canal de contact disponible/i,
     })
@@ -289,6 +300,81 @@ describe('ProspectsFilters — toggle archives', () => {
 
     // Assert
     expect(lastPushedParams().has('archived')).toBe(false)
+  })
+})
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TRI — pills inline (Score ↓ / Score ↑ / Récent / Ancien)
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('ProspectsFilters — pills tri', () => {
+  it('rend les 4 pills tri attendues', () => {
+    render(<ProspectsFilters {...defaultProps} />)
+    const sortGroup = screen.getByRole('group', { name: /Trier les prospects/i })
+    const buttons = within(sortGroup).getAllByRole('button')
+    expect(buttons).toHaveLength(4)
+    expect(within(sortGroup).getByRole('button', { name: /Score ↓/ })).toBeInTheDocument()
+    expect(within(sortGroup).getByRole('button', { name: /Score ↑/ })).toBeInTheDocument()
+    expect(within(sortGroup).getByRole('button', { name: /Récent/ })).toBeInTheDocument()
+    expect(within(sortGroup).getByRole('button', { name: /Ancien/ })).toBeInTheDocument()
+  })
+
+  it('affiche Score ↓ actif par défaut (currentSort omis)', () => {
+    render(<ProspectsFilters {...defaultProps} />)
+    const sortGroup = screen.getByRole('group', { name: /Trier les prospects/i })
+    expect(within(sortGroup).getByRole('button', { name: /Score ↓/ })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    )
+  })
+
+  it('click sur Score ↑ pousse ?sort=score_asc', () => {
+    render(<ProspectsFilters {...defaultProps} />)
+    const sortGroup = screen.getByRole('group', { name: /Trier les prospects/i })
+    fireEvent.click(within(sortGroup).getByRole('button', { name: /Score ↑/ }))
+    expect(lastPushedParams().get('sort')).toBe('score_asc')
+  })
+
+  it('click sur Récent pousse ?sort=created_desc', () => {
+    render(<ProspectsFilters {...defaultProps} />)
+    const sortGroup = screen.getByRole('group', { name: /Trier les prospects/i })
+    fireEvent.click(within(sortGroup).getByRole('button', { name: /Récent/ }))
+    expect(lastPushedParams().get('sort')).toBe('created_desc')
+  })
+
+  it('click sur Ancien pousse ?sort=created_asc', () => {
+    render(<ProspectsFilters {...defaultProps} />)
+    const sortGroup = screen.getByRole('group', { name: /Trier les prospects/i })
+    fireEvent.click(within(sortGroup).getByRole('button', { name: /Ancien/ }))
+    expect(lastPushedParams().get('sort')).toBe('created_asc')
+  })
+
+  it('défaut score_desc : la clé sort est OMISE de l\'URL (pas de bruit)', () => {
+    // Arrange : on démarre sur une valeur non-défaut.
+    render(<ProspectsFilters {...defaultProps} currentSort="created_desc" />)
+    const sortGroup = screen.getByRole('group', { name: /Trier les prospects/i })
+
+    // Act : retour au défaut.
+    fireEvent.click(within(sortGroup).getByRole('button', { name: /Score ↓/ }))
+
+    // Assert : la clé sort doit disparaître de l'URL quand on est sur le défaut.
+    expect(lastPushedParams().has('sort')).toBe(false)
+  })
+
+  it('click sur le tri actif ne push rien (idempotence)', () => {
+    render(<ProspectsFilters {...defaultProps} currentSort="score_desc" />)
+    const sortGroup = screen.getByRole('group', { name: /Trier les prospects/i })
+    fireEvent.click(within(sortGroup).getByRole('button', { name: /Score ↓/ }))
+    expect(mockPush).not.toHaveBeenCalled()
+  })
+
+  it('propagation : currentSort=created_asc → pill Ancien active', () => {
+    render(<ProspectsFilters {...defaultProps} currentSort="created_asc" />)
+    const sortGroup = screen.getByRole('group', { name: /Trier les prospects/i })
+    expect(within(sortGroup).getByRole('button', { name: /Ancien/ })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    )
   })
 })
 

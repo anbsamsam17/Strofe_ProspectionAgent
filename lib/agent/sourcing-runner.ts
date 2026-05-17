@@ -26,6 +26,10 @@ import type {
   SireneEtablissement,
 } from '@/lib/types'
 import {
+  categoriserSecteurAvecGemini,
+  isGeminiAvailable,
+} from './gemini-scoring'
+import {
   enrichirProspect,
   getRePhoneCircuitState,
   resetRePhoneCircuit,
@@ -158,6 +162,16 @@ const ENRICH_SOFT_TIMEOUT_MS = 180 * 1000
 // Recherche Entreprises répond lentement sans déclencher le circuit breaker).
 // 80 × ~2s/SIREN (ADEME parallèle + tel) ≈ 160s — confortable sous le soft timeout.
 const ENRICH_MAX_ETABLISSEMENTS = 80
+
+/**
+ * Cap STRICT de catégorisation secteur Gemini par run sourcing (UI bouton manuel).
+ * Plus restrictif que la phase nocturne (50) pour préserver le quota Gemini gratuit
+ * (1500 req/jour, 30 req/min) face à des sourcings UI répétés.
+ */
+const SECTEUR_MAX_PER_SOURCING_RUN = 20
+
+/** Parallélisme du batch catégorisation (rate-limit Gemini Flash 30 req/min). */
+const SECTEUR_BATCH_PARALLELISM = 5
 
 /**
  * Intervalle du heartbeat (ms) — pousse un log "vivant" dans `agent_runs.logs`
@@ -1043,6 +1057,109 @@ async function upsertProspectsBatch(
 }
 
 // ------------------------------------------------------------
+// HELPER — Catégorisation secteur inline (Gemini Flash 2.0)
+// ------------------------------------------------------------
+
+/**
+ * Catégorise les prospects sans `secteur_libelle` après upsert.
+ *
+ * Limites strictes :
+ *   - Cap à `SECTEUR_MAX_PER_SOURCING_RUN` prospects (préserve quota Gemini gratuit).
+ *   - Batch parallèle de `SECTEUR_BATCH_PARALLELISM` (rate-limit Gemini Flash).
+ *   - Skip silencieux si `GEMINI_API_KEY` absente.
+ *   - `categoriserSecteurAvecGemini` retourne `null` en cas d'échec → pas de crash.
+ *
+ * Optionnel : un échec ici ne propage jamais d'exception (try/catch interne).
+ */
+async function categoriserSecteursPostUpsert(
+  userId: string,
+  supabase: SupabaseAdminClient,
+  scored: Array<Partial<Prospect>>,
+  pushLog: (phase: string, message: string, level: 'info' | 'warn' | 'error', data?: Record<string, unknown>) => void,
+): Promise<void> {
+  if (!isGeminiAvailable()) return
+
+  try {
+    // Cible : nouveaux prospects sourcés sans secteur_libelle mais avec NAF dispo.
+    const sirensSansSecteur = scored
+      .filter(
+        (p) =>
+          p.siren &&
+          p.secteur_naf &&
+          (!p.secteur_libelle || (typeof p.secteur_libelle === 'string' && p.secteur_libelle.trim() === '')),
+      )
+      .slice(0, SECTEUR_MAX_PER_SOURCING_RUN)
+      .map((p) => p.siren as string)
+
+    if (sirensSansSecteur.length === 0) return
+
+    // On relit depuis la DB pour récupérer l'id (clef de l'UPDATE).
+    const { data: rows, error } = await supabase
+      .from('prospects')
+      .select('id, siren, raison_sociale, secteur_naf, effectif_min')
+      .eq('user_id', userId)
+      .in('siren', sirensSansSecteur)
+
+    if (error || !rows || rows.length === 0) {
+      if (error) {
+        pushLog('secteur_categorisation', 'Lecture prospects pour catégorisation impossible', 'warn', {
+          error: error.message,
+        })
+      }
+      return
+    }
+
+    let categorisesCount = 0
+    let echecsCount = 0
+
+    for (let groupStart = 0; groupStart < rows.length; groupStart += SECTEUR_BATCH_PARALLELISM) {
+      const groupEnd = Math.min(groupStart + SECTEUR_BATCH_PARALLELISM, rows.length)
+      const group = rows.slice(groupStart, groupEnd)
+
+      const results = await Promise.all(
+        group.map(async (r) => {
+          const result = await categoriserSecteurAvecGemini({
+            nafCode: (r.secteur_naf as string | null) ?? null,
+            raisonSociale: (r.raison_sociale as string | null) ?? '',
+            effectifMin: (r.effectif_min as number | null) ?? null,
+          })
+          return { id: r.id as string, result }
+        }),
+      )
+
+      for (const { id, result } of results) {
+        if (!result) {
+          echecsCount += 1
+          continue
+        }
+        const { error: updateError } = await supabase
+          .from('prospects')
+          .update({ secteur_libelle: result.secteur_libelle })
+          .eq('id', id)
+        if (updateError) {
+          echecsCount += 1
+          continue
+        }
+        categorisesCount += 1
+      }
+    }
+
+    pushLog('secteur_categorisation', 'Catégorisation secteur (sourcing) terminée', 'info', {
+      prospects_analyses: rows.length,
+      prospects_categorises: categorisesCount,
+      prospects_echec: echecsCount,
+      cap: SECTEUR_MAX_PER_SOURCING_RUN,
+      source: 'gemini-2.0-flash',
+    })
+  } catch (err) {
+    // Phase strictement optionnelle — on n'interrompt jamais le sourcing.
+    pushLog('secteur_categorisation', 'Catégorisation secteur (sourcing) — erreur silencieuse', 'warn', {
+      error: err instanceof Error ? err.message : String(err),
+    })
+  }
+}
+
+// ------------------------------------------------------------
 // API PUBLIQUE : RUN ADAPTATIF END-TO-END
 // (utilisée par runSourcing UI + phaseSourcing orchestrator)
 // ------------------------------------------------------------
@@ -1207,6 +1324,12 @@ export async function runPipelineSourcing(
       prospectsUpdated = upsertResult.prospectsUpdated
       hbState.counters.prospects_new = prospectsNew
       hbState.counters.prospects_updated = prospectsUpdated
+
+      // 5d. Catégorisation secteur (optionnelle, ne bloque pas le pipeline).
+      // Cap strict 20 prospects pour préserver le quota Gemini gratuit lors des
+      // sourcings UI répétés. Skip silencieux si GEMINI_API_KEY absente.
+      hbState.phase = 'secteur_categorisation'
+      await categoriserSecteursPostUpsert(userId, supabase, scored, pushLog)
     }
   } finally {
     // 6. Persiste TOUJOURS l'état partiel (succès ou erreur) — pas de curseur perdu.

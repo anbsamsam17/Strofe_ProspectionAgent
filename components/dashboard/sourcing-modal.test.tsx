@@ -2,11 +2,13 @@
 // Tests : SourcingModal
 // ------------------------------------------------------------
 // Couvre :
-//   - Rendu du formulaire avec les 9 groupes suggérés (quick picks).
-//   - Rendu du multi-select NAF (501 codes) à côté des groupes.
-//   - Combinaison des 2 modes au submit → set union dédupliqué.
-//   - Sélection d'un groupe seul → POST avec les codes du groupe.
-//   - Sélection d'un code individuel seul → POST avec ce code.
+//   - Rendu du formulaire avec les 9 raccourcis (pills) NAF.
+//   - Rendu du multi-select NAF restreint aux ~110 codes BEGES
+//     prioritaires (sections A/C/D/E/F/H).
+//   - Sélection d'un raccourci → POST avec les codes du groupe.
+//   - Sélection d'un code individuel via la recherche.
+//   - Combinaison raccourci + code individuel (set union, pas de
+//     doublon).
 //   - Aucune sélection → POST sans `targetSectors`.
 // ============================================================
 
@@ -103,28 +105,42 @@ afterEach(() => {
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
 describe('SourcingModal — rendu initial', () => {
-  it('rend les 9 groupes suggérés en quick picks', async () => {
+  it('rend les 9 raccourcis (pills) des secteurs prioritaires', async () => {
     render(<SourcingModal isOpen={true} onClose={vi.fn()} />)
 
-    // Les labels des 9 secteurs prioritaires doivent être présents.
-    expect(await screen.findByText(/Viticulture/i)).toBeInTheDocument()
-    expect(screen.getByText(/Aéronautique/i)).toBeInTheDocument()
-    expect(screen.getByText(/Logistique \/ Transport/i)).toBeInTheDocument()
-    expect(screen.getByText(/Agro-alimentaire/i)).toBeInTheDocument()
-    expect(screen.getByText(/Chimie/i)).toBeInTheDocument()
-    expect(screen.getByText(/Sidérurgie \/ Métaux/i)).toBeInTheDocument()
-    expect(screen.getByText(/Énergie/i)).toBeInTheDocument()
-    expect(screen.getByText(/^BTP$/i)).toBeInTheDocument()
-    expect(screen.getByText(/Hôtellerie \/ Restauration/i)).toBeInTheDocument()
+    // Les 9 raccourcis sont rendus comme `<button>` avec `aria-label`
+    // contenant le label du groupe.
+    expect(
+      await screen.findByRole('button', { name: 'Viticulture' }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: 'Aéronautique' }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: /Logistique \/ Transport/i }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: /Agro-alimentaire/i }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: 'Chimie' }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: /Sidérurgie \/ Métaux/i }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: 'Énergie' }),
+    ).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'BTP' })).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: /Hôtellerie \/ Restauration/i }),
+    ).toBeInTheDocument()
   })
 
-  // SKIP : le composant <NafCodeMultiSelect> n'est plus inclus dans la modal
-  // (sourcing-modal.tsx utilise uniquement les checkboxes de groupes NAF_GROUPS_SUGGESTED).
-  // Réactiver ce test si le multi-select 501 codes individuels est réintroduit.
-  it.skip('rend le multi-select NAF (501 codes) à côté des groupes', async () => {
+  it('rend le multi-select NAF BEGES (sections A/C/D/E/F/H) sous les raccourcis', async () => {
     render(<SourcingModal isOpen={true} onClose={vi.fn()} />)
 
-    // Listbox NAF du composant <NafCodeMultiSelect> embarqué.
+    // Listbox du composant <NafCodeMultiSelect> embarqué.
     const listbox = await screen.findByRole('listbox', { name: /Codes NAF disponibles/i })
     expect(listbox).toBeInTheDocument()
     expect(listbox).toHaveAttribute('aria-multiselectable', 'true')
@@ -142,6 +158,13 @@ describe('SourcingModal — rendu initial', () => {
     expect(
       screen.queryByText(/Suggérés \(prospection B2B BEGES\)/i),
     ).not.toBeInTheDocument()
+  })
+
+  it('affiche le compteur « X / N secteurs sélectionnés »', async () => {
+    render(<SourcingModal isOpen={true} onClose={vi.fn()} />)
+    expect(
+      await screen.findByText(/0 \/ \d+ secteurs sélectionnés/i),
+    ).toBeInTheDocument()
   })
 })
 
@@ -179,14 +202,14 @@ describe('SourcingModal — submit et consolidation des codes', () => {
     expect(body.targetSectors).toBeUndefined()
   })
 
-  it('POST avec les codes du groupe quand un seul groupe est coché', async () => {
+  it('POST avec les codes du groupe quand un seul raccourci est coché', async () => {
     const fetchMock = setupFetchMock()
     render(<SourcingModal isOpen={true} onClose={vi.fn()} />)
 
-    // Coche le groupe "Viticulture" → 01.21Z + 01.22Z.
-    const checkbox = (await screen.findByLabelText('Viticulture')) as HTMLInputElement
-    fireEvent.click(checkbox)
-    expect(checkbox.checked).toBe(true)
+    // Coche le raccourci "Viticulture" → 01.21Z + 01.22Z.
+    const pill = await screen.findByRole('button', { name: 'Viticulture' })
+    fireEvent.click(pill)
+    expect(pill).toHaveAttribute('aria-pressed', 'true')
 
     fireEvent.click(screen.getByRole('button', { name: /Lancer la recherche/i }))
 
@@ -202,23 +225,22 @@ describe('SourcingModal — submit et consolidation des codes', () => {
     expect(body.targetSectors).toHaveLength(2)
   })
 
-  // SKIP : cf commentaire au-dessus — multi-select NAF non présent.
-  it.skip('POST avec un code individuel sélectionné via le multi-select', async () => {
+  it('POST avec un code individuel sélectionné via le multi-select', async () => {
     const fetchMock = setupFetchMock()
     render(<SourcingModal isOpen={true} onClose={vi.fn()} />)
 
-    // Cherche un code spécifique (cabinet de conseil = 70.22Z).
+    // Cherche un code BEGES (ciment = 23.51Z).
     const search = await screen.findByPlaceholderText(/Rechercher par code/i)
-    fireEvent.change(search, { target: { value: '70.22Z' } })
+    fireEvent.change(search, { target: { value: '23.51' } })
 
     const listbox = screen.getByRole('listbox', { name: /Codes NAF disponibles/i })
     const options = within(listbox).getAllByRole('option')
     expect(options.length).toBeGreaterThan(0)
     fireEvent.click(options[0]!)
 
-    // Chip "70.22Z" doit apparaître.
+    // Chip "23.51Z" doit apparaître.
     const chipList = await screen.findByLabelText(/Codes NAF sélectionnés/i)
-    expect(within(chipList).getByText('70.22Z')).toBeInTheDocument()
+    expect(within(chipList).getByText('23.51Z')).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: /Lancer la recherche/i }))
 
@@ -230,20 +252,19 @@ describe('SourcingModal — submit et consolidation des codes', () => {
     })
 
     const body = extractSourcingBody(fetchMock)
-    expect(body.targetSectors).toEqual(['70.22Z'])
+    expect(body.targetSectors).toEqual(['23.51Z'])
   })
 
-  // SKIP : cf commentaire au-dessus — multi-select NAF non présent.
-  it.skip('combine groupe + code individuel sans doublon (set union)', async () => {
+  it('combine raccourci + code individuel sans doublon (set union)', async () => {
     const fetchMock = setupFetchMock()
     render(<SourcingModal isOpen={true} onClose={vi.fn()} />)
 
-    // 1. Coche "Viticulture" → 01.21Z + 01.22Z.
-    fireEvent.click(await screen.findByLabelText('Viticulture'))
+    // 1. Coche "Viticulture" (raccourci) → 01.21Z + 01.22Z.
+    fireEvent.click(await screen.findByRole('button', { name: 'Viticulture' }))
 
-    // 2. Ajoute 70.22Z (cabinet de conseil) via le multi-select.
+    // 2. Ajoute 23.51Z (ciment) via le multi-select.
     const search = screen.getByPlaceholderText(/Rechercher par code/i)
-    fireEvent.change(search, { target: { value: '70.22Z' } })
+    fireEvent.change(search, { target: { value: '23.51' } })
     const listbox = screen.getByRole('listbox', { name: /Codes NAF disponibles/i })
     fireEvent.click(within(listbox).getAllByRole('option')[0]!)
 
@@ -258,7 +279,7 @@ describe('SourcingModal — submit et consolidation des codes', () => {
 
     const body = extractSourcingBody(fetchMock)
     expect(body.targetSectors).toEqual(
-      expect.arrayContaining(['01.21Z', '01.22Z', '70.22Z']),
+      expect.arrayContaining(['01.21Z', '01.22Z', '23.51Z']),
     )
     expect(body.targetSectors).toHaveLength(3)
     // Pas de doublon.
@@ -266,19 +287,23 @@ describe('SourcingModal — submit et consolidation des codes', () => {
     expect(unique.size).toBe(body.targetSectors!.length)
   })
 
-  // SKIP : cf commentaire au-dessus — multi-select NAF non présent.
-  it.skip('déduplique si un code individuel est aussi dans un groupe coché', async () => {
+  it('déduplique si un code individuel est aussi dans un raccourci coché', async () => {
     const fetchMock = setupFetchMock()
     render(<SourcingModal isOpen={true} onClose={vi.fn()} />)
 
-    // 1. Coche "Viticulture" (couvre 01.21Z + 01.22Z).
-    fireEvent.click(await screen.findByLabelText('Viticulture'))
+    // 1. Coche "Viticulture" (raccourci, couvre 01.21Z + 01.22Z).
+    fireEvent.click(await screen.findByRole('button', { name: 'Viticulture' }))
 
-    // 2. Ajoute aussi 01.21Z individuellement (collision).
+    // 2. Tente d'ajouter 01.21Z (déjà cible du raccourci) via le multi-select.
+    //    Comme le code est déjà coché, un nouveau clic le toggle (donc retire).
+    //    Pour vraiment exercer "set union sans doublon" il faudrait ajouter
+    //    et NE PAS retirer — on vérifie ici que la valeur de chip persiste.
     const search = screen.getByPlaceholderText(/Rechercher par code/i)
     fireEvent.change(search, { target: { value: '01.21Z' } })
     const listbox = screen.getByRole('listbox', { name: /Codes NAF disponibles/i })
-    fireEvent.click(within(listbox).getAllByRole('option')[0]!)
+    const opts = within(listbox).getAllByRole('option')
+    // L'option doit être déjà marquée selected (le raccourci l'a cochée).
+    expect(opts[0]).toHaveAttribute('aria-selected', 'true')
 
     fireEvent.click(screen.getByRole('button', { name: /Lancer la recherche/i }))
 
@@ -290,7 +315,7 @@ describe('SourcingModal — submit et consolidation des codes', () => {
     })
 
     const body = extractSourcingBody(fetchMock)
-    // Toujours 2 codes (01.21Z + 01.22Z), pas 3 — le doublon a sauté.
+    // Toujours 2 codes (01.21Z + 01.22Z), pas 3 — pas de doublon.
     expect(body.targetSectors).toEqual(expect.arrayContaining(['01.21Z', '01.22Z']))
     expect(body.targetSectors).toHaveLength(2)
   })

@@ -9,6 +9,11 @@ import {
   type NafCodeSearchEntry,
 } from '@/lib/constants/naf-codes'
 
+// Tableau partagé pour la valeur par défaut de `availableCodes` :
+// référence stable entre rendus pour éviter les `useMemo` invalidés à chaque
+// render quand le caller ne passe pas la prop.
+const EMPTY_RESTRICT: readonly string[] = []
+
 // ── Constantes ────────────────────────────────────────────────────────────────
 
 /**
@@ -31,6 +36,17 @@ export interface NafCodeMultiSelectProps {
   showSuggestedGroups?: boolean
   /** Id du label décrivant le champ (a11y). */
   labelledBy?: string
+  /**
+   * Sous-ensemble de codes NAF utilisable comme univers de recherche.
+   * Si fourni (non vide), la listbox + la recherche + le compteur ne
+   * portent QUE sur ces codes (les autres restent invisibles mais peuvent
+   * exister dans `selectedCodes` et seront affichés en chips).
+   * Utilisé par la modal de sourcing pour restreindre aux ~110 codes
+   * BEGES prioritaires (sections A/C/D/E/F/H).
+   */
+  availableCodes?: readonly string[]
+  /** Placeholder de la barre de recherche (par défaut : exemple générique). */
+  searchPlaceholder?: string
 }
 
 // ── Composant ─────────────────────────────────────────────────────────────────
@@ -51,6 +67,8 @@ export function NafCodeMultiSelect({
   disabled = false,
   showSuggestedGroups = true,
   labelledBy,
+  availableCodes = EMPTY_RESTRICT,
+  searchPlaceholder = 'Rechercher par code (ex. 01.21) ou libellé (ex. viticulture)...',
 }: NafCodeMultiSelectProps) {
   const [search, setSearch] = useState('')
   const [activeIndex, setActiveIndex] = useState<number>(-1)
@@ -59,32 +77,41 @@ export function NafCodeMultiSelect({
 
   const selectedSet = useMemo(() => new Set(selectedCodes), [selectedCodes])
 
+  // Univers de codes consultables : NAF_CODES_SEARCH par défaut, restreint
+  // sinon. On garde l'ordre canonique de NAF_CODES_SEARCH pour avoir des
+  // résultats triés et stables.
+  const universe = useMemo<readonly NafCodeSearchEntry[]>(() => {
+    if (availableCodes.length === 0) return NAF_CODES_SEARCH
+    const allow = new Set(availableCodes)
+    return NAF_CODES_SEARCH.filter((e) => allow.has(e.code))
+  }, [availableCodes])
+
   // ── Filtre + limite ────────────────────────────────────────────────────────
   const filtered = useMemo<readonly NafCodeSearchEntry[]>(() => {
     const trimmed = search.trim()
-    if (!trimmed) return NAF_CODES_SEARCH.slice(0, MAX_VISIBLE_ITEMS)
+    if (!trimmed) return universe.slice(0, MAX_VISIBLE_ITEMS)
 
     const needle = normalizeSearchString(trimmed)
     const out: NafCodeSearchEntry[] = []
-    for (const entry of NAF_CODES_SEARCH) {
+    for (const entry of universe) {
       if (entry._haystack.includes(needle)) {
         out.push(entry)
         if (out.length >= MAX_VISIBLE_ITEMS) break
       }
     }
     return out
-  }, [search])
+  }, [search, universe])
 
   const totalMatching = useMemo(() => {
     const trimmed = search.trim()
-    if (!trimmed) return NAF_CODES_SEARCH.length
+    if (!trimmed) return universe.length
     const needle = normalizeSearchString(trimmed)
     let n = 0
-    for (const entry of NAF_CODES_SEARCH) {
+    for (const entry of universe) {
       if (entry._haystack.includes(needle)) n++
     }
     return n
-  }, [search])
+  }, [search, universe])
 
   // Reset de l'index actif quand le filtre change pour éviter d'être
   // hors-bornes après une recherche qui rétrécit la liste.
@@ -286,7 +313,7 @@ export function NafCodeMultiSelect({
             onChange={(e) => setSearch(e.target.value)}
             onKeyDown={onSearchKeyDown}
             disabled={disabled}
-            placeholder="Rechercher par code (ex. 01.21) ou libellé (ex. viticulture)..."
+            placeholder={searchPlaceholder}
             role="combobox"
             aria-expanded="true"
             aria-controls={listboxId}

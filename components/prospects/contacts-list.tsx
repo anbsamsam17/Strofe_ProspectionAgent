@@ -115,7 +115,10 @@ export function ContactsList({ prospect, contacts }: ContactsListProps) {
           Contacts identifiés{displayed.length > 0 ? ` (${displayed.length})` : ''}
         </h2>
         <div className="flex flex-wrap items-start gap-3">
-          <EnrichContactButton prospectId={prospect.id} />
+          {/* On passe la liste affichée (= contacts effectifs OU fallback legacy)
+              pour que le bouton détecte les placeholders masqués et active
+              forceReplace=true côté API. */}
+          <EnrichContactButton prospectId={prospect.id} contacts={displayed} />
           <AddContactDialog prospectId={prospect.id} />
         </div>
       </div>

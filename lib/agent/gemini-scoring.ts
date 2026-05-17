@@ -517,6 +517,316 @@ export async function scoreLeadsBatchGemini(
   return results
 }
 
+// ============================================================
+// CATÉGORISATION SECTEUR — Gemini Flash 2.0
+//
+// Complète le champ existant `prospects.secteur_libelle` quand il est vide
+// (cas fréquent en mode dégradé ou sourcing fallback). Zéro migration —
+// on UPDATE simplement la colonne existante.
+//
+// Modèle figé sur `gemini-2.0-flash` (gratuit, 1500 req/jour, 30 req/min).
+// Throttle 50ms entre appels + LRU cache 1h pour préserver le quota.
+// ============================================================
+
+/** Catégories fermées (alignées avec la nomenclature interne BEGES). */
+export type SecteurCategorie =
+  | 'industrie'
+  | 'transport'
+  | 'energie'
+  | 'construction'
+  | 'agriculture'
+  | 'services'
+  | 'commerce'
+  | 'eau_dechets'
+  | 'autre'
+
+const SECTEUR_CATEGORIES: readonly SecteurCategorie[] = [
+  'industrie',
+  'transport',
+  'energie',
+  'construction',
+  'agriculture',
+  'services',
+  'commerce',
+  'eau_dechets',
+  'autre',
+] as const
+
+export interface SecteurCategorisationResult {
+  /** Libellé court 3-6 mots, langue française. */
+  secteur_libelle: string
+  /** Catégorie figée parmi `SECTEUR_CATEGORIES`. */
+  secteur_categorie: SecteurCategorie
+  /** Confiance heuristique du modèle. */
+  confidence: 'high' | 'medium' | 'low'
+}
+
+/** Timeout par appel catégorisation (ms) — plus court que le scoring (output ≤ 250 tokens). */
+const SECTEUR_TIMEOUT_MS = 8_000
+
+/** Throttle entre deux appels catégorisation (ms) — préserve la limite 30 req/min. */
+const SECTEUR_THROTTLE_MS = 50
+
+/** TTL du cache LRU (ms). */
+const SECTEUR_CACHE_TTL_MS = 60 * 60 * 1000 // 1h
+
+/** Capacité max du cache LRU (entrées). */
+const SECTEUR_CACHE_MAX_SIZE = 1000
+
+const SECTEUR_SYSTEM_PROMPT = `Tu es un expert en classification des entreprises françaises pour le bilan carbone (BEGES).
+À partir du code NAF et de la raison sociale, retourne UN JSON avec :
+- secteur_libelle : libellé court 3-6 mots, langue française
+- secteur_categorie : valeur EXACTE parmi cette liste fermée [industrie, transport, energie, construction, agriculture, services, commerce, eau_dechets, autre]
+- confidence : 'high' si le NAF est précis ET cohérent avec la raison sociale, 'medium' si raison sociale ambiguë, 'low' si seul le NAF est dispo
+
+Retour STRICTEMENT en JSON, pas de markdown, pas de texte additionnel.`
+
+const secteurResponseSchemaForApi: ObjectSchema = {
+  type: SchemaType.OBJECT,
+  properties: {
+    secteur_libelle: { type: SchemaType.STRING },
+    secteur_categorie: { type: SchemaType.STRING },
+    confidence: { type: SchemaType.STRING },
+  },
+  required: ['secteur_libelle', 'secteur_categorie', 'confidence'],
+}
+
+const secteurResponseSchema = z.object({
+  secteur_libelle: z.string().trim().min(3).max(120),
+  secteur_categorie: z.enum([
+    'industrie',
+    'transport',
+    'energie',
+    'construction',
+    'agriculture',
+    'services',
+    'commerce',
+    'eau_dechets',
+    'autre',
+  ] as const),
+  confidence: z.enum(['high', 'medium', 'low'] as const),
+})
+
+let _secteurModel: GenerativeModel | null = null
+
+function getSecteurModel(): GenerativeModel {
+  if (_secteurModel) return _secteurModel
+
+  const apiKey = process.env.GEMINI_API_KEY
+  if (!apiKey) {
+    throw new Error('GEMINI_API_KEY est requis pour la catégorisation secteur')
+  }
+
+  const genai = new GoogleGenerativeAI(apiKey)
+  _secteurModel = genai.getGenerativeModel({
+    model: GEMINI_MODEL,
+    systemInstruction: SECTEUR_SYSTEM_PROMPT,
+    generationConfig: {
+      responseMimeType: 'application/json',
+      responseSchema: secteurResponseSchemaForApi,
+      temperature: 0.2,
+      maxOutputTokens: 250,
+    },
+  })
+
+  return _secteurModel
+}
+
+// ------------------------------------------------------------
+// THROTTLE GLOBAL — un appel max par SECTEUR_THROTTLE_MS
+// ------------------------------------------------------------
+
+let _lastSecteurCallAt = 0
+
+async function awaitSecteurThrottle(): Promise<void> {
+  const elapsed = Date.now() - _lastSecteurCallAt
+  if (elapsed < SECTEUR_THROTTLE_MS) {
+    await new Promise((r) => setTimeout(r, SECTEUR_THROTTLE_MS - elapsed))
+  }
+  _lastSecteurCallAt = Date.now()
+}
+
+// ------------------------------------------------------------
+// CACHE LRU SIMPLE — (nafCode, raisonSociale normalisée) → résultat
+// ------------------------------------------------------------
+
+interface CacheEntry {
+  result: SecteurCategorisationResult
+  expiresAt: number
+}
+
+const _secteurCache = new Map<string, CacheEntry>()
+
+function normalizeRaisonSociale(s: string): string {
+  return s
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+function buildCacheKey(nafCode: string | null, raisonSociale: string): string {
+  return `${nafCode ?? '_'}::${normalizeRaisonSociale(raisonSociale)}`
+}
+
+function getFromCache(key: string): SecteurCategorisationResult | null {
+  const entry = _secteurCache.get(key)
+  if (!entry) return null
+  if (Date.now() > entry.expiresAt) {
+    _secteurCache.delete(key)
+    return null
+  }
+  // LRU : move-to-end (Map preserve insertion order)
+  _secteurCache.delete(key)
+  _secteurCache.set(key, entry)
+  return entry.result
+}
+
+function putInCache(key: string, result: SecteurCategorisationResult): void {
+  if (_secteurCache.size >= SECTEUR_CACHE_MAX_SIZE) {
+    // Évince la plus ancienne (premier itéré dans un Map).
+    const oldestKey = _secteurCache.keys().next().value
+    if (oldestKey !== undefined) _secteurCache.delete(oldestKey)
+  }
+  _secteurCache.set(key, { result, expiresAt: Date.now() + SECTEUR_CACHE_TTL_MS })
+}
+
+// ------------------------------------------------------------
+// CATÉGORISATION UNITAIRE
+// ------------------------------------------------------------
+
+export interface CategoriserSecteurInput {
+  nafCode: string | null
+  raisonSociale: string
+  effectifMin?: number | null
+}
+
+function buildSecteurUserPrompt(input: CategoriserSecteurInput): string {
+  return `Code NAF : ${sanitizeForPrompt(input.nafCode ?? 'Non renseigné', 10)}
+Raison sociale : ${sanitizeForPrompt(input.raisonSociale, 200)}
+Effectif : ${input.effectifMin ?? '?'}+
+
+Réponds en JSON strict conforme au schéma demandé.`
+}
+
+/**
+ * Catégorise le secteur d'un prospect via Gemini Flash 2.0.
+ *
+ * Retourne `null` (au lieu de throw) dans tous les cas dégradés :
+ * - `GEMINI_API_KEY` absente
+ * - quota Gemini dépassé (429)
+ * - JSON malformé ou validation Zod KO
+ * - timeout
+ *
+ * Le caller doit donc traiter `null` comme "pas de catégorisation possible"
+ * et NE PAS écraser `secteur_libelle` existant.
+ */
+export async function categoriserSecteurAvecGemini(
+  input: CategoriserSecteurInput,
+): Promise<SecteurCategorisationResult | null> {
+  if (!isGeminiAvailable()) {
+    return null
+  }
+
+  // 1. Cache lookup
+  const cacheKey = buildCacheKey(input.nafCode, input.raisonSociale)
+  const cached = getFromCache(cacheKey)
+  if (cached) return cached
+
+  // 2. Throttle global
+  await awaitSecteurThrottle()
+
+  // 3. Appel Gemini
+  let model: GenerativeModel
+  try {
+    model = getSecteurModel()
+  } catch (err) {
+    console.log(
+      JSON.stringify({
+        level: 'warn',
+        module: 'gemini-scoring',
+        msg: 'Init client catégorisation secteur échouée',
+        error: err instanceof Error ? err.message : String(err),
+      }),
+    )
+    return null
+  }
+
+  const userPrompt = buildSecteurUserPrompt(input)
+
+  try {
+    const result = await withTimeout(
+      model.generateContent(userPrompt),
+      SECTEUR_TIMEOUT_MS,
+    )
+    const rawContent = result.response.text()
+    if (!rawContent) {
+      console.log(
+        JSON.stringify({
+          level: 'warn',
+          module: 'gemini-scoring',
+          msg: 'Catégorisation secteur — contenu vide',
+        }),
+      )
+      return null
+    }
+
+    let parsedJson: unknown
+    try {
+      parsedJson = JSON.parse(rawContent)
+    } catch {
+      console.log(
+        JSON.stringify({
+          level: 'warn',
+          module: 'gemini-scoring',
+          msg: 'Catégorisation secteur — JSON invalide',
+          preview: rawContent.slice(0, 120),
+        }),
+      )
+      return null
+    }
+
+    const validated = secteurResponseSchema.safeParse(parsedJson)
+    if (!validated.success) {
+      console.log(
+        JSON.stringify({
+          level: 'warn',
+          module: 'gemini-scoring',
+          msg: 'Catégorisation secteur — validation Zod KO',
+          error: validated.error.message,
+        }),
+      )
+      return null
+    }
+
+    const out: SecteurCategorisationResult = {
+      secteur_libelle: validated.data.secteur_libelle,
+      secteur_categorie: validated.data.secteur_categorie,
+      confidence: validated.data.confidence,
+    }
+
+    // 4. Mise en cache (avant retour)
+    putInCache(cacheKey, out)
+
+    return out
+  } catch (err) {
+    const isRetriable = isRetriableGeminiError(err)
+    console.log(
+      JSON.stringify({
+        level: 'warn',
+        module: 'gemini-scoring',
+        msg: isRetriable
+          ? 'Catégorisation secteur — quota/timeout, retour null (graceful)'
+          : 'Catégorisation secteur — échec définitif, retour null',
+        retriable: isRetriable,
+        error: err instanceof Error ? err.message : String(err),
+      }),
+    )
+    return null
+  }
+}
+
 // ------------------------------------------------------------
 // EXPORTS INTERNES POUR LES TESTS
 // ------------------------------------------------------------
@@ -533,5 +843,13 @@ export const _internal = {
   /** Reset du singleton client (utile entre tests). */
   resetClient(): void {
     _geminiModel = null
+    _secteurModel = null
+    _secteurCache.clear()
+    _lastSecteurCallAt = 0
   },
+  /** Pour vérifier le cache dans les tests. */
+  _secteurCacheSize(): number {
+    return _secteurCache.size
+  },
+  SECTEUR_CATEGORIES,
 }

@@ -1,4 +1,4 @@
-﻿'use client'
+'use client'
 
 import { useRouter, usePathname, useSearchParams } from 'next/navigation'
 import { useState, useTransition } from 'react'
@@ -14,6 +14,13 @@ export type ContactFilterType = 'phone' | 'email' | 'linkedin'
  */
 export type BegesFilterValue = 'missing' | 'obligation'
 
+/**
+ * Tri inline visible (pills). Valeurs URL : ?sort=<value>.
+ * `score_desc` reste le défaut côté serveur ; côté UI on l'affiche actif
+ * même quand `?sort` est absent.
+ */
+export type SortValue = 'score_desc' | 'score_asc' | 'created_desc' | 'created_asc'
+
 interface ProspectsFiltersProps {
   currentStatuts: string[]
   currentSecteur: string
@@ -21,6 +28,7 @@ interface ProspectsFiltersProps {
   currentArchived: boolean
   currentContactTypes?: ContactFilterType[]
   currentBegesFilters?: BegesFilterValue[]
+  currentSort?: SortValue
 }
 
 // TODO(Agent A): `offer_sent` à ajouter à `ProspectStatus` (`lib/types.ts`).
@@ -50,6 +58,15 @@ const ALL_CONTACT_TYPES: { value: ContactFilterType; label: string }[] = [
   { value: 'linkedin', label: 'LinkedIn' },
 ]
 
+const ALL_SORTS: { value: SortValue; label: string }[] = [
+  { value: 'score_desc', label: 'Score ↓' },
+  { value: 'score_asc', label: 'Score ↑' },
+  { value: 'created_desc', label: 'Récent' },
+  { value: 'created_asc', label: 'Ancien' },
+]
+
+const DEFAULT_SORT: SortValue = 'score_desc'
+
 export function ProspectsFilters({
   currentStatuts,
   currentSecteur,
@@ -57,6 +74,7 @@ export function ProspectsFilters({
   currentArchived,
   currentContactTypes = [],
   currentBegesFilters = [],
+  currentSort = DEFAULT_SORT,
 }: ProspectsFiltersProps) {
   const router = useRouter()
   const pathname = usePathname()
@@ -69,6 +87,8 @@ export function ProspectsFilters({
   const [archived, setArchived] = useState<boolean>(currentArchived)
   const [contactTypes, setContactTypes] = useState<ContactFilterType[]>(currentContactTypes)
   const [begesFilters, setBegesFilters] = useState<BegesFilterValue[]>(currentBegesFilters)
+  const [sort, setSort] = useState<SortValue>(currentSort)
+  const [moreOpen, setMoreOpen] = useState<boolean>(false)
 
   function applyFilters(
     newStatuts: string[],
@@ -77,6 +97,7 @@ export function ProspectsFilters({
     newArchived: boolean,
     newContactTypes: ContactFilterType[],
     newBegesFilters: BegesFilterValue[],
+    newSort: SortValue,
   ) {
     const params = new URLSearchParams(searchParams.toString())
     params.set('page', '1')
@@ -117,6 +138,16 @@ export function ProspectsFilters({
       params.delete('beges')
     }
 
+    // Tri : on omet le param quand il vaut le défaut pour garder l'URL propre.
+    if (newSort !== DEFAULT_SORT) {
+      params.set('sort', newSort)
+    } else {
+      params.delete('sort')
+    }
+    // Format pré-pivot : ?sort=score_priorite&order=desc — supprimé pour
+    // éviter la collision avec le nouveau ?sort=score_desc.
+    params.delete('order')
+
     startTransition(() => {
       router.push(`${pathname}?${params.toString()}`)
     })
@@ -127,7 +158,7 @@ export function ProspectsFilters({
       ? statuts.filter((s) => s !== value)
       : [...statuts, value]
     setStatuts(next)
-    applyFilters(next, secteur, scoreMin, archived, contactTypes, begesFilters)
+    applyFilters(next, secteur, scoreMin, archived, contactTypes, begesFilters, sort)
   }
 
   function toggleContactType(value: ContactFilterType) {
@@ -135,7 +166,7 @@ export function ProspectsFilters({
       ? contactTypes.filter((t) => t !== value)
       : [...contactTypes, value]
     setContactTypes(next)
-    applyFilters(statuts, secteur, scoreMin, archived, next, begesFilters)
+    applyFilters(statuts, secteur, scoreMin, archived, next, begesFilters, sort)
   }
 
   function toggleBegesValue(value: BegesFilterValue) {
@@ -143,7 +174,7 @@ export function ProspectsFilters({
       ? begesFilters.filter((b) => b !== value)
       : [...begesFilters, value]
     setBegesFilters(next)
-    applyFilters(statuts, secteur, scoreMin, archived, contactTypes, next)
+    applyFilters(statuts, secteur, scoreMin, archived, contactTypes, next, sort)
   }
 
   function handleSecteurChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -152,20 +183,26 @@ export function ProspectsFilters({
 
   function handleSecteurKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
     if (e.key === 'Enter') {
-      applyFilters(statuts, secteur, scoreMin, archived, contactTypes, begesFilters)
+      applyFilters(statuts, secteur, scoreMin, archived, contactTypes, begesFilters, sort)
     }
   }
 
   function handleScoreChange(e: React.ChangeEvent<HTMLInputElement>) {
     const val = parseInt(e.target.value, 10)
     setScoreMin(val)
-    applyFilters(statuts, secteur, val, archived, contactTypes, begesFilters)
+    applyFilters(statuts, secteur, val, archived, contactTypes, begesFilters, sort)
   }
 
   function toggleArchived() {
     const next = !archived
     setArchived(next)
-    applyFilters(statuts, secteur, scoreMin, next, contactTypes, begesFilters)
+    applyFilters(statuts, secteur, scoreMin, next, contactTypes, begesFilters, sort)
+  }
+
+  function selectSort(value: SortValue) {
+    if (value === sort) return
+    setSort(value)
+    applyFilters(statuts, secteur, scoreMin, archived, contactTypes, begesFilters, value)
   }
 
   function handleReset() {
@@ -175,6 +212,7 @@ export function ProspectsFilters({
     setArchived(false)
     setContactTypes([])
     setBegesFilters([])
+    setSort(DEFAULT_SORT)
     startTransition(() => {
       router.push(pathname)
     })
@@ -189,125 +227,103 @@ export function ProspectsFilters({
     begesFilters.length > 0
   const scorePercent = scoreMin
 
+  // Classes utilitaires partagées entre pills (statut, contact, tri).
+  const pillBase =
+    'inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium whitespace-nowrap transition-all duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-green-500/40 focus-visible:ring-offset-1 focus-visible:ring-offset-[oklch(11%_0.022_250)]'
+  const pillInactive =
+    'border-white/10 bg-white/[0.04] backdrop-blur-md text-gray-300 hover:border-white/20 hover:bg-white/[0.08]'
+  const pillActive =
+    'border-green-500/40 bg-green-500/15 text-green-300 ring-1 ring-green-500/25'
+
   return (
     <div
-      className={`rounded-2xl border border-white/[0.08] bg-white/[0.03] backdrop-blur-md shadow-sm dark:border-gray-800 dark:bg-gray-900 transition-opacity ${isPending ? 'opacity-60' : ''}`}
+      className={`rounded-2xl border border-white/[0.08] bg-white/[0.03] backdrop-blur-md shadow-sm transition-opacity ${isPending ? 'opacity-60' : ''}`}
       aria-label="Filtres des prospects"
     >
-      {/* Barre de filtres principale */}
-      <div className="flex flex-wrap items-start gap-4 p-4 sm:p-5">
-        {/* Statuts — pills */}
-        <div className="min-w-0 flex-1">
-          <fieldset>
-            <legend className="mb-2.5 text-xs font-semibold uppercase tracking-wider text-gray-300">
-              Statut
-            </legend>
-            <div className="flex flex-wrap gap-2" role="group" aria-label="Filtrer par statut">
-              {ALL_STATUTS.map(({ value, label, dot }) => {
-                const isActive = statuts.includes(value)
-                return (
-                  <button
-                    key={value}
-                    type="button"
-                    onClick={() => toggleStatut(value)}
-                    aria-pressed={isActive}
-                    className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition-all duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-green-500/40 focus-visible:ring-offset-1 focus-visible:ring-offset-[oklch(11%_0.022_250)] ${
-                      isActive
-                        ? 'border-green-500 bg-green-50 text-green-700 shadow-sm dark:border-green-600 dark:bg-green-950/50 dark:text-green-400'
-                        : 'border-white/10 bg-white/[0.04] backdrop-blur-md text-gray-300 hover:border-white/20 hover:bg-white/[0.06]'
-                    }`}
-                  >
-                    <span
-                      className={`h-1.5 w-1.5 flex-shrink-0 rounded-full ${dot}`}
-                      aria-hidden="true"
-                    />
-                    {label}
-                  </button>
-                )
-              })}
-            </div>
-          </fieldset>
+      {/* ── Ribbon horizontal compact ───────────────────────────────────────
+          Mobile : empile en colonnes (flex-col).
+          Desktop ≥ sm : tout sur une seule ligne grâce à flex-wrap.
+      */}
+      <div className="flex flex-col gap-2 p-2.5 sm:flex-row sm:flex-wrap sm:items-center sm:gap-3 sm:p-3">
+        {/* Pills statut — scroll horizontal si dépassement.
+            Le fieldset+legend porte déjà la sémantique group ; on évite le
+            double role="group" sur le div interne (sinon Testing Library
+            trouve 2 éléments matching le même nom). */}
+        <fieldset className="min-w-0 flex-1">
+          <legend className="sr-only">Filtrer par statut</legend>
+          <div className="-mx-0.5 flex items-center gap-1.5 overflow-x-auto px-0.5 [scrollbar-width:thin]">
+            {ALL_STATUTS.map(({ value, label, dot }) => {
+              const isActive = statuts.includes(value)
+              return (
+                <button
+                  key={value}
+                  type="button"
+                  onClick={() => toggleStatut(value)}
+                  aria-pressed={isActive}
+                  className={`${pillBase} ${isActive ? pillActive : pillInactive}`}
+                >
+                  <span
+                    className={`h-1.5 w-1.5 flex-shrink-0 rounded-full ${dot}`}
+                    aria-hidden="true"
+                  />
+                  {label}
+                </button>
+              )
+            })}
+          </div>
+        </fieldset>
+
+        {/* Secteur — input compact */}
+        <div className="relative w-full sm:w-48">
+          <label htmlFor="filter-secteur" className="sr-only">
+            Secteur
+          </label>
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="13"
+            height="13"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400"
+            aria-hidden="true"
+          >
+            <circle cx="11" cy="11" r="8" />
+            <line x1="21" y1="21" x2="16.65" y2="16.65" />
+          </svg>
+          <input
+            id="filter-secteur"
+            type="text"
+            value={secteur}
+            onChange={handleSecteurChange}
+            onKeyDown={handleSecteurKeyDown}
+            onBlur={() =>
+              applyFilters(statuts, secteur, scoreMin, archived, contactTypes, begesFilters, sort)
+            }
+            placeholder="Secteur..."
+            className="w-full rounded-full border border-white/[0.08] bg-white/[0.04] backdrop-blur-md py-1.5 pl-7 pr-2.5 text-xs text-white placeholder-gray-400 transition focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-500/20"
+          />
         </div>
 
-        {/* Séparateur vertical — masqué sur mobile */}
-        <div className="hidden h-auto w-px self-stretch bg-white/[0.05] dark:bg-gray-800 sm:block" aria-hidden="true" />
-
-        {/* Colonne droite : recherche + score + filtres complémentaires */}
-        <div className="flex flex-col gap-3 sm:w-64">
-          {/* Recherche secteur */}
-          <div>
-            <label
-              htmlFor="filter-secteur"
-              className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-gray-300"
+        {/* Score minimum — slider + badge value */}
+        <div className="flex w-full items-center gap-2 sm:w-48">
+          <label
+            htmlFor="filter-score"
+            className="font-mono text-[10px] uppercase tracking-wider text-gray-400"
+          >
+            Score
+          </label>
+          <div className="relative flex-1">
+            <div
+              className="h-1.5 w-full overflow-hidden rounded-full bg-white/[0.05]"
+              aria-hidden="true"
             >
-              Secteur
-            </label>
-            <div className="relative">
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                width="14"
-                height="14"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400"
-                aria-hidden="true"
-              >
-                <circle cx="11" cy="11" r="8" />
-                <line x1="21" y1="21" x2="16.65" y2="16.65" />
-              </svg>
-              <input
-                id="filter-secteur"
-                type="text"
-                value={secteur}
-                onChange={handleSecteurChange}
-                onKeyDown={handleSecteurKeyDown}
-                onBlur={() => applyFilters(statuts, secteur, scoreMin, archived, contactTypes, begesFilters)}
-                placeholder="ex : Transport..."
-                className="w-full rounded-lg border border-white/[0.08] bg-white/[0.04] backdrop-blur-md py-2 pl-10 pr-3 text-sm text-white placeholder-gray-400 transition focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-500/20"
-              />
-              {isPending && (
-                <svg
-                  className="absolute right-3 top-1/2 -translate-y-1/2 animate-spin text-green-500"
-                  xmlns="http://www.w3.org/2000/svg"
-                  width="14"
-                  height="14"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  aria-hidden="true"
-                >
-                  <path d="M21 12a9 9 0 1 1-6.219-8.56" />
-                </svg>
-              )}
-            </div>
-          </div>
-
-          {/* Score minimum */}
-          <div>
-            <div className="mb-1.5 flex items-center justify-between">
-              <label
-                htmlFor="filter-score"
-                className="text-xs font-semibold uppercase tracking-wider text-gray-300"
-              >
-                Score min.
-              </label>
-              <span className="rounded-md bg-green-50 px-2 py-0.5 text-xs font-bold text-green-700 dark:bg-green-950 dark:text-green-400">
-                {scoreMin}
-              </span>
-            </div>
-            {/* Track visuel du slider */}
-            <div className="relative h-2 w-full rounded-full bg-white/[0.05] dark:bg-gray-800">
               <div
-                className="absolute left-0 top-0 h-2 rounded-full bg-green-500 transition-all"
+                className="h-1.5 rounded-full bg-green-500 transition-all"
                 style={{ width: `${scorePercent}%` }}
-                aria-hidden="true"
               />
             </div>
             <input
@@ -318,25 +334,152 @@ export function ProspectsFilters({
               step={5}
               value={scoreMin}
               onChange={handleScoreChange}
-              className="mt-1 w-full accent-green-600"
+              className="absolute inset-0 w-full cursor-pointer opacity-0"
               aria-label={`Score minimum : ${scoreMin}`}
             />
-            <div className="flex justify-between text-xs text-gray-400 dark:text-gray-400">
-              <span>0</span>
-              <span>100</span>
-            </div>
           </div>
+          <span className="min-w-[2ch] rounded-md bg-green-500/15 px-1.5 py-0.5 text-center text-[11px] font-bold tabular-nums text-green-300 ring-1 ring-green-500/25">
+            {scoreMin}
+          </span>
+        </div>
 
-          {/* Type de contact disponible */}
-          <fieldset>
-            <legend className="mb-1.5 text-xs font-semibold uppercase tracking-wider text-gray-300">
-              Contact dispo
-            </legend>
-            <div
-              className="flex flex-wrap gap-2"
-              role="group"
-              aria-label="Filtrer par canal de contact disponible"
+        {/* Tri — pills inline */}
+        <fieldset aria-label="Trier les prospects">
+          <legend className="sr-only">Trier les prospects</legend>
+          <div className="flex items-center gap-1.5">
+            {ALL_SORTS.map(({ value, label }) => {
+              const isActive = sort === value
+              return (
+                <button
+                  key={value}
+                  type="button"
+                  onClick={() => selectSort(value)}
+                  aria-pressed={isActive}
+                  className={`${pillBase} ${isActive ? pillActive : pillInactive}`}
+                >
+                  {label}
+                </button>
+              )
+            })}
+          </div>
+        </fieldset>
+
+        {/* Toggles compacts (icônes) — Obligation / Manquant / Archivés */}
+        <div className="flex items-center gap-1.5" role="group" aria-label="Filtres rapides BEGES">
+          <ToggleIconButton
+            active={begesFilters.includes('obligation')}
+            onClick={() => toggleBegesValue('obligation')}
+            label="Obligation BEGES"
+            tone="amber"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="13"
+              height="13"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
             >
+              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+            </svg>
+          </ToggleIconButton>
+
+          <ToggleIconButton
+            active={begesFilters.includes('missing')}
+            onClick={() => toggleBegesValue('missing')}
+            label="BEGES manquant"
+            tone="red"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="13"
+              height="13"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+              <line x1="12" y1="9" x2="12" y2="13" />
+              <line x1="12" y1="17" x2="12.01" y2="17" />
+            </svg>
+          </ToggleIconButton>
+
+          <ToggleIconButton
+            active={archived}
+            onClick={toggleArchived}
+            label="Voir les archivés"
+            tone="orange"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="13"
+              height="13"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <polyline points="21 8 21 21 3 21 3 8" />
+              <rect x="1" y="3" width="22" height="5" />
+              <line x1="10" y1="12" x2="14" y2="12" />
+            </svg>
+          </ToggleIconButton>
+
+          {/* Bouton "..." — drawer pour filtres rares (canal de contact) */}
+          <button
+            type="button"
+            onClick={() => setMoreOpen((v) => !v)}
+            aria-expanded={moreOpen}
+            aria-controls="filters-more-panel"
+            aria-label="Plus de filtres"
+            className={`inline-flex h-7 w-7 items-center justify-center rounded-full border transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-green-500/40 ${
+              moreOpen || contactTypes.length > 0
+                ? 'border-green-500/40 bg-green-500/15 text-green-300 ring-1 ring-green-500/25'
+                : 'border-white/10 bg-white/[0.04] text-gray-300 hover:border-white/20 hover:bg-white/[0.08]'
+            }`}
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <circle cx="5" cy="12" r="1" />
+              <circle cx="12" cy="12" r="1" />
+              <circle cx="19" cy="12" r="1" />
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      {/* ── Drawer "Plus de filtres" — collapsible ──────────────────────── */}
+      {moreOpen && (
+        <div
+          id="filters-more-panel"
+          className="border-t border-white/[0.06] px-3 py-2.5"
+        >
+          <fieldset aria-label="Filtrer par canal de contact disponible">
+            <legend className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-gray-400">
+              Contact disponible
+            </legend>
+            <div className="flex flex-wrap gap-1.5">
               {ALL_CONTACT_TYPES.map(({ value, label }) => {
                 const isActive = contactTypes.includes(value)
                 return (
@@ -345,11 +488,7 @@ export function ProspectsFilters({
                     type="button"
                     onClick={() => toggleContactType(value)}
                     aria-pressed={isActive}
-                    className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition-all duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-green-500/40 focus-visible:ring-offset-1 focus-visible:ring-offset-[oklch(11%_0.022_250)] ${
-                      isActive
-                        ? 'border-green-500 bg-green-50 text-green-700 shadow-sm dark:border-green-600 dark:bg-green-950/50 dark:text-green-400'
-                        : 'border-white/10 bg-white/[0.04] backdrop-blur-md text-gray-300 hover:border-white/20 hover:bg-white/[0.06]'
-                    }`}
+                    className={`${pillBase} ${isActive ? pillActive : pillInactive}`}
                   >
                     {label}
                   </button>
@@ -357,151 +496,13 @@ export function ProspectsFilters({
               })}
             </div>
           </fieldset>
-
-          {/* Toggle Obligation BEGES — entreprises soumises a Article L. 229-25 */}
-          <div>
-            <button
-              type="button"
-              onClick={() => toggleBegesValue('obligation')}
-              aria-pressed={begesFilters.includes('obligation')}
-              aria-label="Filtrer : entreprises soumises a l'obligation BEGES"
-              className={`inline-flex w-full items-center justify-between rounded-lg border px-3 py-2 text-xs font-medium transition-colors ${
-                begesFilters.includes('obligation')
-                  ? 'border-amber-400/40 bg-amber-500/15 text-amber-200 ring-1 ring-amber-500/25'
-                  : 'border-white/10 bg-white/[0.04] backdrop-blur-md text-gray-300 hover:border-white/20 hover:bg-white/[0.06]'
-              }`}
-            >
-              <span className="inline-flex items-center gap-2">
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  width="13"
-                  height="13"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  aria-hidden="true"
-                >
-                  <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
-                </svg>
-                Obligation BEGES
-              </span>
-              <span
-                className={`relative inline-block h-4 w-7 rounded-full transition-colors ${
-                  begesFilters.includes('obligation') ? 'bg-amber-500' : 'bg-white/[0.1] ring-1 ring-white/15'
-                }`}
-                aria-hidden="true"
-              >
-                <span
-                  className={`absolute top-0.5 h-3 w-3 rounded-full bg-white shadow-sm transition-transform ${
-                    begesFilters.includes('obligation') ? 'translate-x-3.5' : 'translate-x-0.5'
-                  }`}
-                />
-              </span>
-            </button>
-          </div>
-
-          {/* Toggle BEGES manquant (absent OU expiré) — cible commerciale chaude */}
-          <div>
-            <button
-              type="button"
-              onClick={() => toggleBegesValue('missing')}
-              aria-pressed={begesFilters.includes('missing')}
-              aria-label="Filtrer : BEGES absent ou expiré"
-              className={`inline-flex w-full items-center justify-between rounded-lg border px-3 py-2 text-xs font-medium transition-colors ${
-                begesFilters.includes('missing')
-                  ? 'border-red-400/40 bg-red-500/15 text-red-200 ring-1 ring-red-500/25'
-                  : 'border-white/10 bg-white/[0.04] backdrop-blur-md text-gray-300 hover:border-white/20 hover:bg-white/[0.06]'
-              }`}
-            >
-              <span className="inline-flex items-center gap-2">
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  width="13"
-                  height="13"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  aria-hidden="true"
-                >
-                  <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
-                  <line x1="12" y1="9" x2="12" y2="13" />
-                  <line x1="12" y1="17" x2="12.01" y2="17" />
-                </svg>
-                BEGES manquant
-              </span>
-              <span
-                className={`relative inline-block h-4 w-7 rounded-full transition-colors ${
-                  begesFilters.includes('missing') ? 'bg-red-500' : 'bg-white/[0.1] ring-1 ring-white/15'
-                }`}
-                aria-hidden="true"
-              >
-                <span
-                  className={`absolute top-0.5 h-3 w-3 rounded-full bg-white shadow-sm transition-transform ${
-                    begesFilters.includes('missing') ? 'translate-x-3.5' : 'translate-x-0.5'
-                  }`}
-                />
-              </span>
-            </button>
-          </div>
-
-          {/* Toggle archivés — masqués par défaut, accessibles via filtre */}
-          <div>
-            <button
-              type="button"
-              onClick={toggleArchived}
-              aria-pressed={archived}
-              className={`inline-flex w-full items-center justify-between rounded-lg border px-3 py-2 text-xs font-medium transition-colors ${
-                archived
-                  ? 'border-orange-300 bg-orange-50 text-orange-700 dark:border-orange-700 dark:bg-orange-950/40 dark:text-orange-400'
-                  : 'border-white/10 bg-white/[0.04] backdrop-blur-md text-gray-300 hover:border-white/20 hover:bg-white/[0.06]'
-              }`}
-            >
-              <span className="inline-flex items-center gap-2">
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  width="13"
-                  height="13"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  aria-hidden="true"
-                >
-                  <polyline points="21 8 21 21 3 21 3 8" />
-                  <rect x="1" y="3" width="22" height="5" />
-                  <line x1="10" y1="12" x2="14" y2="12" />
-                </svg>
-                Voir les archivés
-              </span>
-              <span
-                className={`relative inline-block h-4 w-7 rounded-full transition-colors ${
-                  archived ? 'bg-orange-500' : 'bg-white/[0.1] ring-1 ring-white/15'
-                }`}
-                aria-hidden="true"
-              >
-                <span
-                  className={`absolute top-0.5 h-3 w-3 rounded-full bg-white shadow-sm transition-transform ${
-                    archived ? 'translate-x-3.5' : 'translate-x-0.5'
-                  }`}
-                />
-              </span>
-            </button>
-          </div>
         </div>
-      </div>
+      )}
 
-      {/* Pied de barre — actions */}
+      {/* ── Pied — résumé filtres actifs + Réinitialiser ─────────────────── */}
       {hasFilters && (
-        <div className="flex items-center justify-between border-t border-white/[0.06] px-4 py-2.5 dark:border-gray-800">
-          <p className="text-xs text-gray-400">
+        <div className="flex items-center justify-between border-t border-white/[0.06] px-3 py-2">
+          <p className="truncate text-[11px] text-gray-400">
             {[
               statuts.length > 0 && `${statuts.length} statut${statuts.length > 1 ? 's' : ''}`,
               secteur && `secteur "${secteur}"`,
@@ -521,12 +522,12 @@ export function ProspectsFilters({
             type="button"
             onClick={handleReset}
             aria-label="Réinitialiser tous les filtres"
-            className="inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-medium text-gray-300 transition-colors hover:bg-white/[0.06] hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-green-500/40"
+            className="ml-2 inline-flex flex-shrink-0 items-center gap-1 rounded-md px-2 py-1 text-[11px] font-medium text-gray-300 transition-colors hover:bg-white/[0.06] hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-green-500/40"
           >
             <svg
               xmlns="http://www.w3.org/2000/svg"
-              width="12"
-              height="12"
+              width="11"
+              height="11"
               viewBox="0 0 24 24"
               fill="none"
               stroke="currentColor"
@@ -543,5 +544,43 @@ export function ProspectsFilters({
         </div>
       )}
     </div>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ToggleIconButton — bouton icône carré 28px avec aria-label.
+// On garde le label texte uniquement pour l'a11y (tooltip natif via title +
+// aria-label) ; visuellement l'icône suffit pour gagner de la place.
+// ─────────────────────────────────────────────────────────────────────────────
+
+interface ToggleIconButtonProps {
+  active: boolean
+  onClick: () => void
+  label: string
+  tone: 'amber' | 'red' | 'orange'
+  children: React.ReactNode
+}
+
+function ToggleIconButton({ active, onClick, label, tone, children }: ToggleIconButtonProps) {
+  const toneActive: Record<ToggleIconButtonProps['tone'], string> = {
+    amber: 'border-amber-400/40 bg-amber-500/15 text-amber-200 ring-1 ring-amber-500/25',
+    red: 'border-red-400/40 bg-red-500/15 text-red-200 ring-1 ring-red-500/25',
+    orange: 'border-orange-400/40 bg-orange-500/15 text-orange-200 ring-1 ring-orange-500/25',
+  }
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={active}
+      aria-label={label}
+      title={label}
+      className={`inline-flex h-7 w-7 items-center justify-center rounded-full border transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-green-500/40 ${
+        active
+          ? toneActive[tone]
+          : 'border-white/10 bg-white/[0.04] text-gray-300 hover:border-white/20 hover:bg-white/[0.08]'
+      }`}
+    >
+      {children}
+    </button>
   )
 }
