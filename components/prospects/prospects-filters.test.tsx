@@ -308,21 +308,23 @@ describe('ProspectsFilters — toggle archives', () => {
 // ─────────────────────────────────────────────────────────────────────────────
 
 describe('ProspectsFilters — pills tri', () => {
-  it('rend les 4 pills tri attendues', () => {
+  it('rend les 4 pills tri attendues (préfixées "Tri :" pour clarifier vs filtre)', () => {
     render(<ProspectsFilters {...defaultProps} />)
     const sortGroup = screen.getByRole('group', { name: /Trier les prospects/i })
     const buttons = within(sortGroup).getAllByRole('button')
     expect(buttons).toHaveLength(4)
-    expect(within(sortGroup).getByRole('button', { name: /Score ↓/ })).toBeInTheDocument()
-    expect(within(sortGroup).getByRole('button', { name: /Score ↑/ })).toBeInTheDocument()
-    expect(within(sortGroup).getByRole('button', { name: /Récent/ })).toBeInTheDocument()
-    expect(within(sortGroup).getByRole('button', { name: /Ancien/ })).toBeInTheDocument()
+    // Les labels sont préfixés "Tri :" pour distinguer du filtre score range
+    // (cf. fix UX 2026-05-17 — Score ↓ pouvait être confondu avec score>=).
+    expect(within(sortGroup).getByRole('button', { name: /Tri : Score ↓/ })).toBeInTheDocument()
+    expect(within(sortGroup).getByRole('button', { name: /Tri : Score ↑/ })).toBeInTheDocument()
+    expect(within(sortGroup).getByRole('button', { name: /Tri : Récent/ })).toBeInTheDocument()
+    expect(within(sortGroup).getByRole('button', { name: /Tri : Ancien/ })).toBeInTheDocument()
   })
 
   it('affiche Score ↓ actif par défaut (currentSort omis)', () => {
     render(<ProspectsFilters {...defaultProps} />)
     const sortGroup = screen.getByRole('group', { name: /Trier les prospects/i })
-    expect(within(sortGroup).getByRole('button', { name: /Score ↓/ })).toHaveAttribute(
+    expect(within(sortGroup).getByRole('button', { name: /Tri : Score ↓/ })).toHaveAttribute(
       'aria-pressed',
       'true',
     )
@@ -331,21 +333,21 @@ describe('ProspectsFilters — pills tri', () => {
   it('click sur Score ↑ pousse ?sort=score_asc', () => {
     render(<ProspectsFilters {...defaultProps} />)
     const sortGroup = screen.getByRole('group', { name: /Trier les prospects/i })
-    fireEvent.click(within(sortGroup).getByRole('button', { name: /Score ↑/ }))
+    fireEvent.click(within(sortGroup).getByRole('button', { name: /Tri : Score ↑/ }))
     expect(lastPushedParams().get('sort')).toBe('score_asc')
   })
 
   it('click sur Récent pousse ?sort=created_desc', () => {
     render(<ProspectsFilters {...defaultProps} />)
     const sortGroup = screen.getByRole('group', { name: /Trier les prospects/i })
-    fireEvent.click(within(sortGroup).getByRole('button', { name: /Récent/ }))
+    fireEvent.click(within(sortGroup).getByRole('button', { name: /Tri : Récent/ }))
     expect(lastPushedParams().get('sort')).toBe('created_desc')
   })
 
   it('click sur Ancien pousse ?sort=created_asc', () => {
     render(<ProspectsFilters {...defaultProps} />)
     const sortGroup = screen.getByRole('group', { name: /Trier les prospects/i })
-    fireEvent.click(within(sortGroup).getByRole('button', { name: /Ancien/ }))
+    fireEvent.click(within(sortGroup).getByRole('button', { name: /Tri : Ancien/ }))
     expect(lastPushedParams().get('sort')).toBe('created_asc')
   })
 
@@ -355,7 +357,7 @@ describe('ProspectsFilters — pills tri', () => {
     const sortGroup = screen.getByRole('group', { name: /Trier les prospects/i })
 
     // Act : retour au défaut.
-    fireEvent.click(within(sortGroup).getByRole('button', { name: /Score ↓/ }))
+    fireEvent.click(within(sortGroup).getByRole('button', { name: /Tri : Score ↓/ }))
 
     // Assert : la clé sort doit disparaître de l'URL quand on est sur le défaut.
     expect(lastPushedParams().has('sort')).toBe(false)
@@ -364,17 +366,123 @@ describe('ProspectsFilters — pills tri', () => {
   it('click sur le tri actif ne push rien (idempotence)', () => {
     render(<ProspectsFilters {...defaultProps} currentSort="score_desc" />)
     const sortGroup = screen.getByRole('group', { name: /Trier les prospects/i })
-    fireEvent.click(within(sortGroup).getByRole('button', { name: /Score ↓/ }))
+    fireEvent.click(within(sortGroup).getByRole('button', { name: /Tri : Score ↓/ }))
     expect(mockPush).not.toHaveBeenCalled()
   })
 
   it('propagation : currentSort=created_asc → pill Ancien active', () => {
     render(<ProspectsFilters {...defaultProps} currentSort="created_asc" />)
     const sortGroup = screen.getByRole('group', { name: /Trier les prospects/i })
-    expect(within(sortGroup).getByRole('button', { name: /Ancien/ })).toHaveAttribute(
+    expect(within(sortGroup).getByRole('button', { name: /Tri : Ancien/ })).toHaveAttribute(
       'aria-pressed',
       'true',
     )
+  })
+})
+
+// ─────────────────────────────────────────────────────────────────────────────
+// FILTRE SCORE RANGE — double-thumb [min, max]
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('ProspectsFilters — score range double-thumb', () => {
+  it('rend 2 inputs range (min + max) avec aria-label distincts', () => {
+    render(<ProspectsFilters {...defaultProps} />)
+    expect(screen.getByLabelText(/Score minimum/i)).toBeInTheDocument()
+    expect(screen.getByLabelText(/Score maximum/i)).toBeInTheDocument()
+  })
+
+  it('changement du thumb max pousse ?score_max=80', () => {
+    render(<ProspectsFilters {...defaultProps} />)
+    const rangeMax = screen.getByLabelText(/Score maximum/i)
+    fireEvent.change(rangeMax, { target: { value: '80' } })
+    expect(lastPushedParams().get('score_max')).toBe('80')
+  })
+
+  it('changement combiné min=25 puis max=80 → ?score_min=25&score_max=80', () => {
+    render(<ProspectsFilters {...defaultProps} />)
+    const rangeMin = screen.getByLabelText(/Score minimum/i)
+    const rangeMax = screen.getByLabelText(/Score maximum/i)
+
+    fireEvent.change(rangeMin, { target: { value: '25' } })
+    fireEvent.change(rangeMax, { target: { value: '80' } })
+
+    const params = lastPushedParams()
+    expect(params.get('score_min')).toBe('25')
+    expect(params.get('score_max')).toBe('80')
+  })
+
+  it('clamp : min ne peut pas dépasser max (force au moins 1 step d\'écart)', () => {
+    // Arrange : on démarre avec max=50.
+    render(<ProspectsFilters {...defaultProps} currentScoreMax={50} />)
+    const rangeMin = screen.getByLabelText(/Score minimum/i)
+
+    // Act : tentative de pousser min à 80 (au-dessus de max).
+    fireEvent.change(rangeMin, { target: { value: '80' } })
+
+    // Assert : la valeur min est clampée à max - SCORE_STEP (45).
+    // L'URL pousse score_min=45, score_max=50 (max < 100 → param présent).
+    const params = lastPushedParams()
+    expect(parseInt(params.get('score_min') ?? '0', 10)).toBeLessThan(50)
+    expect(parseInt(params.get('score_min') ?? '0', 10)).toBeGreaterThanOrEqual(0)
+  })
+
+  it('clamp inverse : max ne peut pas passer sous min', () => {
+    // Arrange : min=60.
+    render(<ProspectsFilters {...defaultProps} currentScoreMin={60} />)
+    const rangeMax = screen.getByLabelText(/Score maximum/i)
+
+    // Act : tentative de pousser max à 10 (en dessous de min).
+    fireEvent.change(rangeMax, { target: { value: '10' } })
+
+    // Assert : max est clampé à min + SCORE_STEP (65).
+    const params = lastPushedParams()
+    expect(parseInt(params.get('score_max') ?? '100', 10)).toBeGreaterThan(60)
+  })
+
+  it('défaut [0, 100] : aucun param score_min ni score_max dans l\'URL', () => {
+    // Arrange : on démarre avec max=80 (filtre actif).
+    render(<ProspectsFilters {...defaultProps} currentScoreMax={80} />)
+    const rangeMax = screen.getByLabelText(/Score maximum/i)
+
+    // Act : retour à 100 (= pas de filtre haut).
+    fireEvent.change(rangeMax, { target: { value: '100' } })
+
+    // Assert : la clé score_max disparaît de l'URL.
+    expect(lastPushedParams().has('score_max')).toBe(false)
+  })
+
+  it('propagation initiale : currentScoreMin/Max propagés dans les inputs', () => {
+    render(
+      <ProspectsFilters
+        {...defaultProps}
+        currentScoreMin={30}
+        currentScoreMax={75}
+      />,
+    )
+    const rangeMin = screen.getByLabelText(/Score minimum : 30/i) as HTMLInputElement
+    const rangeMax = screen.getByLabelText(/Score maximum : 75/i) as HTMLInputElement
+    expect(rangeMin.value).toBe('30')
+    expect(rangeMax.value).toBe('75')
+  })
+
+  it('reset filtres remet [0, 100] et purge score_min/score_max de l\'URL', () => {
+    // Arrange : on démarre avec un range actif et un statut (pour rendre le
+    // bouton Réinitialiser visible).
+    render(
+      <ProspectsFilters
+        {...defaultProps}
+        currentStatuts={['qualified']}
+        currentScoreMin={25}
+        currentScoreMax={80}
+      />,
+    )
+    const resetBtn = screen.getByRole('button', { name: /Réinitialiser tous les filtres/i })
+
+    // Act
+    fireEvent.click(resetBtn)
+
+    // Assert : push vers /prospects strict (pas de query string).
+    expect(mockPush).toHaveBeenCalledWith('/prospects')
   })
 })
 

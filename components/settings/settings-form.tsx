@@ -1,9 +1,12 @@
-﻿'use client'
+'use client'
 
-import { useMemo, useState } from 'react'
+import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { DEFAULT_SCORING_WEIGHTS, type ProfileSettings, type ScoringWeights } from '@/lib/types'
-import { NafCodeMultiSelect } from './naf-code-multi-select'
+// TODO 2026-05-17 : import gardé car le composant est utilisé par la section
+// "Secteurs cibles" masquée par demande user (UI minimaliste). Décommenter
+// l'import si la section est ré-exposée.
+// import { NafCodeMultiSelect } from './naf-code-multi-select'
 
 interface SettingsFormProps {
   initialSettings: ProfileSettings
@@ -12,7 +15,9 @@ interface SettingsFormProps {
 type ScoringPilier = keyof ScoringWeights
 
 const SCORING_TOTAL = 100
-const POSTAL_CODE_REGEX = /^\d{5}$/
+// TODO 2026-05-17 : constante utilisée par la section "Zone géographique"
+// masquée. Conservée pour faciliter le rétablissement éventuel.
+// const POSTAL_CODE_REGEX = /^\d{5}$/
 
 const PILIERS_INFO: Record<ScoringPilier, { label: string; description: string; accent: string }> = {
   taille: {
@@ -55,9 +60,12 @@ export function SettingsForm({ initialSettings }: SettingsFormProps) {
     ...initialSettings,
     scoring_weights: initialSettings.scoring_weights ?? { ...DEFAULT_SCORING_WEIGHTS },
   })
-  const [postalCodeInput, setPostalCodeInput] = useState('')
-  const [postalCodeError, setPostalCodeError] = useState<string | null>(null)
-  const [isAdvancedOpen, setIsAdvancedOpen] = useState(false)
+  // TODO 2026-05-17 : états ci-dessous liés à la section "Zone géographique"
+  // (codes postaux) et "Avancé" (sourcing_target_per_run) — sections masquées.
+  // Le payload PATCH continue d'envoyer les valeurs persistées en l'état.
+  // const [postalCodeInput, setPostalCodeInput] = useState('')
+  // const [postalCodeError, setPostalCodeError] = useState<string | null>(null)
+  // const [isAdvancedOpen, setIsAdvancedOpen] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const [saveStatus, setSaveStatus] = useState<'idle' | 'success' | 'error'>('idle')
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
@@ -66,12 +74,14 @@ export function SettingsForm({ initialSettings }: SettingsFormProps) {
   const weightsSum = weights.taille + weights.beges + weights.contact
   const isWeightsBalanced = weightsSum === SCORING_TOTAL
 
-  const selectedSecteurs = settings.target_sectors ?? []
-  const charCount = (settings.offer_description ?? '').length
-  const postalCodes = useMemo(
-    () => settings.target_postal_codes ?? [],
-    [settings.target_postal_codes],
-  )
+  // TODO 2026-05-17 : dérivés liés aux sections "Secteurs cibles" /
+  // "Offre commerciale" / "Zone géographique" — toutes masquées.
+  // const selectedSecteurs = settings.target_sectors ?? []
+  // const charCount = (settings.offer_description ?? '').length
+  // const postalCodes = useMemo(
+  //   () => settings.target_postal_codes ?? [],
+  //   [settings.target_postal_codes],
+  // )
 
   function updateWeight(pilier: ScoringPilier, value: number) {
     setSettings((prev) => {
@@ -97,39 +107,40 @@ export function SettingsForm({ initialSettings }: SettingsFormProps) {
     }))
   }
 
-  function setSecteurs(codes: string[]) {
-    setSettings((prev) => ({ ...prev, target_sectors: codes }))
-  }
-
-  function addPostalCode() {
-    const code = postalCodeInput.trim()
-    if (!code) return
-    if (!POSTAL_CODE_REGEX.test(code)) {
-      setPostalCodeError('Code postal invalide (5 chiffres attendus).')
-      return
-    }
-    if (postalCodes.includes(code)) {
-      setPostalCodeError('Code postal déjà ajouté.')
-      return
-    }
-    if (postalCodes.length >= 10) {
-      setPostalCodeError('Maximum 10 codes postaux.')
-      return
-    }
-    setSettings((prev) => ({
-      ...prev,
-      target_postal_codes: [...(prev.target_postal_codes ?? []), code],
-    }))
-    setPostalCodeInput('')
-    setPostalCodeError(null)
-  }
-
-  function removePostalCode(code: string) {
-    setSettings((prev) => ({
-      ...prev,
-      target_postal_codes: (prev.target_postal_codes ?? []).filter((c) => c !== code),
-    }))
-  }
+  // TODO 2026-05-17 : helpers attachés aux sections masquées.
+  // function setSecteurs(codes: string[]) {
+  //   setSettings((prev) => ({ ...prev, target_sectors: codes }))
+  // }
+  //
+  // function addPostalCode() {
+  //   const code = postalCodeInput.trim()
+  //   if (!code) return
+  //   if (!POSTAL_CODE_REGEX.test(code)) {
+  //     setPostalCodeError('Code postal invalide (5 chiffres attendus).')
+  //     return
+  //   }
+  //   if (postalCodes.includes(code)) {
+  //     setPostalCodeError('Code postal déjà ajouté.')
+  //     return
+  //   }
+  //   if (postalCodes.length >= 10) {
+  //     setPostalCodeError('Maximum 10 codes postaux.')
+  //     return
+  //   }
+  //   setSettings((prev) => ({
+  //     ...prev,
+  //     target_postal_codes: [...(prev.target_postal_codes ?? []), code],
+  //   }))
+  //   setPostalCodeInput('')
+  //   setPostalCodeError(null)
+  // }
+  //
+  // function removePostalCode(code: string) {
+  //   setSettings((prev) => ({
+  //     ...prev,
+  //     target_postal_codes: (prev.target_postal_codes ?? []).filter((c) => c !== code),
+  //   }))
+  // }
 
   const router = useRouter()
 
@@ -143,6 +154,11 @@ export function SettingsForm({ initialSettings }: SettingsFormProps) {
     const normalizedWeights = normalizeWeightsClient(weights)
 
     try {
+      // Note : on continue d'envoyer offer_description / target_sectors /
+      // target_city / target_postal_codes / sourcing_target_per_run depuis
+      // l'état local — ils restent persistés en DB même si l'UI ne les expose
+      // plus (TODO 2026-05-17, section masquée). Le backend Zod accepte ces
+      // champs sans changement.
       const response = await fetch('/api/profile/settings', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
@@ -182,20 +198,19 @@ export function SettingsForm({ initialSettings }: SettingsFormProps) {
       aria-label="Paramètres de l'agent"
       className="space-y-8"
     >
-      {/* ── Section : Ciblage commercial — Secteurs ────────────────────────── */}
-      <section
+      {/* TODO 2026-05-17 : section "Secteurs cibles" masquée par demande user
+          (UI minimaliste). Le param backend `target_sectors` reste fonctionnel
+          via PATCH /api/profile/settings (valeurs DB préservées). */}
+      {/* <section
         aria-labelledby="sectors-title"
         className="rounded-2xl border border-white/[0.08] bg-white/[0.03] backdrop-blur-md shadow-sm dark:border-gray-800 dark:bg-gray-900"
       >
         <header className="border-b border-white/[0.06] px-6 py-5 dark:border-gray-800">
-          <h2
-            id="sectors-title"
-            className="text-sm font-semibold uppercase tracking-wider text-gray-300"
-          >
+          <h2 id="sectors-title" className="text-sm font-semibold uppercase tracking-wider text-gray-300">
             Secteurs cibles
           </h2>
           <p className="mt-1 text-sm text-gray-300">
-            L&apos;agent priorisera les entreprises dont le code NAF est coché.
+            L'agent priorisera les entreprises dont le code NAF est coché.
             Recherche par code (ex. 01.21) ou par libellé (ex. viticulture).
             {selectedSecteurs.length > 0 && (
               <span className="ml-2 inline-flex items-center rounded-full bg-blue-100 px-2 py-0.5 text-xs font-semibold text-blue-700 dark:bg-blue-950 dark:text-blue-300">
@@ -211,129 +226,19 @@ export function SettingsForm({ initialSettings }: SettingsFormProps) {
             labelledBy="sectors-title"
           />
         </div>
-      </section>
+      </section> */}
 
-      {/* ── Section : Zone géographique ─────────────────────────────────────── */}
-      <section
+      {/* TODO 2026-05-17 : section "Zone géographique" masquée par demande user
+          (UI minimaliste). Les params backend `target_city` et
+          `target_postal_codes` restent fonctionnels via PATCH /api/profile/settings. */}
+      {/* <section
         aria-labelledby="geo-title"
         className="rounded-2xl border border-white/[0.08] bg-white/[0.03] backdrop-blur-md shadow-sm dark:border-gray-800 dark:bg-gray-900"
       >
-        <header className="border-b border-white/[0.06] px-6 py-5 dark:border-gray-800">
-          <h2
-            id="geo-title"
-            className="text-sm font-semibold uppercase tracking-wider text-gray-300"
-          >
-            Zone géographique
-          </h2>
-          <p className="mt-1 text-sm text-gray-300">
-            Ville, département ou région ciblée, et codes postaux complémentaires.
-          </p>
-        </header>
-        <div className="space-y-6 px-6 py-6">
-          <div className="space-y-1.5">
-            <label
-              htmlFor="target_city"
-              className="block text-sm font-medium text-gray-200"
-            >
-              Ville / région
-            </label>
-            <input
-              id="target_city"
-              type="text"
-              value={settings.target_city ?? ''}
-              onChange={(e) =>
-                setSettings((prev) => ({ ...prev, target_city: e.target.value }))
-              }
-              placeholder="Ex : Lyon, Île-de-France, Rhône-Alpes..."
-              className="w-full rounded-lg border border-white/[0.08] bg-white/[0.04] backdrop-blur-md px-4 py-2.5 text-sm text-white placeholder-gray-400 transition focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-500/20"
-            />
-          </div>
+        ... champs target_city + postal codes input ...
+      </section> */}
 
-          <div className="space-y-1.5">
-            <label
-              htmlFor="postal_code_input"
-              className="block text-sm font-medium text-gray-200"
-            >
-              Codes postaux (max 10)
-            </label>
-            <div className="flex gap-3">
-              <input
-                id="postal_code_input"
-                type="text"
-                inputMode="numeric"
-                pattern="\d{5}"
-                maxLength={5}
-                value={postalCodeInput}
-                onChange={(e) => {
-                  setPostalCodeInput(e.target.value.replace(/\D/g, '').slice(0, 5))
-                  if (postalCodeError) setPostalCodeError(null)
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    e.preventDefault()
-                    addPostalCode()
-                  }
-                }}
-                placeholder="69001"
-                className="flex-1 rounded-lg border border-white/[0.08] bg-white/[0.04] backdrop-blur-md px-4 py-2.5 text-sm tabular-nums text-white placeholder-gray-400 transition focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-500/20"
-                aria-describedby={postalCodeError ? 'postal-code-error' : undefined}
-              />
-              <button
-                type="button"
-                onClick={addPostalCode}
-                className="rounded-lg border border-white/[0.08] bg-white/[0.02] px-4 py-2.5 text-sm font-medium text-gray-200 transition hover:border-white/20 hover:bg-white/[0.06] focus:outline-none focus:ring-2 focus:ring-green-500/20"
-              >
-                Ajouter
-              </button>
-            </div>
-            {postalCodeError && (
-              <p
-                id="postal-code-error"
-                role="alert"
-                className="mt-1.5 text-xs text-red-600 dark:text-red-400"
-              >
-                {postalCodeError}
-              </p>
-            )}
-            {postalCodes.length > 0 && (
-              <ul className="mt-3 flex flex-wrap gap-2" aria-label="Codes postaux sélectionnés">
-                {postalCodes.map((code) => (
-                  <li
-                    key={code}
-                    className="inline-flex items-center gap-1.5 rounded-full bg-white/[0.05] px-3 py-1 text-xs font-medium tabular-nums text-gray-200"
-                  >
-                    {code}
-                    <button
-                      type="button"
-                      onClick={() => removePostalCode(code)}
-                      aria-label={`Retirer le code postal ${code}`}
-                      className="rounded-full text-gray-400 transition hover:text-red-400 focus:outline-none focus:ring-2 focus:ring-red-500/20"
-                    >
-                      <svg
-                        xmlns="http://www.w3.org/2000/svg"
-                        width="12"
-                        height="12"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="2.5"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        aria-hidden="true"
-                      >
-                        <line x1="18" y1="6" x2="6" y2="18" />
-                        <line x1="6" y1="6" x2="18" y2="18" />
-                      </svg>
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-        </div>
-      </section>
-
-      {/* ── Section : Pondération du scoring (NEW) ──────────────────────────── */}
+      {/* ── Section : Pondération du scoring ──────────────────────────────── */}
       <section
         aria-labelledby="scoring-title"
         className="rounded-2xl border border-white/[0.08] bg-white/[0.03] backdrop-blur-md shadow-sm dark:border-gray-800 dark:bg-gray-900"
@@ -473,129 +378,26 @@ export function SettingsForm({ initialSettings }: SettingsFormProps) {
         </div>
       </section>
 
-      {/* ── Section : Offre commerciale ─────────────────────────────────────── */}
-      <section
+      {/* TODO 2026-05-17 : section "Offre commerciale" masquée par demande user
+          (UI minimaliste). Le param backend `offer_description` reste fonctionnel
+          via PATCH /api/profile/settings (valeur DB préservée, exploitée par les
+          pitchs IA). */}
+      {/* <section
         aria-labelledby="offer-title"
         className="rounded-2xl border border-white/[0.08] bg-white/[0.03] backdrop-blur-md shadow-sm dark:border-gray-800 dark:bg-gray-900"
       >
-        <header className="border-b border-white/[0.06] px-6 py-5 dark:border-gray-800">
-          <h2
-            id="offer-title"
-            className="text-sm font-semibold uppercase tracking-wider text-gray-300"
-          >
-            Offre commerciale
-          </h2>
-          <p className="mt-1 text-sm text-gray-300">
-            Utilisée par l&apos;IA pour personnaliser les pitchs et accroches de chaque appel.
-          </p>
-        </header>
-        <div className="px-6 py-6">
-          <label htmlFor="offer_description" className="sr-only">
-            Description de l&apos;offre
-          </label>
-          <div className="relative">
-            <textarea
-              id="offer_description"
-              value={settings.offer_description ?? ''}
-              onChange={(e) =>
-                setSettings((prev) => ({ ...prev, offer_description: e.target.value }))
-              }
-              placeholder="Ex : Nous accompagnons les ETI dans la réalisation de leur bilan carbone réglementaire (BEGES Scope 1+2+3) et dans la construction de leur plan de décarbonation..."
-              rows={6}
-              maxLength={2000}
-              className="w-full resize-none rounded-lg border border-white/[0.08] bg-white/[0.04] backdrop-blur-md px-4 py-3 pb-9 text-sm leading-relaxed text-white placeholder-gray-400 transition focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-500/20"
-            />
-            <span
-              className={`pointer-events-none absolute bottom-3 right-3 rounded-md bg-black/40 px-1.5 py-0.5 text-[11px] tabular-nums backdrop-blur-sm ${
-                charCount > 1800 ? 'text-orange-400' : 'text-gray-400'
-              }`}
-            >
-              {charCount} / 2000
-            </span>
-          </div>
-        </div>
-      </section>
+        ... textarea offer_description ...
+      </section> */}
 
-      {/* ── Section : Avancé (legacy daily_call_target) ─────────────────────── */}
-      <section
+      {/* TODO 2026-05-17 : section "Avancé" (sourcing_target_per_run) masquée
+          par demande user (UI minimaliste). Le param backend reste fonctionnel
+          via PATCH /api/profile/settings (valeur DB préservée). */}
+      {/* <section
         aria-labelledby="advanced-title"
         className="rounded-2xl border border-white/[0.08] bg-white/[0.03] backdrop-blur-md shadow-sm dark:border-gray-800 dark:bg-gray-900"
       >
-        <button
-          type="button"
-          onClick={() => setIsAdvancedOpen((v) => !v)}
-          aria-expanded={isAdvancedOpen}
-          aria-controls="advanced-content"
-          className="flex w-full items-center justify-between px-6 py-5 text-left transition hover:bg-white/[0.06] focus:outline-none focus:ring-2 focus:ring-green-500/20 dark:hover:bg-gray-800/50"
-        >
-          <div>
-            <h2
-              id="advanced-title"
-              className="text-sm font-semibold uppercase tracking-wider text-gray-300"
-            >
-              Avancé
-            </h2>
-            <p className="mt-1 text-sm text-gray-300">
-              Paramètres hérités, conservés pour rétrocompatibilité.
-            </p>
-          </div>
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            width="18"
-            height="18"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            className={`flex-shrink-0 text-gray-400 transition-transform ${
-              isAdvancedOpen ? 'rotate-180' : ''
-            }`}
-            aria-hidden="true"
-          >
-            <polyline points="6 9 12 15 18 9" />
-          </svg>
-        </button>
-
-        {isAdvancedOpen && (
-          <div
-            id="advanced-content"
-            className="space-y-2 border-t border-white/[0.06] px-6 py-6 dark:border-gray-800"
-          >
-            <div className="flex items-baseline justify-between gap-3">
-              <label
-                htmlFor="sourcing_target_per_run"
-                className="text-sm font-medium text-gray-200"
-              >
-                Cible de sourcing par run
-              </label>
-              <span className="rounded-md bg-white/[0.06] px-2 py-0.5 text-sm font-semibold tabular-nums text-white">
-                {settings.sourcing_target_per_run}
-              </span>
-            </div>
-            <input
-              id="sourcing_target_per_run"
-              type="range"
-              min={5}
-              max={30}
-              step={1}
-              value={settings.sourcing_target_per_run}
-              onChange={(e) =>
-                setSettings((prev) => ({
-                  ...prev,
-                  sourcing_target_per_run: parseInt(e.target.value, 10),
-                }))
-              }
-              className="block w-full accent-green-500"
-              aria-label={`Cible de sourcing par run : ${settings.sourcing_target_per_run}`}
-            />
-            <p className="text-xs text-gray-400">
-              Nombre cible de prospects sourcés par run nocturne (targetCandidates = max(N×3, 50)).
-            </p>
-          </div>
-        )}
-      </section>
+        ... toggle Avancé + slider sourcing_target_per_run ...
+      </section> */}
 
       {/* ── Feedback ────────────────────────────────────────────────────────── */}
       {saveStatus === 'error' && errorMessage && (

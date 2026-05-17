@@ -64,6 +64,38 @@ describe('NewExchangeDialog — ouverture', () => {
     expect(screen.getByLabelText(/^Notes$/i)).toBeInTheDocument()
     expect(screen.getByLabelText(/Date de rappel/i)).toBeInTheDocument()
   })
+
+  // Regression : le dialog doit être teleporté via React Portal dans
+  // `document.body`, pas rendu à l'intérieur du parent. Sinon le parent
+  // ExchangesPanel (overflow-hidden + backdrop-blur) clippe la modale.
+  it('rend le dialog via React Portal directement dans document.body', () => {
+    // On wrap le composant dans un parent identifiable par data-attr.
+    render(
+      <div data-testid="parent-container">
+        <NewExchangeDialog prospectId={PROSPECT_ID} />
+      </div>,
+    )
+    fireEvent.click(screen.getByRole('button', { name: /^Nouvel échange$/i }))
+
+    const dialog = screen.getByRole('dialog')
+    const parent = screen.getByTestId('parent-container')
+
+    // Le dialog NE doit PAS être un descendant du parent du trigger.
+    expect(parent.contains(dialog)).toBe(false)
+    // Mais doit bien être attaché à document.body.
+    expect(document.body.contains(dialog)).toBe(true)
+  })
+
+  it('bloque le scroll du body à l\'ouverture et le restaure à la fermeture', () => {
+    render(<NewExchangeDialog prospectId={PROSPECT_ID} />)
+    expect(document.body.style.overflow).not.toBe('hidden')
+
+    fireEvent.click(screen.getByRole('button', { name: /^Nouvel échange$/i }))
+    expect(document.body.style.overflow).toBe('hidden')
+
+    fireEvent.keyDown(document, { key: 'Escape' })
+    expect(document.body.style.overflow).not.toBe('hidden')
+  })
 })
 
 describe('NewExchangeDialog — submission', () => {

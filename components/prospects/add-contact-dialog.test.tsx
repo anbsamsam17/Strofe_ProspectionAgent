@@ -67,6 +67,35 @@ describe('AddContactDialog — ouverture', () => {
     expect(screen.getByLabelText(/^LinkedIn$/i)).toBeInTheDocument()
     expect(screen.getByLabelText(/Définir comme contact principal/i)).toBeInTheDocument()
   })
+
+  // Regression : le dialog doit être teleporté via React Portal dans
+  // `document.body`, pas rendu à l'intérieur du parent ContactsList (qui a
+  // overflow-hidden + backdrop-blur et clipperait la modale).
+  it('rend le dialog via React Portal directement dans document.body', () => {
+    render(
+      <div data-testid="parent-container">
+        <AddContactDialog prospectId={PROSPECT_ID} />
+      </div>,
+    )
+    fireEvent.click(screen.getByRole('button', { name: /Ajouter un contact/i }))
+
+    const dialog = screen.getByRole('dialog')
+    const parent = screen.getByTestId('parent-container')
+
+    expect(parent.contains(dialog)).toBe(false)
+    expect(document.body.contains(dialog)).toBe(true)
+  })
+
+  it('bloque le scroll du body à l\'ouverture et le restaure à la fermeture', () => {
+    render(<AddContactDialog prospectId={PROSPECT_ID} />)
+    expect(document.body.style.overflow).not.toBe('hidden')
+
+    fireEvent.click(screen.getByRole('button', { name: /^Ajouter un contact$/i }))
+    expect(document.body.style.overflow).toBe('hidden')
+
+    fireEvent.keyDown(document, { key: 'Escape' })
+    expect(document.body.style.overflow).not.toBe('hidden')
+  })
 })
 
 describe('AddContactDialog — soumission', () => {

@@ -1,19 +1,21 @@
 // ============================================================
-// Tests : SourcingModal
+// Tests : SourcingModal (post-simplification 2026-05-17)
 // ------------------------------------------------------------
+// La section "Secteurs cibles" (raccourcis + multi-select NAF)
+// est désactivée tant que Sirene n'accepte pas la query NAF
+// (cf. hindsight 2026-05-17 HTTP 400). On envoie systématiquement
+// `targetSectors: []` au backend.
+//
 // Couvre :
-//   - Rendu du formulaire avec les 9 raccourcis (pills) NAF.
-//   - Rendu du multi-select NAF restreint aux ~110 codes BEGES
-//     prioritaires (sections A/C/D/E/F/H).
-//   - Sélection d'un raccourci → POST avec les codes du groupe.
-//   - Sélection d'un code individuel via la recherche.
-//   - Combinaison raccourci + code individuel (set union, pas de
-//     doublon).
-//   - Aucune sélection → POST sans `targetSectors`.
+//   - Rendu du formulaire avec effectif + zone géo uniquement.
+//   - Absence de la section "Secteurs cibles" (legend, pills,
+//     multi-select listbox, compteur).
+//   - Submit → body { effectifMin, effectifMax, targetSectors: [] }.
+//   - Conservation du champ "Zone géographique" dans le body.
 // ============================================================
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, fireEvent, waitFor, cleanup, within } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react'
 
 // Mock hooks avant l'import du composant (Vitest hoist).
 vi.mock('@/lib/hooks/use-agent-run-status', () => ({
@@ -45,7 +47,6 @@ function setupFetchMock(): ReturnType<typeof vi.fn> {
         json: () =>
           Promise.resolve({
             data: {
-              targetSectors: [],
               targetRegion: '',
               effectifMin: 50,
               effectifMax: 500,
@@ -104,208 +105,71 @@ afterEach(() => {
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
-describe('SourcingModal — rendu initial', () => {
-  it('rend les 9 raccourcis (pills) des secteurs prioritaires', async () => {
+describe('SourcingModal — rendu initial (simplifié, sans NAF)', () => {
+  it('rend les champs effectif min/max et la zone géographique', async () => {
     render(<SourcingModal isOpen={true} onClose={vi.fn()} />)
 
-    // Les 9 raccourcis sont rendus comme `<button>` avec `aria-label`
-    // contenant le label du groupe.
+    expect(await screen.findByLabelText(/Minimum/i)).toBeInTheDocument()
+    expect(screen.getByLabelText(/Maximum/i)).toBeInTheDocument()
+    expect(screen.getByLabelText(/Zone géographique/i)).toBeInTheDocument()
     expect(
-      await screen.findByRole('button', { name: 'Viticulture' }),
-    ).toBeInTheDocument()
-    expect(
-      screen.getByRole('button', { name: 'Aéronautique' }),
-    ).toBeInTheDocument()
-    expect(
-      screen.getByRole('button', { name: /Logistique \/ Transport/i }),
-    ).toBeInTheDocument()
-    expect(
-      screen.getByRole('button', { name: /Agro-alimentaire/i }),
-    ).toBeInTheDocument()
-    expect(
-      screen.getByRole('button', { name: 'Chimie' }),
-    ).toBeInTheDocument()
-    expect(
-      screen.getByRole('button', { name: /Sidérurgie \/ Métaux/i }),
-    ).toBeInTheDocument()
-    expect(
-      screen.getByRole('button', { name: 'Énergie' }),
-    ).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'BTP' })).toBeInTheDocument()
-    expect(
-      screen.getByRole('button', { name: /Hôtellerie \/ Restauration/i }),
+      screen.getByRole('button', { name: /Lancer la recherche/i }),
     ).toBeInTheDocument()
   })
 
-  it('rend le multi-select NAF BEGES (sections A/C/D/E/F/H) sous les raccourcis', async () => {
+  it('n\'affiche plus la section "Secteurs cibles" (legend retirée)', async () => {
     render(<SourcingModal isOpen={true} onClose={vi.fn()} />)
+    // Attendre que la modal soit rendue (firstFocusable disponible).
+    await screen.findByLabelText(/Minimum/i)
 
-    // Listbox du composant <NafCodeMultiSelect> embarqué.
-    const listbox = await screen.findByRole('listbox', { name: /Codes NAF disponibles/i })
-    expect(listbox).toBeInTheDocument()
-    expect(listbox).toHaveAttribute('aria-multiselectable', 'true')
-
-    // Barre de recherche présente.
-    expect(screen.getByPlaceholderText(/Rechercher par code/i)).toBeInTheDocument()
+    expect(screen.queryByText(/Secteurs cibles/i)).not.toBeInTheDocument()
   })
 
-  it('n\'affiche pas les groupes suggérés DEUX FOIS (multi-select sans suggestions)', async () => {
+  it('n\'affiche plus les raccourcis (pills) de groupes NAF', async () => {
     render(<SourcingModal isOpen={true} onClose={vi.fn()} />)
+    await screen.findByLabelText(/Minimum/i)
 
-    // Le multi-select n'expose pas ses propres "groupes suggérés" puisqu'on
-    // utilise déjà les quick-picks au-dessus → showSuggestedGroups={false}.
-    // Le label de section "Suggérés (prospection B2B BEGES)" ne doit pas apparaître.
+    // Les 9 anciens raccourcis ne doivent plus exister.
     expect(
-      screen.queryByText(/Suggérés \(prospection B2B BEGES\)/i),
+      screen.queryByRole('button', { name: 'Viticulture' }),
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: 'Aéronautique' }),
+    ).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'BTP' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Chimie' })).not.toBeInTheDocument()
+  })
+
+  it('n\'affiche plus le multi-select NAF BEGES (listbox + barre de recherche)', async () => {
+    render(<SourcingModal isOpen={true} onClose={vi.fn()} />)
+    await screen.findByLabelText(/Minimum/i)
+
+    expect(
+      screen.queryByRole('listbox', { name: /Codes NAF disponibles/i }),
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByPlaceholderText(/Rechercher par code/i),
     ).not.toBeInTheDocument()
   })
 
-  it('affiche le compteur « X / N secteurs sélectionnés »', async () => {
+  it('n\'affiche plus le compteur « X / N secteurs sélectionnés »', async () => {
     render(<SourcingModal isOpen={true} onClose={vi.fn()} />)
+    await screen.findByLabelText(/Minimum/i)
+
     expect(
-      await screen.findByText(/0 \/ \d+ secteurs sélectionnés/i),
-    ).toBeInTheDocument()
+      screen.queryByText(/secteurs sélectionnés/i),
+    ).not.toBeInTheDocument()
   })
 })
 
-describe('SourcingModal — submit et consolidation des codes', () => {
-  it('POST sans `targetSectors` si rien n\'est sélectionné', async () => {
-    const fetchMock = vi.fn((url: string | URL) => {
-      const u = typeof url === 'string' ? url : url.toString()
-      if (u.includes('/api/profile/sourcing-defaults')) {
-        return Promise.resolve({
-          ok: true,
-          status: 200,
-          json: () => Promise.resolve({ data: {} }),
-        })
-      }
-      return Promise.resolve({
-        ok: true,
-        status: 200,
-        json: () => Promise.resolve({ ok: true, data: { prospectsNew: 0, prospectsUpdated: 0 } }),
-      })
-    })
-    vi.stubGlobal('fetch', fetchMock)
-
-    render(<SourcingModal isOpen={true} onClose={vi.fn()} />)
-
-    fireEvent.click(await screen.findByRole('button', { name: /Lancer la recherche/i }))
-
-    await waitFor(() => {
-      const sourcingCall = fetchMock.mock.calls.find(
-        (c) => typeof c[0] === 'string' && c[0].includes('/api/agent/sourcing'),
-      )
-      expect(sourcingCall).toBeDefined()
-    })
-
-    const body = extractSourcingBody(fetchMock)
-    expect(body.targetSectors).toBeUndefined()
-  })
-
-  it('POST avec les codes du groupe quand un seul raccourci est coché', async () => {
+describe('SourcingModal — submit (targetSectors: [] systématique)', () => {
+  it('POST avec `targetSectors: []` (tableau vide) et les valeurs effectif', async () => {
     const fetchMock = setupFetchMock()
     render(<SourcingModal isOpen={true} onClose={vi.fn()} />)
 
-    // Coche le raccourci "Viticulture" → 01.21Z + 01.22Z.
-    const pill = await screen.findByRole('button', { name: 'Viticulture' })
-    fireEvent.click(pill)
-    expect(pill).toHaveAttribute('aria-pressed', 'true')
-
-    fireEvent.click(screen.getByRole('button', { name: /Lancer la recherche/i }))
-
-    await waitFor(() => {
-      const sourcingCall = fetchMock.mock.calls.find(
-        (c) => typeof c[0] === 'string' && c[0].includes('/api/agent/sourcing'),
-      )
-      expect(sourcingCall).toBeDefined()
-    })
-
-    const body = extractSourcingBody(fetchMock)
-    expect(body.targetSectors).toEqual(expect.arrayContaining(['01.21Z', '01.22Z']))
-    expect(body.targetSectors).toHaveLength(2)
-  })
-
-  it('POST avec un code individuel sélectionné via le multi-select', async () => {
-    const fetchMock = setupFetchMock()
-    render(<SourcingModal isOpen={true} onClose={vi.fn()} />)
-
-    // Cherche un code BEGES (ciment = 23.51Z).
-    const search = await screen.findByPlaceholderText(/Rechercher par code/i)
-    fireEvent.change(search, { target: { value: '23.51' } })
-
-    const listbox = screen.getByRole('listbox', { name: /Codes NAF disponibles/i })
-    const options = within(listbox).getAllByRole('option')
-    expect(options.length).toBeGreaterThan(0)
-    fireEvent.click(options[0]!)
-
-    // Chip "23.51Z" doit apparaître.
-    const chipList = await screen.findByLabelText(/Codes NAF sélectionnés/i)
-    expect(within(chipList).getByText('23.51Z')).toBeInTheDocument()
-
-    fireEvent.click(screen.getByRole('button', { name: /Lancer la recherche/i }))
-
-    await waitFor(() => {
-      const sourcingCall = fetchMock.mock.calls.find(
-        (c) => typeof c[0] === 'string' && c[0].includes('/api/agent/sourcing'),
-      )
-      expect(sourcingCall).toBeDefined()
-    })
-
-    const body = extractSourcingBody(fetchMock)
-    expect(body.targetSectors).toEqual(['23.51Z'])
-  })
-
-  it('combine raccourci + code individuel sans doublon (set union)', async () => {
-    const fetchMock = setupFetchMock()
-    render(<SourcingModal isOpen={true} onClose={vi.fn()} />)
-
-    // 1. Coche "Viticulture" (raccourci) → 01.21Z + 01.22Z.
-    fireEvent.click(await screen.findByRole('button', { name: 'Viticulture' }))
-
-    // 2. Ajoute 23.51Z (ciment) via le multi-select.
-    const search = screen.getByPlaceholderText(/Rechercher par code/i)
-    fireEvent.change(search, { target: { value: '23.51' } })
-    const listbox = screen.getByRole('listbox', { name: /Codes NAF disponibles/i })
-    fireEvent.click(within(listbox).getAllByRole('option')[0]!)
-
-    fireEvent.click(screen.getByRole('button', { name: /Lancer la recherche/i }))
-
-    await waitFor(() => {
-      const sourcingCall = fetchMock.mock.calls.find(
-        (c) => typeof c[0] === 'string' && c[0].includes('/api/agent/sourcing'),
-      )
-      expect(sourcingCall).toBeDefined()
-    })
-
-    const body = extractSourcingBody(fetchMock)
-    expect(body.targetSectors).toEqual(
-      expect.arrayContaining(['01.21Z', '01.22Z', '23.51Z']),
+    fireEvent.click(
+      await screen.findByRole('button', { name: /Lancer la recherche/i }),
     )
-    expect(body.targetSectors).toHaveLength(3)
-    // Pas de doublon.
-    const unique = new Set(body.targetSectors)
-    expect(unique.size).toBe(body.targetSectors!.length)
-  })
-
-  it('déduplique si un code individuel est aussi dans un raccourci coché', async () => {
-    const fetchMock = setupFetchMock()
-    render(<SourcingModal isOpen={true} onClose={vi.fn()} />)
-
-    // 1. Coche "Viticulture" (raccourci, couvre 01.21Z + 01.22Z).
-    fireEvent.click(await screen.findByRole('button', { name: 'Viticulture' }))
-
-    // 2. Tente d'ajouter 01.21Z (déjà cible du raccourci) via le multi-select.
-    //    Comme le code est déjà coché, un nouveau clic le toggle (donc retire).
-    //    Pour vraiment exercer "set union sans doublon" il faudrait ajouter
-    //    et NE PAS retirer — on vérifie ici que la valeur de chip persiste.
-    const search = screen.getByPlaceholderText(/Rechercher par code/i)
-    fireEvent.change(search, { target: { value: '01.21Z' } })
-    const listbox = screen.getByRole('listbox', { name: /Codes NAF disponibles/i })
-    const opts = within(listbox).getAllByRole('option')
-    // L'option doit être déjà marquée selected (le raccourci l'a cochée).
-    expect(opts[0]).toHaveAttribute('aria-selected', 'true')
-
-    fireEvent.click(screen.getByRole('button', { name: /Lancer la recherche/i }))
 
     await waitFor(() => {
       const sourcingCall = fetchMock.mock.calls.find(
@@ -315,8 +179,100 @@ describe('SourcingModal — submit et consolidation des codes', () => {
     })
 
     const body = extractSourcingBody(fetchMock)
-    // Toujours 2 codes (01.21Z + 01.22Z), pas 3 — pas de doublon.
-    expect(body.targetSectors).toEqual(expect.arrayContaining(['01.21Z', '01.22Z']))
-    expect(body.targetSectors).toHaveLength(2)
+    expect(body.targetSectors).toEqual([])
+    expect(Array.isArray(body.targetSectors)).toBe(true)
+    expect(body.effectifMin).toBe(50)
+    expect(body.effectifMax).toBe(500)
+  })
+
+  it('transmet le champ "Zone géographique" quand renseigné', async () => {
+    const fetchMock = setupFetchMock()
+    render(<SourcingModal isOpen={true} onClose={vi.fn()} />)
+
+    const regionInput = await screen.findByLabelText(/Zone géographique/i)
+    fireEvent.change(regionInput, { target: { value: 'IDF' } })
+
+    fireEvent.click(
+      screen.getByRole('button', { name: /Lancer la recherche/i }),
+    )
+
+    await waitFor(() => {
+      const sourcingCall = fetchMock.mock.calls.find(
+        (c) => typeof c[0] === 'string' && c[0].includes('/api/agent/sourcing'),
+      )
+      expect(sourcingCall).toBeDefined()
+    })
+
+    const body = extractSourcingBody(fetchMock)
+    expect(body.targetRegion).toBe('IDF')
+    expect(body.targetSectors).toEqual([])
+  })
+
+  it('omet `targetRegion` si laissé vide (trim → "")', async () => {
+    const fetchMock = setupFetchMock()
+    render(<SourcingModal isOpen={true} onClose={vi.fn()} />)
+
+    // Laisse la zone géo vide (valeur par défaut '').
+    fireEvent.click(
+      await screen.findByRole('button', { name: /Lancer la recherche/i }),
+    )
+
+    await waitFor(() => {
+      const sourcingCall = fetchMock.mock.calls.find(
+        (c) => typeof c[0] === 'string' && c[0].includes('/api/agent/sourcing'),
+      )
+      expect(sourcingCall).toBeDefined()
+    })
+
+    const body = extractSourcingBody(fetchMock)
+    expect(body.targetRegion).toBeUndefined()
+    expect(body.targetSectors).toEqual([])
+  })
+
+  it('respecte les nouvelles valeurs d\'effectif saisies par l\'utilisateur', async () => {
+    const fetchMock = setupFetchMock()
+    render(<SourcingModal isOpen={true} onClose={vi.fn()} />)
+
+    const min = await screen.findByLabelText(/Minimum/i)
+    const max = screen.getByLabelText(/Maximum/i)
+    fireEvent.change(min, { target: { value: '100' } })
+    fireEvent.change(max, { target: { value: '999' } })
+
+    fireEvent.click(
+      screen.getByRole('button', { name: /Lancer la recherche/i }),
+    )
+
+    await waitFor(() => {
+      const sourcingCall = fetchMock.mock.calls.find(
+        (c) => typeof c[0] === 'string' && c[0].includes('/api/agent/sourcing'),
+      )
+      expect(sourcingCall).toBeDefined()
+    })
+
+    const body = extractSourcingBody(fetchMock)
+    expect(body.effectifMin).toBe(100)
+    expect(body.effectifMax).toBe(999)
+    expect(body.targetSectors).toEqual([])
+  })
+
+  it('bloque le submit si effectifMin > effectifMax (régression effectif)', async () => {
+    const fetchMock = setupFetchMock()
+    render(<SourcingModal isOpen={true} onClose={vi.fn()} />)
+
+    const min = await screen.findByLabelText(/Minimum/i)
+    const max = screen.getByLabelText(/Maximum/i)
+    fireEvent.change(min, { target: { value: '500' } })
+    fireEvent.change(max, { target: { value: '100' } })
+
+    fireEvent.click(
+      screen.getByRole('button', { name: /Lancer la recherche/i }),
+    )
+
+    // Le submit doit échouer côté validation client → aucun appel /api/agent/sourcing.
+    await screen.findByRole('alert')
+    const sourcingCall = fetchMock.mock.calls.find(
+      (c) => typeof c[0] === 'string' && c[0].includes('/api/agent/sourcing'),
+    )
+    expect(sourcingCall).toBeUndefined()
   })
 })

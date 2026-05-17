@@ -1,21 +1,25 @@
 // ============================================================
-// Tests : SettingsForm
+// Tests : SettingsForm (UI minimaliste post-2026-05-17)
 // ------------------------------------------------------------
+// L'UI ne contient plus que 2 sections du formulaire (Pondération + Notifications).
+// La section "Mon compte" (avec déconnexion) est rendue par la page parente,
+// pas par SettingsForm — testée indirectement via la non-régression des sections
+// gardées et l'absence des sections retirées.
+//
 // Couvre :
 //   - Rendu initial avec defaults 30 / 30 / 40 (scoring_weights).
-//   - Le champ legacy "sourcing_target_per_run" n'apparaît pas dans le formulaire
-//     principal (planqué dans la section Avancé fermée par défaut).
+//   - Présence section Notifications (champ email).
 //   - Modification d'un slider, somme recalculée + warning si != 100.
 //   - Bouton "Normaliser" re-projette à 100.
 //   - Bouton "Réinitialiser" remet 30 / 30 / 40.
-//   - Multi-select NAF : recherche par code et par libellé, sélection
-//     individuelle, chips de récap, groupes suggérés cochables en bloc.
 //   - Soumission → PATCH /api/profile/settings avec body attendu (scoring
-//     normalisé).
+//     normalisé). Le payload conserve les autres champs (offer_description,
+//     target_sectors, ...) même si l'UI ne les expose plus.
+//   - Sections retirées absentes du DOM (Secteurs, Zone géo, Offre, Avancé).
 // ============================================================
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, fireEvent, waitFor, cleanup, within } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react'
 
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ refresh: vi.fn(), push: vi.fn() }),
@@ -55,8 +59,8 @@ afterEach(() => {
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
-describe('SettingsForm — rendu initial', () => {
-  it('rend les 3 sliders de pondération avec les defaults 30 / 30 / 40', () => {
+describe('SettingsForm — sections gardées (UI minimaliste)', () => {
+  it('rend la section Pondération avec les 3 sliders et les defaults 30 / 30 / 40', () => {
     render(<SettingsForm initialSettings={baseSettings()} />)
 
     const taille = screen.getByLabelText(/Pondération Taille/i) as HTMLInputElement
@@ -71,21 +75,39 @@ describe('SettingsForm — rendu initial', () => {
     expect(screen.getByText(/Total: 100 %/)).toBeInTheDocument()
   })
 
-  it('ne montre pas le slider "sourcing_target_per_run" dans le formulaire principal', () => {
-    render(<SettingsForm initialSettings={baseSettings()} />)
+  it('rend la section Notifications avec le champ email', () => {
+    render(<SettingsForm initialSettings={baseSettings({ notification_email: 'jane@example.com' })} />)
 
-    // Le label/aria du sourcing_target_per_run ne doit pas être visible avant ouverture
-    // de la section Avancé (collapsable, fermée par défaut).
-    expect(screen.queryByLabelText(/Cible de sourcing par run/i)).not.toBeInTheDocument()
+    const emailInput = screen.getByLabelText(/Email de notification/i) as HTMLInputElement
+    expect(emailInput).toBeInTheDocument()
+    expect(emailInput.type).toBe('email')
+    expect(emailInput.value).toBe('jane@example.com')
+  })
+})
+
+describe('SettingsForm — sections retirées (UI minimaliste)', () => {
+  it('n\'affiche plus la section "Secteurs cibles" (multi-select NAF)', () => {
+    render(<SettingsForm initialSettings={baseSettings()} />)
+    expect(screen.queryByRole('listbox', { name: /Codes NAF disponibles/i })).not.toBeInTheDocument()
+    expect(screen.queryByPlaceholderText(/Rechercher par code/i)).not.toBeInTheDocument()
   })
 
-  it('expose le slider sourcing_target_per_run dans la section Avancé une fois dépliée', () => {
+  it('n\'affiche plus la section "Zone géographique" (ville + codes postaux)', () => {
     render(<SettingsForm initialSettings={baseSettings()} />)
-    const toggle = screen.getByRole('button', { name: /Avancé/i })
+    expect(screen.queryByLabelText(/Ville \/ région/i)).not.toBeInTheDocument()
+    expect(screen.queryByLabelText(/Codes postaux/i)).not.toBeInTheDocument()
+  })
 
-    fireEvent.click(toggle)
+  it('n\'affiche plus la section "Offre commerciale" (textarea)', () => {
+    render(<SettingsForm initialSettings={baseSettings()} />)
+    expect(screen.queryByLabelText(/Description de l'offre/i)).not.toBeInTheDocument()
+    expect(screen.queryByPlaceholderText(/Nous accompagnons les ETI/i)).not.toBeInTheDocument()
+  })
 
-    expect(screen.getByLabelText(/Cible de sourcing par run/i)).toBeInTheDocument()
+  it('n\'affiche plus la section "Avancé" (sourcing_target_per_run)', () => {
+    render(<SettingsForm initialSettings={baseSettings()} />)
+    expect(screen.queryByRole('button', { name: /^Avancé/i })).not.toBeInTheDocument()
+    expect(screen.queryByLabelText(/Cible de sourcing par run/i)).not.toBeInTheDocument()
   })
 })
 
@@ -134,84 +156,14 @@ describe('SettingsForm — pondération du scoring', () => {
   })
 })
 
-describe('SettingsForm — multi-select NAF', () => {
-  it('expose une listbox NAF avec navigation possible', () => {
+describe('SettingsForm — notifications', () => {
+  it('met à jour la valeur saisie dans le champ email', () => {
     render(<SettingsForm initialSettings={baseSettings()} />)
-    const listbox = screen.getByRole('listbox', { name: /Codes NAF disponibles/i })
-    expect(listbox).toBeInTheDocument()
-    expect(listbox).toHaveAttribute('aria-multiselectable', 'true')
-  })
+    const emailInput = screen.getByLabelText(/Email de notification/i) as HTMLInputElement
 
-  it('filtre la liste sur le libellé (insensible aux accents)', () => {
-    render(<SettingsForm initialSettings={baseSettings()} />)
-    const search = screen.getByPlaceholderText(/Rechercher par code/i)
+    fireEvent.change(emailInput, { target: { value: 'samir@strofe.fr' } })
 
-    fireEvent.change(search, { target: { value: 'viticulture' } })
-
-    const listbox = screen.getByRole('listbox', { name: /Codes NAF disponibles/i })
-    // 01.21Z = Culture de la vigne, mais on recherche "viticulture"
-    // → match aussi sur le label de groupe via le haystack ? Non.
-    // Vérifions plutôt avec un terme présent dans un libellé.
-    expect(within(listbox).queryAllByRole('option').length).toBeGreaterThanOrEqual(0)
-  })
-
-  it('filtre la liste sur le code NAF (préfixe partiel)', () => {
-    render(<SettingsForm initialSettings={baseSettings()} />)
-    const search = screen.getByPlaceholderText(/Rechercher par code/i)
-
-    fireEvent.change(search, { target: { value: '01.21' } })
-
-    const listbox = screen.getByRole('listbox', { name: /Codes NAF disponibles/i })
-    const options = within(listbox).getAllByRole('option')
-    // Au moins 01.21Z (Culture de la vigne) doit apparaître
-    expect(options.length).toBeGreaterThan(0)
-    expect(within(listbox).getByText(/01\.21Z/)).toBeInTheDocument()
-  })
-
-  it('sélectionne un code et l\'affiche en chip', () => {
-    render(<SettingsForm initialSettings={baseSettings()} />)
-    const search = screen.getByPlaceholderText(/Rechercher par code/i)
-    fireEvent.change(search, { target: { value: '01.21Z' } })
-
-    const listbox = screen.getByRole('listbox', { name: /Codes NAF disponibles/i })
-    const option = within(listbox).getAllByRole('option')[0]
-    fireEvent.click(option!)
-
-    // La chip "01.21Z" doit apparaître dans la zone "Sélectionnés".
-    const chipList = screen.getByLabelText(/Codes NAF sélectionnés/i)
-    expect(within(chipList).getByText('01.21Z')).toBeInTheDocument()
-  })
-
-  it('coche tous les codes d\'un groupe suggéré en un clic', () => {
-    render(<SettingsForm initialSettings={baseSettings()} />)
-    // Bouton du groupe "Viticulture" (2 codes : 01.21Z + 01.22Z)
-    const groupBtn = screen.getByRole('button', { name: /Viticulture/i })
-    fireEvent.click(groupBtn)
-
-    const chipList = screen.getByLabelText(/Codes NAF sélectionnés/i)
-    expect(within(chipList).getByText('01.21Z')).toBeInTheDocument()
-    expect(within(chipList).getByText('01.22Z')).toBeInTheDocument()
-  })
-
-  it('le bouton "Tout sélectionner" sélectionne tous les codes suggérés', () => {
-    render(<SettingsForm initialSettings={baseSettings()} />)
-    fireEvent.click(screen.getByRole('button', { name: /^Tout sélectionner$/i }))
-
-    const chipList = screen.getByLabelText(/Codes NAF sélectionnés/i)
-    // Quelques codes représentatifs des 9 secteurs prioritaires.
-    expect(within(chipList).getByText('01.21Z')).toBeInTheDocument()
-    expect(within(chipList).getByText('30.30Z')).toBeInTheDocument()
-    expect(within(chipList).getByText('55.10Z')).toBeInTheDocument()
-  })
-
-  it('le bouton "Désélectionner tout" vide les suggérés', () => {
-    render(
-      <SettingsForm
-        initialSettings={baseSettings({ target_sectors: ['01.21Z', '30.30Z'] })}
-      />,
-    )
-    fireEvent.click(screen.getByRole('button', { name: /Désélectionner tout/i }))
-    expect(screen.queryByLabelText(/Codes NAF sélectionnés/i)).not.toBeInTheDocument()
+    expect(emailInput.value).toBe('samir@strofe.fr')
   })
 })
 
@@ -268,6 +220,46 @@ describe('SettingsForm — soumission', () => {
     }
     // 25/25/25 → re-projection vers 100 ; somme exactement 100.
     expect(body.scoring_weights.taille + body.scoring_weights.beges + body.scoring_weights.contact).toBe(100)
+  })
+
+  it('préserve les champs persistés masqués dans le payload (rétrocompat backend)', async () => {
+    // Garantit que même si l'UI ne montre plus offer_description / target_sectors / etc.,
+    // le PATCH continue d'envoyer les valeurs existantes — pas de wipe côté DB.
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: () => Promise.resolve({ data: { ok: true } }),
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    render(
+      <SettingsForm
+        initialSettings={baseSettings({
+          offer_description: 'Bilan carbone BEGES réglementaire',
+          target_sectors: ['01.21Z', '30.30Z'],
+          target_city: 'Lyon',
+          target_postal_codes: ['69001', '69002'],
+        })}
+      />,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: /Sauvegarder les paramètres/i }))
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledTimes(1)
+    })
+
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit]
+    const body = JSON.parse(init.body as string) as {
+      offer_description?: string
+      target_sectors?: string[]
+      target_city?: string
+      target_postal_codes?: string[]
+    }
+    expect(body.offer_description).toBe('Bilan carbone BEGES réglementaire')
+    expect(body.target_sectors).toEqual(['01.21Z', '30.30Z'])
+    expect(body.target_city).toBe('Lyon')
+    expect(body.target_postal_codes).toEqual(['69001', '69002'])
   })
 
   it('affiche une erreur si l\'API retourne 500', async () => {

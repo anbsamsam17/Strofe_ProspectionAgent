@@ -1,6 +1,7 @@
 ﻿'use client'
 
 import { useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { useRouter } from 'next/navigation'
 
 // ── Props ─────────────────────────────────────────────────────────────────────
@@ -39,8 +40,14 @@ export function AddContactDialog({ prospectId }: AddContactDialogProps) {
   const [pending, setPending] = useState(false)
   const firstFieldRef = useRef<HTMLInputElement | null>(null)
   const triggerRef = useRef<HTMLButtonElement | null>(null)
+  // Portal mount : sur le serveur on ne rend rien. On flip à true au 1er render
+  // côté client pour éviter mismatch SSR/CSR.
+  const [mounted, setMounted] = useState(false)
+  useEffect(() => {
+    setMounted(true)
+  }, [])
 
-  // Focus le 1er champ à l'ouverture + gérer ESC.
+  // Focus le 1er champ à l'ouverture + gérer ESC + body scroll lock.
   useEffect(() => {
     if (!open) return
     const t = setTimeout(() => firstFieldRef.current?.focus(), 30)
@@ -48,9 +55,12 @@ export function AddContactDialog({ prospectId }: AddContactDialogProps) {
       if (e.key === 'Escape') closeDialog()
     }
     document.addEventListener('keydown', onKeyDown)
+    const previousOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
     return () => {
       clearTimeout(t)
       document.removeEventListener('keydown', onKeyDown)
+      document.body.style.overflow = previousOverflow
     }
   }, [open])
 
@@ -141,12 +151,12 @@ export function AddContactDialog({ prospectId }: AddContactDialogProps) {
         Ajouter un contact
       </button>
 
-      {open && (
+      {open && mounted && createPortal(
         <div
           role="dialog"
           aria-modal="true"
           aria-labelledby="add-contact-title"
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4 backdrop-blur-sm"
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 px-4 backdrop-blur-sm"
           onClick={(e) => {
             // Clic sur le backdrop (pas sur le panel) → fermer.
             if (e.target === e.currentTarget) closeDialog()
@@ -272,7 +282,8 @@ export function AddContactDialog({ prospectId }: AddContactDialogProps) {
               </div>
             </form>
           </div>
-        </div>
+        </div>,
+        document.body,
       )}
     </>
   )

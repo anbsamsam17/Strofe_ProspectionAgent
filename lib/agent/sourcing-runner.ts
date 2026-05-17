@@ -1161,17 +1161,33 @@ async function categoriserSecteursPostUpsert(
 
   try {
     // Cible : nouveaux prospects sourcés sans secteur_libelle mais avec NAF dispo.
+    // Le filtre inclut désormais la valeur littérale "Inconnu*" en plus de NULL/vide.
+    const isMissingSecteur = (s: string | undefined | null): boolean => {
+      if (!s) return true
+      const trimmed = s.trim()
+      if (trimmed === '') return true
+      return /^inconnu/i.test(trimmed)
+    }
+
     const sirensSansSecteur = scored
       .filter(
         (p) =>
           p.siren &&
           p.secteur_naf &&
-          (!p.secteur_libelle || (typeof p.secteur_libelle === 'string' && p.secteur_libelle.trim() === '')),
+          isMissingSecteur(p.secteur_libelle),
       )
       .slice(0, SECTEUR_MAX_PER_SOURCING_RUN)
       .map((p) => p.siren as string)
 
-    if (sirensSansSecteur.length === 0) return
+    if (sirensSansSecteur.length === 0) {
+      pushLog(
+        'secteur_categorisation',
+        'Gemini : 0 prospects sélectionnés (sourcing) — tous ont déjà un secteur_libelle',
+        'info',
+        { selected: 0, cap: SECTEUR_MAX_PER_SOURCING_RUN },
+      )
+      return
+    }
 
     // On relit depuis la DB pour récupérer l'id (clef de l'UPDATE).
     const { data: rows, error } = await supabase
@@ -1185,6 +1201,13 @@ async function categoriserSecteursPostUpsert(
         pushLog('secteur_categorisation', 'Lecture prospects pour catégorisation impossible', 'warn', {
           error: error.message,
         })
+      } else {
+        pushLog(
+          'secteur_categorisation',
+          'Gemini : 0 rows DB pour les SIREN sélectionnés — incohérence ?',
+          'warn',
+          { siren_count: sirensSansSecteur.length },
+        )
       }
       return
     }
@@ -1224,13 +1247,18 @@ async function categoriserSecteursPostUpsert(
       }
     }
 
-    pushLog('secteur_categorisation', 'Catégorisation secteur (sourcing) terminée', 'info', {
-      prospects_analyses: rows.length,
-      prospects_categorises: categorisesCount,
-      prospects_echec: echecsCount,
-      cap: SECTEUR_MAX_PER_SOURCING_RUN,
-      source: 'gemini-2.0-flash',
-    })
+    pushLog(
+      'secteur_categorisation',
+      `Gemini (sourcing) : ${rows.length} sélectionnés, ${categorisesCount} catégorisés, ${echecsCount} échecs`,
+      'info',
+      {
+        selected: rows.length,
+        categorises: categorisesCount,
+        echecs: echecsCount,
+        cap: SECTEUR_MAX_PER_SOURCING_RUN,
+        source: 'gemini-2.0-flash',
+      },
+    )
   } catch (err) {
     // Phase strictement optionnelle — on n'interrompt jamais le sourcing.
     pushLog('secteur_categorisation', 'Catégorisation secteur (sourcing) — erreur silencieuse', 'warn', {

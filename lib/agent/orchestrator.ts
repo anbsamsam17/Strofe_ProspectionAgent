@@ -289,17 +289,30 @@ async function phaseSourcingAdaptive(
 // PHASE 3.5 : CATÉGORISATION SECTEUR via Gemini Flash 2.0
 // ------------------------------------------------------------
 
-/** Nombre maximum de prospects catégorisés par run (préserver le quota Gemini gratuit). */
-const SECTEUR_MAX_PER_RUN = 50
+/**
+ * Nombre maximum de prospects catégorisés par run.
+ *
+ * Augmenté de 50 → 200 le 2026-05-17 pour rattraper le backlog (~700 prospects
+ * existants insérés sans `secteur_libelle` avant cablage Gemini, cf. enrichirProspect
+ * dans sourcing.ts qui ne renseigne JAMAIS ce champ). Le free tier Gemini Flash 2.0
+ * autorise 1500 req/jour — 200 par run nocturne reste loin du plafond, mais nécessite
+ * le throttle interne `SECTEUR_THROTTLE_MS` (50ms) pour respecter la limite 30 req/min.
+ */
+const SECTEUR_MAX_PER_RUN = 200
 
 /** Parallélisme du batch catégorisation (rate-limit Gemini Flash 30 req/min). */
 const SECTEUR_BATCH_PARALLELISM = 5
 
 /**
- * Complète `prospects.secteur_libelle` quand il est NULL ou vide via Gemini Flash 2.0.
+ * Complète `prospects.secteur_libelle` quand il est NULL, vide, ou littéral
+ * "Inconnu*" via Gemini Flash 2.0.
  *
  * Phase NON-FATALE — n'impacte ni le scoring numérique (déjà calculé) ni la suite
  * du pipeline. Si `GEMINI_API_KEY` est absente, la phase est skippée silencieusement.
+ *
+ * Le filtre inclut désormais `secteur_libelle ILIKE 'inconnu%'` pour rattraper les
+ * prospects où la valeur littérale "Inconnu" a été persistée par un import legacy
+ * ou un import manuel — équivalent fonctionnel d'un NULL pour l'utilisateur.
  *
  * PII : aucune donnée contact n'est envoyée à Gemini (uniquement code NAF +
  * raison sociale, qui sont publiques via Sirene).
@@ -315,16 +328,19 @@ async function phaseSecteurCategorisation(
     return
   }
 
-  log(run, 'secteur_categorisation', 'Démarrage catégorisation secteur via Gemini', 'info')
+  log(run, 'secteur_categorisation', 'Démarrage catégorisation secteur via Gemini', 'info', {
+    cap: SECTEUR_MAX_PER_RUN,
+  })
 
-  // Charger les prospects sans secteur_libelle exploitable (NULL ou chaîne vide
-  // après trim). Sirene NAF doit être présent pour permettre la classification.
+  // Charger les prospects sans secteur_libelle exploitable : NULL, chaîne vide
+  // OU valeur littérale "Inconnu*" (cas import legacy). Sirene NAF doit être
+  // présent pour permettre la classification.
   const { data: prospects, error } = await supabase
     .from('prospects')
     .select('id, siren, raison_sociale, secteur_naf, secteur_libelle, effectif_min')
     .eq('user_id', run.user_id)
     .is('archived_at', null)
-    .or('secteur_libelle.is.null,secteur_libelle.eq.')
+    .or('secteur_libelle.is.null,secteur_libelle.eq.,secteur_libelle.ilike.inconnu%')
     .not('secteur_naf', 'is', null)
     .order('score_priorite', { ascending: false })
     .limit(SECTEUR_MAX_PER_RUN)
@@ -336,10 +352,22 @@ async function phaseSecteurCategorisation(
     return
   }
 
-  if (!prospects || prospects.length === 0) {
-    log(run, 'secteur_categorisation', 'Aucun prospect à catégoriser', 'info')
+  const selected = prospects?.length ?? 0
+
+  if (!prospects || selected === 0) {
+    log(run, 'secteur_categorisation', 'Gemini : 0 prospects sélectionnés (rien à catégoriser)', 'info', {
+      selected: 0,
+      categorises: 0,
+      echecs: 0,
+      cap: SECTEUR_MAX_PER_RUN,
+    })
     return
   }
+
+  log(run, 'secteur_categorisation', `Gemini : ${selected} prospects sélectionnés`, 'info', {
+    selected,
+    cap: SECTEUR_MAX_PER_RUN,
+  })
 
   let categorisesCount = 0
   let echecsCount = 0
@@ -390,12 +418,19 @@ async function phaseSecteurCategorisation(
     }
   }
 
-  log(run, 'secteur_categorisation', 'Catégorisation secteur terminée', 'info', {
-    prospects_analyses: prospects.length,
-    prospects_categorises: categorisesCount,
-    prospects_echec: echecsCount,
-    source: 'gemini-2.0-flash',
-  })
+  log(
+    run,
+    'secteur_categorisation',
+    `Gemini : ${selected} sélectionnés, ${categorisesCount} catégorisés, ${echecsCount} échecs`,
+    'info',
+    {
+      selected,
+      categorises: categorisesCount,
+      echecs: echecsCount,
+      cap: SECTEUR_MAX_PER_RUN,
+      source: 'gemini-2.0-flash',
+    },
+  )
 }
 
 // ------------------------------------------------------------

@@ -1,17 +1,20 @@
-﻿'use client'
+'use client'
 
-import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import { useAgentRunStatus } from '@/lib/hooks/use-agent-run-status'
-import { NAF_GROUPS_SUGGESTED, type NafGroup } from '@/lib/constants/naf-codes'
-import {
-  NAF_BEGES_PRIORITY,
-  NAF_BEGES_PRIORITY_SET,
-} from '@/lib/constants/naf-beges-priority'
-import { NafCodeMultiSelect } from '@/components/settings/naf-code-multi-select'
-
-// Codes BEGES prioritaires (sections A/C/D/E/F/H) — univers du multi-select.
-const NAF_BEGES_CODES: readonly string[] = NAF_BEGES_PRIORITY.map((c) => c.code)
+// TODO: réactiver une fois Sirene stable (cf. hindsight 2026-05-17 HTTP 400)
+// Imports liés à la sélection NAF — conservés pour réactivation rapide :
+// import { useMemo } from 'react'
+// import { NAF_GROUPS_SUGGESTED, type NafGroup } from '@/lib/constants/naf-codes'
+// import {
+//   NAF_BEGES_PRIORITY,
+//   NAF_BEGES_PRIORITY_SET,
+// } from '@/lib/constants/naf-beges-priority'
+// import { NafCodeMultiSelect } from '@/components/settings/naf-code-multi-select'
+//
+// const NAF_BEGES_CODES: readonly string[] = NAF_BEGES_PRIORITY.map((c) => c.code)
+// const SECTOR_OPTIONS: readonly NafGroup[] = NAF_GROUPS_SUGGESTED
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -50,10 +53,6 @@ interface RunStats {
 type ViewMode = 'form' | 'running' | 'results'
 
 // ── Constantes ────────────────────────────────────────────────────────────────
-
-// Source unique des groupes pré-définis « prospection B2B BEGES » — centralisée
-// dans `lib/constants/naf-codes.ts` pour rester alignée avec la page Settings.
-const SECTOR_OPTIONS: readonly NafGroup[] = NAF_GROUPS_SUGGESTED
 
 const LOADING_MESSAGES: readonly string[] = [
   'Recherche en cours...',
@@ -115,9 +114,8 @@ export function SourcingModal({ isOpen, onClose }: SourcingModalProps) {
     effectifMax: '500',
     targetRegion: '',
   })
-  // State : ensemble de codes NAF directs (format `XX.XXX`). On a abandonné
-  // l'indexation par groupe pour permettre la sélection fine code par code.
-  const [selectedCodes, setSelectedCodes] = useState<Set<string>>(new Set())
+  // TODO: réactiver une fois Sirene stable (cf. hindsight 2026-05-17 HTTP 400)
+  // const [selectedCodes, setSelectedCodes] = useState<Set<string>>(new Set())
   const [view, setView] = useState<ViewMode>('form')
   const [error, setError] = useState<string | null>(null)
   const [stats, setStats] = useState<RunStats | null>(null)
@@ -132,25 +130,18 @@ export function SourcingModal({ isOpen, onClose }: SourcingModalProps) {
 
   const isLoading = view === 'running'
 
-  // Tableau ordonné des codes sélectionnés (utile pour <NafCodeMultiSelect>
-  // qui veut `selectedCodes: string[]`). On dérive du Set pour garder
-  // l'unicité, l'ordre n'importe pas côté API.
-  const selectedCodesArray = useMemo(
-    () => Array.from(selectedCodes),
-    [selectedCodes],
-  )
-
-  // Nombre de codes sélectionnés appartenant à l'univers BEGES affiché.
-  // Sert au compteur « X / N secteurs sélectionnés » et reste cohérent
-  // si un code hors univers (ajouté via raccourci G/I) est aussi dans
-  // `selectedCodes`.
-  const selectedInUniverseCount = useMemo(() => {
-    let n = 0
-    for (const c of selectedCodes) {
-      if (NAF_BEGES_PRIORITY_SET.has(c)) n++
-    }
-    return n
-  }, [selectedCodes])
+  // TODO: réactiver une fois Sirene stable (cf. hindsight 2026-05-17 HTTP 400)
+  // const selectedCodesArray = useMemo(
+  //   () => Array.from(selectedCodes),
+  //   [selectedCodes],
+  // )
+  // const selectedInUniverseCount = useMemo(() => {
+  //   let n = 0
+  //   for (const c of selectedCodes) {
+  //     if (NAF_BEGES_PRIORITY_SET.has(c)) n++
+  //   }
+  //   return n
+  // }, [selectedCodes])
 
   // Détection « run global déjà en cours » (ex. lancé depuis un autre onglet).
   // On utilise la même source de vérité que les autres déclencheurs : le hook
@@ -214,10 +205,11 @@ export function SourcingModal({ isOpen, onClose }: SourcingModalProps) {
   // Réinitialiser l'état à la fermeture, hydrater depuis le profil à l'ouverture.
   // Hydratation best-effort : si /api/profile/sourcing-defaults échoue, on garde
   // les valeurs locales par défaut (silencieux, pas de UX bloquante).
+  // NOTE: `targetSectors` du profil est ignoré tant que la section NAF est masquée
+  // — on garde l'hydratation effectif/région uniquement.
   useEffect(() => {
     if (!isOpen) {
       setFormData({ effectifMin: '50', effectifMax: '500', targetRegion: '' })
-      setSelectedCodes(new Set())
       setError(null)
       setStats(null)
       setView('form')
@@ -232,7 +224,6 @@ export function SourcingModal({ isOpen, onClose }: SourcingModalProps) {
         const data = (j as { data?: unknown }).data
         if (!data || typeof data !== 'object') return
         const d = data as {
-          targetSectors?: unknown
           targetRegion?: unknown
           effectifMin?: unknown
           effectifMax?: unknown
@@ -243,15 +234,6 @@ export function SourcingModal({ isOpen, onClose }: SourcingModalProps) {
           effectifMax: typeof d.effectifMax === 'number' ? String(d.effectifMax) : prev.effectifMax,
           targetRegion: typeof d.targetRegion === 'string' ? d.targetRegion : prev.targetRegion,
         }))
-
-        if (Array.isArray(d.targetSectors) && d.targetSectors.length > 0) {
-          const profileCodes = d.targetSectors.filter(
-            (c): c is string => typeof c === 'string',
-          )
-          if (profileCodes.length > 0) {
-            setSelectedCodes(new Set(profileCodes))
-          }
-        }
       })
       .catch(() => {
         /* silencieux : on garde les défauts locaux */
@@ -268,33 +250,23 @@ export function SourcingModal({ isOpen, onClose }: SourcingModalProps) {
     }
   }
 
-  /**
-   * Toggle d'un quick-pick (groupe NAF pré-défini) :
-   *   - si TOUS les codes du groupe sont déjà sélectionnés → on les retire,
-   *   - sinon → on ajoute tous ceux qui manquent.
-   * Idempotent et sans doublon (Set).
-   */
-  function toggleGroup(group: NafGroup) {
-    setSelectedCodes((prev) => {
-      const next = new Set(prev)
-      const allSelected = group.codes.every((c) => next.has(c))
-      if (allSelected) {
-        group.codes.forEach((c) => next.delete(c))
-      } else {
-        group.codes.forEach((c) => next.add(c))
-      }
-      return next
-    })
-  }
-
-  /**
-   * Callback unique du `NafCodeMultiSelect` : remplace l'ensemble courant
-   * par la nouvelle liste. On reconstruit un Set à partir d'un tableau pour
-   * dédupliquer une éventuelle duplication côté caller.
-   */
-  function handleMultiSelectChange(codes: string[]) {
-    setSelectedCodes(new Set(codes))
-  }
+  // TODO: réactiver une fois Sirene stable (cf. hindsight 2026-05-17 HTTP 400)
+  // function toggleGroup(group: NafGroup) {
+  //   setSelectedCodes((prev) => {
+  //     const next = new Set(prev)
+  //     const allSelected = group.codes.every((c) => next.has(c))
+  //     if (allSelected) {
+  //       group.codes.forEach((c) => next.delete(c))
+  //     } else {
+  //       group.codes.forEach((c) => next.add(c))
+  //     }
+  //     return next
+  //   })
+  // }
+  //
+  // function handleMultiSelectChange(codes: string[]) {
+  //   setSelectedCodes(new Set(codes))
+  // }
 
   function resetToForm() {
     setStats(null)
@@ -335,9 +307,6 @@ export function SourcingModal({ isOpen, onClose }: SourcingModalProps) {
       return
     }
 
-    // Codes NAF sélectionnés (déjà aplatis dans le state : un Set<string>).
-    const flatNafCodes: string[] = Array.from(selectedCodes)
-
     // AbortController : permet le cleanup propre + un timeout client de sécurité.
     const controller = new AbortController()
     abortRef.current = controller
@@ -346,13 +315,17 @@ export function SourcingModal({ isOpen, onClose }: SourcingModalProps) {
     setView('running')
 
     try {
+      // NOTE: la section NAF est désactivée (cf. hindsight 2026-05-17 HTTP 400).
+      // On envoie systématiquement `targetSectors: []` afin que le runner Sirene
+      // omette le filtre `activitePrincipaleEtablissement` et réduise la
+      // complexité de la query Lucene/Solr.
       const response = await fetch('/api/agent/sourcing', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           effectifMin: min,
           effectifMax: max,
-          targetSectors: flatNafCodes.length > 0 ? flatNafCodes : undefined,
+          targetSectors: [],
           targetRegion: formData.targetRegion.trim() || undefined,
         }),
         signal: controller.signal,
@@ -550,8 +523,8 @@ export function SourcingModal({ isOpen, onClose }: SourcingModalProps) {
                           Aucune entreprise ne correspond à ces filtres
                         </p>
                         <p className="mt-1 text-xs">
-                          Élargissez les effectifs, les secteurs ou la zone
-                          géographique pour découvrir des prospects.
+                          Élargissez les effectifs ou la zone géographique
+                          pour découvrir des prospects.
                         </p>
                         <button
                           type="button"
@@ -592,8 +565,7 @@ export function SourcingModal({ isOpen, onClose }: SourcingModalProps) {
                           {stats.totalAvailable !== null
                             ? `${stats.totalAvailable.toLocaleString('fr-FR')} entreprises au total — toutes déjà sourcées. `
                             : 'Toutes les entreprises correspondantes ont déjà été sourcées. '}
-                          Essayez d&apos;autres secteurs, d&apos;autres régions ou un
-                          effectif différent.
+                          Essayez d&apos;autres régions ou un effectif différent.
                         </p>
                         <button
                           type="button"
@@ -722,101 +694,29 @@ export function SourcingModal({ isOpen, onClose }: SourcingModalProps) {
                     </p>
                   </fieldset>
 
-                  {/* Secteurs cibles — 2 niveaux : raccourcis + liste détaillée BEGES */}
-                  <fieldset>
-                    <div className="mb-2.5 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-                      <legend className="text-sm font-medium text-gray-200">
-                        Secteurs cibles
-                        <span className="ml-1.5 text-xs font-normal text-gray-400 dark:text-gray-400">
-                          (optionnel — tous si aucun coché)
-                        </span>
-                      </legend>
-                      <p
-                        className="text-xs tabular-nums text-gray-400"
-                        aria-live="polite"
-                        role="status"
-                      >
-                        {selectedInUniverseCount} / {NAF_BEGES_CODES.length} secteurs
-                        sélectionnés
-                      </p>
-                    </div>
+                  {/*
+                    TODO: réactiver une fois Sirene stable (cf. hindsight 2026-05-17 HTTP 400)
+                    ─────────────────────────────────────────────────────────────────────────
+                    Section "Secteurs cibles" volontairement retirée du render :
+                    la query Lucene Sirene plante (HTTP 400) quand le filtre
+                    `activitePrincipaleEtablissement:(... OR ...)` cumule trop de
+                    codes NAF. Pour réduire la complexité de la requête à un strict
+                    minimum, on ne propose plus la sélection NAF côté UI et on
+                    envoie systématiquement `targetSectors: []` au runner — celui-ci
+                    omet alors le filtre côté query (cf. `buildLuceneQuery`).
 
-                    {/* Raccourcis : 9 groupes prêts à l'emploi (toggle complet) */}
-                    <div>
-                      <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-gray-400">
-                        Raccourcis
-                      </p>
-                      <ul className="flex flex-wrap gap-1.5">
-                        {SECTOR_OPTIONS.map((sector) => {
-                          const allSelected = sector.codes.every((c) =>
-                            selectedCodes.has(c),
-                          )
-                          const someSelected =
-                            !allSelected &&
-                            sector.codes.some((c) => selectedCodes.has(c))
-                          return (
-                            <li key={sector.label}>
-                              <button
-                                type="button"
-                                onClick={() => toggleGroup(sector)}
-                                disabled={isLoading}
-                                aria-pressed={allSelected}
-                                aria-label={sector.label}
-                                title={sector.codes.join(', ')}
-                                className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition-colors duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/40 disabled:cursor-not-allowed disabled:opacity-50 ${
-                                  allSelected
-                                    ? 'border-green-200 bg-green-100 text-green-700 ring-1 ring-green-200 hover:bg-green-200/60 dark:border-green-800 dark:bg-green-950/60 dark:text-green-300 dark:ring-green-900'
-                                    : someSelected
-                                      ? 'border-green-200 bg-white/[0.04] backdrop-blur-md text-green-700 hover:bg-green-50 dark:border-green-800/60 dark:bg-gray-900 dark:text-green-300'
-                                      : 'border-white/10 bg-white/[0.04] backdrop-blur-md text-gray-200 hover:border-white/20 hover:bg-white/[0.06]'
-                                }`}
-                              >
-                                {allSelected && (
-                                  <svg
-                                    xmlns="http://www.w3.org/2000/svg"
-                                    width="11"
-                                    height="11"
-                                    viewBox="0 0 24 24"
-                                    fill="none"
-                                    stroke="currentColor"
-                                    strokeWidth="3"
-                                    strokeLinecap="round"
-                                    strokeLinejoin="round"
-                                    aria-hidden="true"
-                                  >
-                                    <polyline points="20 6 9 17 4 12" />
-                                  </svg>
-                                )}
-                                {sector.label}
-                                <span className="tabular-nums text-[10px] opacity-70">
-                                  ({sector.codes.length})
-                                </span>
-                              </button>
-                            </li>
-                          )
-                        })}
-                      </ul>
-                    </div>
-
-                    {/* Liste détaillée recherchable : ~110 codes BEGES prioritaires */}
-                    <div className="mt-4">
-                      <p
-                        id="naf-beges-detail-label"
-                        className="mb-2 text-xs font-semibold uppercase tracking-wider text-gray-400"
-                      >
-                        Liste détaillée (sections A · C · D · E · F · H)
-                      </p>
+                    Code à restaurer (raccourcis groupes + multi-select BEGES) :
+                    <fieldset>
+                      <legend>Secteurs cibles (optionnel — tous si aucun coché)</legend>
+                      ...raccourcis SECTOR_OPTIONS via toggleGroup()...
                       <NafCodeMultiSelect
                         selectedCodes={selectedCodesArray}
                         onChange={handleMultiSelectChange}
-                        disabled={isLoading}
-                        showSuggestedGroups={false}
                         availableCodes={NAF_BEGES_CODES}
-                        labelledBy="naf-beges-detail-label"
-                        searchPlaceholder="Rechercher par code (ex. 23.51) ou libellé (ex. ciment)..."
+                        ...
                       />
-                    </div>
-                  </fieldset>
+                    </fieldset>
+                  */}
 
                   {/* Zone géographique */}
                   <div className="space-y-1.5">

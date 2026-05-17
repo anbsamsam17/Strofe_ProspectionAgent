@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { DEFAULT_SCORING_WEIGHTS, type Profile, type ProfileSettings } from '@/lib/types'
 import { SettingsForm } from '@/components/settings/settings-form'
+import { LogoutButton } from '@/components/settings/logout-button'
 
 // Force le rendu dynamique — les settings doivent toujours refléter la valeur
 // actuelle en base (pas de version cached servie après une mise à jour récente)
@@ -46,11 +47,11 @@ export default async function SettingsPage() {
           Paramètres
         </h1>
         <p className="mt-0.5 text-sm text-gray-400">
-          Configurez les critères de prospection utilisés par l&apos;agent IA.
+          Compte, pondération du scoring, notifications.
         </p>
       </div>
 
-      {/* ── Infos compte ─────────────────────────────────────── */}
+      {/* ── Mon compte ───────────────────────────────────────── */}
       <section
         aria-labelledby="account-title"
         className="rounded-xl border border-white/[0.06] bg-white/[0.03] backdrop-blur-md shadow-sm dark:border-gray-800/60 dark:bg-gray-900"
@@ -60,7 +61,7 @@ export default async function SettingsPage() {
             id="account-title"
             className="text-xs font-semibold uppercase tracking-widest text-gray-400 dark:text-gray-400"
           >
-            Compte
+            Mon compte
           </h2>
         </div>
 
@@ -91,17 +92,22 @@ export default async function SettingsPage() {
                   {profile?.email ?? user.email}
                 </p>
               </div>
-              {profile?.company_name && (
+              {/* TODO 2026-05-17 : champ "Entreprise" masqué (UI minimaliste).
+                  Le champ profile.company_name reste persisté en DB. */}
+              {/* {profile?.company_name && (
                 <div>
-                  <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-400">
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">
                     Entreprise
                   </p>
-                  <p className="mt-0.5 text-sm text-gray-200">
-                    {profile.company_name}
-                  </p>
+                  <p className="mt-0.5 text-sm text-gray-200">{profile.company_name}</p>
                 </div>
-              )}
+              )} */}
             </div>
+          </div>
+
+          {/* Bouton de déconnexion */}
+          <div className="mt-5 flex justify-end border-t border-white/[0.06] pt-4">
+            <LogoutButton />
           </div>
         </div>
       </section>

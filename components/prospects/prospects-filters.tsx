@@ -25,6 +25,11 @@ interface ProspectsFiltersProps {
   currentStatuts: string[]
   currentSecteur: string
   currentScoreMin: number
+  /**
+   * Borne supérieure du range de score (0-100). Défaut = 100 = pas de filtre haut.
+   * Combiné avec `currentScoreMin`, formant un range [min, max].
+   */
+  currentScoreMax?: number
   currentArchived: boolean
   currentContactTypes?: ContactFilterType[]
   currentBegesFilters?: BegesFilterValue[]
@@ -58,19 +63,28 @@ const ALL_CONTACT_TYPES: { value: ContactFilterType; label: string }[] = [
   { value: 'linkedin', label: 'LinkedIn' },
 ]
 
+// Pills tri — labels préfixés "Tri :" pour clarifier la sémantique (TRI vs FILTRE).
+// On garde les glyphes flèches "Score ↓" / "Score ↑" / "Récent" / "Ancien" en suffixe
+// pour rester lisible d'un coup d'oeil et compat des tests existants.
 const ALL_SORTS: { value: SortValue; label: string }[] = [
-  { value: 'score_desc', label: 'Score ↓' },
-  { value: 'score_asc', label: 'Score ↑' },
-  { value: 'created_desc', label: 'Récent' },
-  { value: 'created_asc', label: 'Ancien' },
+  { value: 'score_desc', label: 'Tri : Score ↓' },
+  { value: 'score_asc', label: 'Tri : Score ↑' },
+  { value: 'created_desc', label: 'Tri : Récent' },
+  { value: 'created_asc', label: 'Tri : Ancien' },
 ]
 
 const DEFAULT_SORT: SortValue = 'score_desc'
+
+// Bornes du range score (filtre [min, max], 0-100, pas de 5).
+const SCORE_MIN_BOUND = 0
+const SCORE_MAX_BOUND = 100
+const SCORE_STEP = 5
 
 export function ProspectsFilters({
   currentStatuts,
   currentSecteur,
   currentScoreMin,
+  currentScoreMax = SCORE_MAX_BOUND,
   currentArchived,
   currentContactTypes = [],
   currentBegesFilters = [],
@@ -84,6 +98,7 @@ export function ProspectsFilters({
   const [statuts, setStatuts] = useState<string[]>(currentStatuts)
   const [secteur, setSecteur] = useState(currentSecteur)
   const [scoreMin, setScoreMin] = useState(currentScoreMin)
+  const [scoreMax, setScoreMax] = useState(currentScoreMax)
   const [archived, setArchived] = useState<boolean>(currentArchived)
   const [contactTypes, setContactTypes] = useState<ContactFilterType[]>(currentContactTypes)
   const [begesFilters, setBegesFilters] = useState<BegesFilterValue[]>(currentBegesFilters)
@@ -94,6 +109,7 @@ export function ProspectsFilters({
     newStatuts: string[],
     newSecteur: string,
     newScoreMin: number,
+    newScoreMax: number,
     newArchived: boolean,
     newContactTypes: ContactFilterType[],
     newBegesFilters: BegesFilterValue[],
@@ -114,10 +130,19 @@ export function ProspectsFilters({
       params.delete('secteur')
     }
 
-    if (newScoreMin > 0) {
+    // Range score [min, max] :
+    //   - min > 0 → ?score_min=X
+    //   - max < 100 → ?score_max=Y
+    //   - défaut [0, 100] = aucun param (URL propre).
+    if (newScoreMin > SCORE_MIN_BOUND) {
       params.set('score_min', String(newScoreMin))
     } else {
       params.delete('score_min')
+    }
+    if (newScoreMax < SCORE_MAX_BOUND) {
+      params.set('score_max', String(newScoreMax))
+    } else {
+      params.delete('score_max')
     }
 
     if (newArchived) {
@@ -158,7 +183,7 @@ export function ProspectsFilters({
       ? statuts.filter((s) => s !== value)
       : [...statuts, value]
     setStatuts(next)
-    applyFilters(next, secteur, scoreMin, archived, contactTypes, begesFilters, sort)
+    applyFilters(next, secteur, scoreMin, scoreMax, archived, contactTypes, begesFilters, sort)
   }
 
   function toggleContactType(value: ContactFilterType) {
@@ -166,7 +191,7 @@ export function ProspectsFilters({
       ? contactTypes.filter((t) => t !== value)
       : [...contactTypes, value]
     setContactTypes(next)
-    applyFilters(statuts, secteur, scoreMin, archived, next, begesFilters, sort)
+    applyFilters(statuts, secteur, scoreMin, scoreMax, archived, next, begesFilters, sort)
   }
 
   function toggleBegesValue(value: BegesFilterValue) {
@@ -174,7 +199,7 @@ export function ProspectsFilters({
       ? begesFilters.filter((b) => b !== value)
       : [...begesFilters, value]
     setBegesFilters(next)
-    applyFilters(statuts, secteur, scoreMin, archived, contactTypes, next, sort)
+    applyFilters(statuts, secteur, scoreMin, scoreMax, archived, contactTypes, next, sort)
   }
 
   function handleSecteurChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -183,32 +208,45 @@ export function ProspectsFilters({
 
   function handleSecteurKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
     if (e.key === 'Enter') {
-      applyFilters(statuts, secteur, scoreMin, archived, contactTypes, begesFilters, sort)
+      applyFilters(statuts, secteur, scoreMin, scoreMax, archived, contactTypes, begesFilters, sort)
     }
   }
 
-  function handleScoreChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const val = parseInt(e.target.value, 10)
+  // Range double-thumb : clamp min ≤ max (les thumbs ne peuvent jamais se croiser).
+  // On force au moins 1 cran d'écart (SCORE_STEP) pour rester saisissable visuellement.
+  function handleScoreMinChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const raw = parseInt(e.target.value, 10)
+    const clamped = Math.min(raw, scoreMax - SCORE_STEP)
+    const val = Math.max(SCORE_MIN_BOUND, clamped)
     setScoreMin(val)
-    applyFilters(statuts, secteur, val, archived, contactTypes, begesFilters, sort)
+    applyFilters(statuts, secteur, val, scoreMax, archived, contactTypes, begesFilters, sort)
+  }
+
+  function handleScoreMaxChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const raw = parseInt(e.target.value, 10)
+    const clamped = Math.max(raw, scoreMin + SCORE_STEP)
+    const val = Math.min(SCORE_MAX_BOUND, clamped)
+    setScoreMax(val)
+    applyFilters(statuts, secteur, scoreMin, val, archived, contactTypes, begesFilters, sort)
   }
 
   function toggleArchived() {
     const next = !archived
     setArchived(next)
-    applyFilters(statuts, secteur, scoreMin, next, contactTypes, begesFilters, sort)
+    applyFilters(statuts, secteur, scoreMin, scoreMax, next, contactTypes, begesFilters, sort)
   }
 
   function selectSort(value: SortValue) {
     if (value === sort) return
     setSort(value)
-    applyFilters(statuts, secteur, scoreMin, archived, contactTypes, begesFilters, value)
+    applyFilters(statuts, secteur, scoreMin, scoreMax, archived, contactTypes, begesFilters, value)
   }
 
   function handleReset() {
     setStatuts([])
     setSecteur('')
-    setScoreMin(0)
+    setScoreMin(SCORE_MIN_BOUND)
+    setScoreMax(SCORE_MAX_BOUND)
     setArchived(false)
     setContactTypes([])
     setBegesFilters([])
@@ -218,18 +256,23 @@ export function ProspectsFilters({
     })
   }
 
+  const hasScoreFilter = scoreMin > SCORE_MIN_BOUND || scoreMax < SCORE_MAX_BOUND
   const hasFilters =
     statuts.length > 0 ||
     secteur ||
-    scoreMin > 0 ||
+    hasScoreFilter ||
     archived ||
     contactTypes.length > 0 ||
     begesFilters.length > 0
-  const scorePercent = scoreMin
+
+  // Pourcentages pour la track active du range (entre les 2 thumbs).
+  const scoreLeftPct = (scoreMin / SCORE_MAX_BOUND) * 100
+  const scoreRightPct = (scoreMax / SCORE_MAX_BOUND) * 100
 
   // Classes utilitaires partagées entre pills (statut, contact, tri).
+  // Padding élargi (py-1.5 px-3) vs version compactée précédente (py-1 px-2.5).
   const pillBase =
-    'inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium whitespace-nowrap transition-all duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-green-500/40 focus-visible:ring-offset-1 focus-visible:ring-offset-[oklch(11%_0.022_250)]'
+    'inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium whitespace-nowrap transition-all duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-green-500/40 focus-visible:ring-offset-1 focus-visible:ring-offset-[oklch(11%_0.022_250)]'
   const pillInactive =
     'border-white/10 bg-white/[0.04] backdrop-blur-md text-gray-300 hover:border-white/20 hover:bg-white/[0.08]'
   const pillActive =
@@ -240,11 +283,11 @@ export function ProspectsFilters({
       className={`rounded-2xl border border-white/[0.08] bg-white/[0.03] backdrop-blur-md shadow-sm transition-opacity ${isPending ? 'opacity-60' : ''}`}
       aria-label="Filtres des prospects"
     >
-      {/* ── Ribbon horizontal compact ───────────────────────────────────────
+      {/* ── Ribbon horizontal — légèrement élargi (py-3 sm:py-4) ──────────────
           Mobile : empile en colonnes (flex-col).
-          Desktop ≥ sm : tout sur une seule ligne grâce à flex-wrap.
+          Desktop ≥ sm : 1 ligne via flex-wrap, gap-4 confortable.
       */}
-      <div className="flex flex-col gap-2 p-2.5 sm:flex-row sm:flex-wrap sm:items-center sm:gap-3 sm:p-3">
+      <div className="flex flex-col gap-3 p-3 sm:flex-row sm:flex-wrap sm:items-center sm:gap-4 sm:p-4">
         {/* Pills statut — scroll horizontal si dépassement.
             Le fieldset+legend porte déjà la sémantique group ; on évite le
             double role="group" sur le div interne (sinon Testing Library
@@ -280,8 +323,8 @@ export function ProspectsFilters({
           </label>
           <svg
             xmlns="http://www.w3.org/2000/svg"
-            width="13"
-            height="13"
+            width="14"
+            height="14"
             viewBox="0 0 24 24"
             fill="none"
             stroke="currentColor"
@@ -301,45 +344,88 @@ export function ProspectsFilters({
             onChange={handleSecteurChange}
             onKeyDown={handleSecteurKeyDown}
             onBlur={() =>
-              applyFilters(statuts, secteur, scoreMin, archived, contactTypes, begesFilters, sort)
+              applyFilters(
+                statuts,
+                secteur,
+                scoreMin,
+                scoreMax,
+                archived,
+                contactTypes,
+                begesFilters,
+                sort,
+              )
             }
             placeholder="Secteur..."
-            className="w-full rounded-full border border-white/[0.08] bg-white/[0.04] backdrop-blur-md py-1.5 pl-7 pr-2.5 text-xs text-white placeholder-gray-400 transition focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-500/20"
+            className="w-full rounded-full border border-white/[0.08] bg-white/[0.04] backdrop-blur-md py-2 pl-8 pr-3 text-xs text-white placeholder-gray-400 transition focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-500/20"
           />
         </div>
 
-        {/* Score minimum — slider + badge value */}
-        <div className="flex w-full items-center gap-2 sm:w-48">
-          <label
-            htmlFor="filter-score"
-            className="font-mono text-[10px] uppercase tracking-wider text-gray-400"
-          >
+        {/* Filtre score — range DOUBLE-THUMB [min, max].
+            2 inputs range superposés en absolute, track unique en background.
+            Affichage en clair "25 — 80" en font-mono. */}
+        <div className="flex w-full items-center gap-2 sm:w-64">
+          <span className="font-mono text-[10px] uppercase tracking-wider text-gray-400">
             Score
-          </label>
-          <div className="relative flex-1">
+          </span>
+          <div className="relative h-5 flex-1">
+            {/* Track de fond (0 → 100) */}
             <div
-              className="h-1.5 w-full overflow-hidden rounded-full bg-white/[0.05]"
+              className="pointer-events-none absolute left-0 top-1/2 h-1.5 w-full -translate-y-1/2 rounded-full bg-white/[0.05]"
               aria-hidden="true"
-            >
-              <div
-                className="h-1.5 rounded-full bg-green-500 transition-all"
-                style={{ width: `${scorePercent}%` }}
-              />
-            </div>
+            />
+            {/* Track active (entre min et max) */}
+            <div
+              className="pointer-events-none absolute top-1/2 h-1.5 -translate-y-1/2 rounded-full bg-green-500 transition-all"
+              style={{
+                left: `${scoreLeftPct}%`,
+                width: `${Math.max(0, scoreRightPct - scoreLeftPct)}%`,
+              }}
+              aria-hidden="true"
+            />
+            {/* Thumb MIN — input range superposé, opacity-0, z-index plus haut
+                quand min approche le max pour rester saisissable. */}
             <input
-              id="filter-score"
+              id="filter-score-min"
               type="range"
-              min={0}
-              max={100}
-              step={5}
+              min={SCORE_MIN_BOUND}
+              max={SCORE_MAX_BOUND}
+              step={SCORE_STEP}
               value={scoreMin}
-              onChange={handleScoreChange}
-              className="absolute inset-0 w-full cursor-pointer opacity-0"
+              onChange={handleScoreMinChange}
               aria-label={`Score minimum : ${scoreMin}`}
+              className="absolute inset-0 z-20 h-5 w-full cursor-pointer appearance-none bg-transparent opacity-0"
+              style={{ pointerEvents: 'auto' }}
+            />
+            {/* Thumb MAX — second input range. */}
+            <input
+              id="filter-score-max"
+              type="range"
+              min={SCORE_MIN_BOUND}
+              max={SCORE_MAX_BOUND}
+              step={SCORE_STEP}
+              value={scoreMax}
+              onChange={handleScoreMaxChange}
+              aria-label={`Score maximum : ${scoreMax}`}
+              className="absolute inset-0 z-10 h-5 w-full cursor-pointer appearance-none bg-transparent opacity-0"
+              style={{ pointerEvents: 'auto' }}
+            />
+            {/* Bullets visuelles aux positions des thumbs (purement décoratifs). */}
+            <span
+              className="pointer-events-none absolute top-1/2 h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full border border-green-300 bg-green-500 shadow-sm"
+              style={{ left: `${scoreLeftPct}%` }}
+              aria-hidden="true"
+            />
+            <span
+              className="pointer-events-none absolute top-1/2 h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full border border-green-300 bg-green-500 shadow-sm"
+              style={{ left: `${scoreRightPct}%` }}
+              aria-hidden="true"
             />
           </div>
-          <span className="min-w-[2ch] rounded-md bg-green-500/15 px-1.5 py-0.5 text-center text-[11px] font-bold tabular-nums text-green-300 ring-1 ring-green-500/25">
-            {scoreMin}
+          <span
+            className="min-w-[5ch] rounded-md bg-green-500/15 px-2 py-0.5 text-center font-mono text-[11px] font-bold tabular-nums text-green-300 ring-1 ring-green-500/25"
+            aria-label={`Plage de score sélectionnée : ${scoreMin} à ${scoreMax}`}
+          >
+            {scoreMin} — {scoreMax}
           </span>
         </div>
 
@@ -374,8 +460,8 @@ export function ProspectsFilters({
           >
             <svg
               xmlns="http://www.w3.org/2000/svg"
-              width="13"
-              height="13"
+              width="14"
+              height="14"
               viewBox="0 0 24 24"
               fill="none"
               stroke="currentColor"
@@ -396,8 +482,8 @@ export function ProspectsFilters({
           >
             <svg
               xmlns="http://www.w3.org/2000/svg"
-              width="13"
-              height="13"
+              width="14"
+              height="14"
               viewBox="0 0 24 24"
               fill="none"
               stroke="currentColor"
@@ -420,8 +506,8 @@ export function ProspectsFilters({
           >
             <svg
               xmlns="http://www.w3.org/2000/svg"
-              width="13"
-              height="13"
+              width="14"
+              height="14"
               viewBox="0 0 24 24"
               fill="none"
               stroke="currentColor"
@@ -443,7 +529,7 @@ export function ProspectsFilters({
             aria-expanded={moreOpen}
             aria-controls="filters-more-panel"
             aria-label="Plus de filtres"
-            className={`inline-flex h-7 w-7 items-center justify-center rounded-full border transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-green-500/40 ${
+            className={`inline-flex h-8 w-8 items-center justify-center rounded-full border transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-green-500/40 ${
               moreOpen || contactTypes.length > 0
                 ? 'border-green-500/40 bg-green-500/15 text-green-300 ring-1 ring-green-500/25'
                 : 'border-white/10 bg-white/[0.04] text-gray-300 hover:border-white/20 hover:bg-white/[0.08]'
@@ -473,7 +559,7 @@ export function ProspectsFilters({
       {moreOpen && (
         <div
           id="filters-more-panel"
-          className="border-t border-white/[0.06] px-3 py-2.5"
+          className="border-t border-white/[0.06] px-4 py-3"
         >
           <fieldset aria-label="Filtrer par canal de contact disponible">
             <legend className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-gray-400">
@@ -501,12 +587,12 @@ export function ProspectsFilters({
 
       {/* ── Pied — résumé filtres actifs + Réinitialiser ─────────────────── */}
       {hasFilters && (
-        <div className="flex items-center justify-between border-t border-white/[0.06] px-3 py-2">
+        <div className="flex items-center justify-between border-t border-white/[0.06] px-4 py-2.5">
           <p className="truncate text-[11px] text-gray-400">
             {[
               statuts.length > 0 && `${statuts.length} statut${statuts.length > 1 ? 's' : ''}`,
               secteur && `secteur "${secteur}"`,
-              scoreMin > 0 && `score ≥ ${scoreMin}`,
+              hasScoreFilter && `score ${scoreMin}–${scoreMax}`,
               archived && 'archivés',
               begesFilters.includes('obligation') && 'Obligation BEGES',
               begesFilters.includes('missing') && 'BEGES manquant',
@@ -548,7 +634,7 @@ export function ProspectsFilters({
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// ToggleIconButton — bouton icône carré 28px avec aria-label.
+// ToggleIconButton — bouton icône carré 32px avec aria-label.
 // On garde le label texte uniquement pour l'a11y (tooltip natif via title +
 // aria-label) ; visuellement l'icône suffit pour gagner de la place.
 // ─────────────────────────────────────────────────────────────────────────────
@@ -574,7 +660,7 @@ function ToggleIconButton({ active, onClick, label, tone, children }: ToggleIcon
       aria-pressed={active}
       aria-label={label}
       title={label}
-      className={`inline-flex h-7 w-7 items-center justify-center rounded-full border transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-green-500/40 ${
+      className={`inline-flex h-8 w-8 items-center justify-center rounded-full border transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-green-500/40 ${
         active
           ? toneActive[tone]
           : 'border-white/10 bg-white/[0.04] text-gray-300 hover:border-white/20 hover:bg-white/[0.08]'

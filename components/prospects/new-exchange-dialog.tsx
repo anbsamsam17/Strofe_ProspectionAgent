@@ -1,6 +1,7 @@
 ﻿'use client'
 
 import { useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { useRouter } from 'next/navigation'
 
 // ── Types locaux (TODO(coord-A): déplacer dans lib/types.ts) ──────────────────
@@ -71,6 +72,12 @@ export function NewExchangeDialog({ prospectId }: NewExchangeDialogProps) {
   const [pending, setPending] = useState(false)
   const firstFieldRef = useRef<HTMLInputElement | null>(null)
   const triggerRef = useRef<HTMLButtonElement | null>(null)
+  // Portal mount : sur le serveur on ne rend rien. On flip à true au 1er render
+  // côté client pour éviter mismatch SSR/CSR.
+  const [mounted, setMounted] = useState(false)
+  useEffect(() => {
+    setMounted(true)
+  }, [])
 
   useEffect(() => {
     if (!open) return
@@ -80,9 +87,13 @@ export function NewExchangeDialog({ prospectId }: NewExchangeDialogProps) {
       if (e.key === 'Escape') closeDialog()
     }
     document.addEventListener('keydown', onKeyDown)
+    // Body scroll lock : on bloque le scroll sous le backdrop.
+    const previousOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
     return () => {
       clearTimeout(t)
       document.removeEventListener('keydown', onKeyDown)
+      document.body.style.overflow = previousOverflow
     }
   }, [open])
 
@@ -164,12 +175,12 @@ export function NewExchangeDialog({ prospectId }: NewExchangeDialogProps) {
         Nouvel échange
       </button>
 
-      {open && (
+      {open && mounted && createPortal(
         <div
           role="dialog"
           aria-modal="true"
           aria-labelledby="new-exchange-title"
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4 backdrop-blur-sm"
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 px-4 backdrop-blur-sm"
           onClick={(e) => {
             if (e.target === e.currentTarget) closeDialog()
           }}
@@ -332,7 +343,8 @@ export function NewExchangeDialog({ prospectId }: NewExchangeDialogProps) {
               </div>
             </form>
           </div>
-        </div>
+        </div>,
+        document.body,
       )}
     </>
   )

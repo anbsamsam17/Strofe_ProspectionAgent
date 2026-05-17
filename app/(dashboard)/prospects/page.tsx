@@ -253,6 +253,11 @@ interface SearchParams {
   statut?: string
   secteur?: string
   score_min?: string
+  /**
+   * Borne supérieure du range de score (0-100). Combinée à `score_min` pour
+   * former un filtre [min, max]. Absente = 100 = pas de filtre haut.
+   */
+  score_max?: string
   /** "1" pour afficher uniquement les prospects archivés. */
   archived?: string
   contact_type?: string
@@ -369,6 +374,13 @@ export default async function ProspectsPage({
     : []
   const secteurFilter = params.secteur ?? ''
   const scoreMin = params.score_min ? parseInt(params.score_min, 10) : 0
+  // Borne haute du range. Défaut 100 = pas de filtre. Clamp défensif 0-100
+  // (anti-fuzzing URL) et garantit max >= min (sinon on neutralise le filtre).
+  const scoreMaxRaw = params.score_max ? parseInt(params.score_max, 10) : 100
+  const scoreMax =
+    Number.isFinite(scoreMaxRaw) && scoreMaxRaw >= 0 && scoreMaxRaw <= 100
+      ? Math.max(scoreMaxRaw, scoreMin)
+      : 100
   const showArchived = params.archived === '1'
   const contactTypes = parseContactTypes(params.contact_type)
   // Parsing CSV : ?beges=missing,obligation → ['missing', 'obligation']
@@ -403,8 +415,13 @@ export default async function ProspectsPage({
   if (secteurFilter) {
     query = query.ilike('secteur_libelle', `%${secteurFilter}%`)
   }
+  // Range score [min, max] — on omet `.gte` si min=0 et `.lte` si max=100
+  // pour ne pas surfiltrer une plage qui couvre tout.
   if (scoreMin > 0) {
     query = query.gte('score_priorite', scoreMin)
+  }
+  if (scoreMax < 100) {
+    query = query.lte('score_priorite', scoreMax)
   }
   if (contactTypes.length > 0) {
     // Multi-select = OR : un prospect matche s'il a AU MOINS un des canaux choisis.
