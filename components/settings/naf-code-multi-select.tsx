@@ -247,9 +247,9 @@ export function NafCodeMultiSelect({
                     aria-pressed={allSelected}
                     className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-green-500/30 disabled:cursor-not-allowed disabled:opacity-50 ${
                       allSelected
-                        ? 'border-green-200 bg-green-100 text-green-700 ring-1 ring-green-200 hover:bg-green-200/60 dark:border-green-800 dark:bg-green-950/60 dark:text-green-300 dark:ring-green-900'
+                        ? 'border-green-500/40 bg-green-500/[0.18] text-green-300 ring-1 ring-green-500/30 hover:bg-green-500/[0.25]'
                         : someSelected
-                          ? 'border-green-200 bg-white/[0.04] backdrop-blur-md text-green-700 hover:bg-green-50 dark:border-green-800/60 dark:bg-gray-900 dark:text-green-300'
+                          ? 'border-green-500/30 bg-green-500/[0.08] text-green-300 hover:bg-green-500/[0.14]'
                           : 'border-white/10 bg-white/[0.04] backdrop-blur-md text-gray-200 hover:border-white/20 hover:bg-white/[0.06]'
                     }`}
                   >
@@ -383,19 +383,19 @@ export function NafCodeMultiSelect({
               aria-selected={isSelected}
               onClick={() => toggleCode(entry.code)}
               onMouseEnter={() => setActiveIndex(index)}
-              className={`flex cursor-pointer items-start gap-3 border-b border-white/[0.06] px-3 py-2 text-sm transition-colors duration-150 last:border-b-0 dark:border-gray-800 ${
+              className={`flex cursor-pointer items-start gap-3 border-b border-white/[0.06] px-3 py-2 text-sm transition-colors duration-150 last:border-b-0 ${
                 isActive
-                  ? 'bg-green-50 dark:bg-green-950/40'
+                  ? 'bg-green-500/[0.14]'
                   : isSelected
-                    ? 'bg-green-50/60 dark:bg-green-950/20'
-                    : 'hover:bg-white/[0.06] dark:hover:bg-gray-800/60'
+                    ? 'bg-green-500/[0.08]'
+                    : 'hover:bg-white/[0.06]'
               }`}
             >
               <span
                 className={`mt-0.5 flex h-4 w-4 flex-shrink-0 items-center justify-center rounded border-2 transition-colors duration-150 ${
                   isSelected
                     ? 'border-green-600 bg-green-600'
-                    : 'border-gray-300 bg-white/[0.04] backdrop-blur-md dark:border-gray-600 dark:bg-gray-800'
+                    : 'border-white/20 bg-white/[0.04] backdrop-blur-md'
                 }`}
                 aria-hidden="true"
               >
@@ -451,14 +451,14 @@ export function NafCodeMultiSelect({
           <ul className="flex flex-wrap gap-2" aria-label="Codes NAF sélectionnés">
             {selectedCodes.map((code) => (
               <li key={code}>
-                <span className="inline-flex items-center gap-1 rounded-full bg-green-100 px-2.5 py-1 text-xs font-medium text-green-700 ring-1 ring-green-200 dark:bg-green-950/60 dark:text-green-300 dark:ring-green-900">
+                <span className="inline-flex items-center gap-1 rounded-full bg-green-500/[0.15] px-2.5 py-1 text-xs font-medium text-green-300 ring-1 ring-green-500/30">
                   <span className="font-mono tabular-nums">{code}</span>
                   <button
                     type="button"
                     onClick={() => removeCode(code)}
                     disabled={disabled}
                     aria-label={`Retirer le code ${code}`}
-                    className="rounded-full p-0.5 text-green-600 transition-colors hover:bg-green-200 hover:text-green-900 focus:outline-none focus:ring-2 focus:ring-green-500/40 disabled:cursor-not-allowed disabled:opacity-50 dark:text-green-400 dark:hover:bg-green-900/50 dark:hover:text-green-200"
+                    className="rounded-full p-0.5 text-green-400 transition-colors hover:bg-green-500/[0.25] hover:text-green-200 focus:outline-none focus:ring-2 focus:ring-green-500/40 disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     <svg
                       xmlns="http://www.w3.org/2000/svg"

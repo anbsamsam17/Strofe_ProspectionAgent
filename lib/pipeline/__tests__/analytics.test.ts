@@ -7,6 +7,7 @@ import type { AgentRun, Prospect, ProspectStatus } from '@/lib/types'
 import {
   buildFunnel,
   formatDurationShort,
+  sectorsByNafSection,
   sourcingMix,
   topSectors,
   toRunStat,
@@ -309,5 +310,91 @@ describe('formatDurationShort', () => {
     expect(formatDurationShort(null)).toBe('—')
     expect(formatDurationShort(-1)).toBe('—')
     expect(formatDurationShort(Number.NaN)).toBe('—')
+  })
+})
+
+// ── sectorsByNafSection ──────────────────────────────────────────────────────
+
+describe('sectorsByNafSection', () => {
+  it('agrège 5 prospects de 3 sections différentes et retourne 3 entrées avec les bons counts', () => {
+    // Q = Santé humaine (86.xx), C = Industrie manufacturière (25.xx), H = Transports (49.xx)
+    const prospects = [
+      makeProspect({ id: '1', secteur_naf: '86.10Z' }), // Q
+      makeProspect({ id: '2', secteur_naf: '86.21Z' }), // Q
+      makeProspect({ id: '3', secteur_naf: '25.11Z' }), // C
+      makeProspect({ id: '4', secteur_naf: '49.10Z' }), // H
+      makeProspect({ id: '5', secteur_naf: '86.90F' }), // Q
+    ]
+
+    const result = sectorsByNafSection(prospects)
+
+    // Doit contenir exactement les 3 sections présentes
+    expect(result).toHaveLength(3)
+
+    // Ordre officiel INSEE : C (lettre C) avant H avant Q
+    expect(result.map((r) => r.code)).toEqual(['C', 'H', 'Q'])
+    expect(result.find((r) => r.code === 'Q')?.count).toBe(3)
+    expect(result.find((r) => r.code === 'C')?.count).toBe(1)
+    expect(result.find((r) => r.code === 'H')?.count).toBe(1)
+  })
+
+  it('calcule sharePct correctement sur le total des prospects avec NAF valide', () => {
+    // 2 sur 4 prospects ont un NAF reconnu pour la section C, 2 pour Q
+    const prospects = [
+      makeProspect({ id: '1', secteur_naf: '25.11Z' }), // C
+      makeProspect({ id: '2', secteur_naf: '25.62Z' }), // C
+      makeProspect({ id: '3', secteur_naf: '86.10Z' }), // Q
+      makeProspect({ id: '4', secteur_naf: '86.21Z' }), // Q
+    ]
+
+    const result = sectorsByNafSection(prospects)
+
+    expect(result).toHaveLength(2)
+    // total = 4, C = 2 → 50%, Q = 2 → 50%
+    expect(result.find((r) => r.code === 'C')?.sharePct).toBeCloseTo(50, 5)
+    expect(result.find((r) => r.code === 'Q')?.sharePct).toBeCloseTo(50, 5)
+  })
+
+  it('skip les prospects sans NAF (null, undefined, vide, inconnu) sans erreur', () => {
+    const prospects = [
+      makeProspect({ id: '1', secteur_naf: undefined }),
+      makeProspect({ id: '2', secteur_naf: '' }),
+      makeProspect({ id: '3', secteur_naf: 'XX' }), // division inconnue
+      makeProspect({ id: '4', secteur_naf: '86.10Z' }), // Q — seul valide
+    ]
+
+    const result = sectorsByNafSection(prospects)
+
+    expect(result).toHaveLength(1)
+    expect(result[0].code).toBe('Q')
+    expect(result[0].count).toBe(1)
+    // sharePct calculé sur 1 seul prospect valide
+    expect(result[0].sharePct).toBeCloseTo(100, 5)
+  })
+
+  it('retourne [] sur liste vide', () => {
+    expect(sectorsByNafSection([])).toEqual([])
+  })
+
+  it('retourne [] si tous les prospects ont un NAF invalide', () => {
+    const prospects = [
+      makeProspect({ id: '1', secteur_naf: undefined }),
+      makeProspect({ id: '2', secteur_naf: '' }),
+    ]
+    expect(sectorsByNafSection(prospects)).toEqual([])
+  })
+
+  it('respecte l\'ordre officiel INSEE (A avant B avant C, etc.) quelle que soit la fréquence', () => {
+    // On insère volontairement dans l'ordre inverse (U, C, A)
+    const prospects = [
+      makeProspect({ id: '1', secteur_naf: '99.00Z' }), // U
+      makeProspect({ id: '2', secteur_naf: '99.00Z' }), // U
+      makeProspect({ id: '3', secteur_naf: '25.11Z' }), // C
+      makeProspect({ id: '4', secteur_naf: '01.11Z' }), // A
+    ]
+
+    const result = sectorsByNafSection(prospects)
+
+    expect(result.map((r) => r.code)).toEqual(['A', 'C', 'U'])
   })
 })

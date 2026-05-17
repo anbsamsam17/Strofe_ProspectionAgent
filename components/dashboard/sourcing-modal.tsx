@@ -3,18 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import { useAgentRunStatus } from '@/lib/hooks/use-agent-run-status'
-// TODO: réactiver une fois Sirene stable (cf. hindsight 2026-05-17 HTTP 400)
-// Imports liés à la sélection NAF — conservés pour réactivation rapide :
-// import { useMemo } from 'react'
-// import { NAF_GROUPS_SUGGESTED, type NafGroup } from '@/lib/constants/naf-codes'
-// import {
-//   NAF_BEGES_PRIORITY,
-//   NAF_BEGES_PRIORITY_SET,
-// } from '@/lib/constants/naf-beges-priority'
-// import { NafCodeMultiSelect } from '@/components/settings/naf-code-multi-select'
-//
-// const NAF_BEGES_CODES: readonly string[] = NAF_BEGES_PRIORITY.map((c) => c.code)
-// const SECTOR_OPTIONS: readonly NafGroup[] = NAF_GROUPS_SUGGESTED
+import { NAF_SECTIONS, type NafSection } from '@/lib/agent/naf-labels'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -28,6 +17,9 @@ interface FormData {
   effectifMax: string
   targetRegion: string
 }
+
+/** Sections NAF sélectionnées (lettres A-U). Vide = toutes sections. */
+type SelectedSections = Set<NafSection>
 
 /**
  * Stats normalisées affichées à l'utilisateur après un run.
@@ -114,8 +106,8 @@ export function SourcingModal({ isOpen, onClose }: SourcingModalProps) {
     effectifMax: '500',
     targetRegion: '',
   })
-  // TODO: réactiver une fois Sirene stable (cf. hindsight 2026-05-17 HTTP 400)
-  // const [selectedCodes, setSelectedCodes] = useState<Set<string>>(new Set())
+  /** Sections NAF cochées. Vide = toutes sections (comportement actuel préservé). */
+  const [selectedSections, setSelectedSections] = useState<SelectedSections>(new Set())
   const [view, setView] = useState<ViewMode>('form')
   const [error, setError] = useState<string | null>(null)
   const [stats, setStats] = useState<RunStats | null>(null)
@@ -315,10 +307,12 @@ export function SourcingModal({ isOpen, onClose }: SourcingModalProps) {
     setView('running')
 
     try {
-      // NOTE: la section NAF est désactivée (cf. hindsight 2026-05-17 HTTP 400).
-      // On envoie systématiquement `targetSectors: []` afin que le runner Sirene
-      // omette le filtre `activitePrincipaleEtablissement` et réduise la
-      // complexité de la query Lucene/Solr.
+      // Sections NAF (lettres A-U). Vide = toutes sections (comportement
+      // défaut). Filtrage post-fetch côté serveur sur le résultat de
+      // `searchSireneCache` via `sectionFromNaf` (cf. lib/agent/naf-labels.ts).
+      const sectionsPayload =
+        selectedSections.size > 0 ? Array.from(selectedSections) : undefined
+
       const response = await fetch('/api/agent/sourcing', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -327,6 +321,7 @@ export function SourcingModal({ isOpen, onClose }: SourcingModalProps) {
           effectifMax: max,
           targetSectors: [],
           targetRegion: formData.targetRegion.trim() || undefined,
+          sections: sectionsPayload,
         }),
         signal: controller.signal,
       })
@@ -694,29 +689,61 @@ export function SourcingModal({ isOpen, onClose }: SourcingModalProps) {
                     </p>
                   </fieldset>
 
-                  {/*
-                    TODO: réactiver une fois Sirene stable (cf. hindsight 2026-05-17 HTTP 400)
-                    ─────────────────────────────────────────────────────────────────────────
-                    Section "Secteurs cibles" volontairement retirée du render :
-                    la query Lucene Sirene plante (HTTP 400) quand le filtre
-                    `activitePrincipaleEtablissement:(... OR ...)` cumule trop de
-                    codes NAF. Pour réduire la complexité de la requête à un strict
-                    minimum, on ne propose plus la sélection NAF côté UI et on
-                    envoie systématiquement `targetSectors: []` au runner — celui-ci
-                    omet alors le filtre côté query (cf. `buildLuceneQuery`).
-
-                    Code à restaurer (raccourcis groupes + multi-select BEGES) :
-                    <fieldset>
-                      <legend>Secteurs cibles (optionnel — tous si aucun coché)</legend>
-                      ...raccourcis SECTOR_OPTIONS via toggleGroup()...
-                      <NafCodeMultiSelect
-                        selectedCodes={selectedCodesArray}
-                        onChange={handleMultiSelectChange}
-                        availableCodes={NAF_BEGES_CODES}
-                        ...
-                      />
-                    </fieldset>
-                  */}
+                  {/* Sections NAF (21 sections officielles INSEE rev. 2).
+                      Multi-sélection, vide = toutes sections (comportement défaut).
+                      Filtrage côté serveur via `sectionFromNaf` sur les résultats
+                      cache SIRENE — pas de query Lucene ici (le cache local
+                      remplace l'API Sirene live depuis 2026-05-17). */}
+                  <fieldset>
+                    <legend className="mb-1.5 block text-sm font-medium text-gray-200">
+                      Sections d&apos;activité
+                      <span className="ml-1.5 text-xs font-normal text-gray-400">
+                        (optionnel — toutes si aucune cochée)
+                      </span>
+                    </legend>
+                    <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
+                      {NAF_SECTIONS.map(({ code, libelle }) => {
+                        const checked = selectedSections.has(code)
+                        return (
+                          <label
+                            key={code}
+                            className={`group inline-flex cursor-pointer items-center gap-2 rounded-lg border px-2.5 py-1.5 text-xs transition-colors ${
+                              checked
+                                ? 'border-green-500/40 bg-green-500/15 text-green-300 ring-1 ring-green-500/25'
+                                : 'border-white/[0.08] bg-white/[0.04] text-gray-300 hover:border-white/20 hover:bg-white/[0.08]'
+                            } ${isLoading ? 'cursor-not-allowed opacity-60' : ''}`}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              disabled={isLoading}
+                              onChange={() =>
+                                setSelectedSections((prev) => {
+                                  const next = new Set(prev)
+                                  if (next.has(code)) next.delete(code)
+                                  else next.add(code)
+                                  return next
+                                })
+                              }
+                              className="h-3.5 w-3.5 flex-shrink-0 rounded border-white/20 bg-white/[0.04] text-green-500 accent-green-500 focus:ring-2 focus:ring-green-500/40 [color-scheme:dark]"
+                              aria-label={`Section ${code} — ${libelle}`}
+                            />
+                            <span className="font-mono text-[11px] font-semibold tabular-nums">
+                              {code}
+                            </span>
+                            <span className="truncate">{libelle}</span>
+                          </label>
+                        )
+                      })}
+                    </div>
+                    {selectedSections.size > 0 && (
+                      <p className="mt-1.5 text-xs text-gray-400">
+                        {selectedSections.size} section{selectedSections.size > 1 ? 's' : ''} cochée
+                        {selectedSections.size > 1 ? 's' : ''} — l&apos;agent ne sourcera que dans
+                        ces périmètres.
+                      </p>
+                    )}
+                  </fieldset>
 
                   {/* Zone géographique */}
                   <div className="space-y-1.5">

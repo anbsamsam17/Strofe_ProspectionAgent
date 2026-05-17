@@ -29,7 +29,7 @@ import {
   categoriserSecteurAvecGemini,
   isGeminiAvailable,
 } from './gemini-scoring'
-import { resolveSectorFromNaf } from './naf-labels'
+import { resolveSectorFromNaf, sectionFromNaf, type NafSection } from './naf-labels'
 import {
   enrichirProspect,
   getRePhoneCircuitState,
@@ -71,6 +71,13 @@ export interface SourcingParams {
    * Résolu via `mapRegionToCodePostal` + `mapRegionToDepartements`.
    */
   targetRegion?: string
+  /**
+   * Filtre par section NAF (lettres A-U). Multi-sélection.
+   * Vide ou absent = toutes sections (comportement défaut).
+   * Filtrage post-fetch via `sectionFromNaf` sur les etablissements
+   * retournés par le cache SIRENE.
+   */
+  sections?: NafSection[]
 }
 
 /**
@@ -259,6 +266,11 @@ export interface ResolvedSourcingFilters {
   signature: string
   /** Source des NAF retenus (utile pour les logs). */
   nafSource: 'params_request' | 'settings_user' | 'naf_prioritaires_default'
+  /**
+   * Filtre par section NAF (lettres A-U). Vide/absent = toutes sections.
+   * Appliqué APRÈS le filtre NAF, sur le résultat des sources de données.
+   */
+  sections?: NafSection[]
 }
 
 /**
@@ -330,7 +342,15 @@ export function resolveSourcingFilters(
   const departements = mapRegionToDepartements(params.targetRegion)
   const signature = computeFiltersSignature({ tranches, codePostalRange, nafCodes })
 
-  return { nafCodes, tranches, codePostalRange, departements, signature, nafSource }
+  return {
+    nafCodes,
+    tranches,
+    codePostalRange,
+    departements,
+    signature,
+    nafSource,
+    sections: params.sections,
+  }
 }
 
 // ------------------------------------------------------------
@@ -575,6 +595,14 @@ export async function runAdaptiveSourcing(
 ): Promise<AdaptiveSourcingOutcome> {
   const { filters, startCurseur, sirenSet, targetCandidates, pushLog, preferFallback, supabase } = options
 
+  // Filtre par section NAF (lettres A-U). Vide/absent = pass-through.
+  // Appliqué après le filtre NAF dans les 3 sources (cache, fallback, live).
+  const matchesSelectedSections = (etab: SireneEtablissement): boolean => {
+    if (!filters.sections || filters.sections.length === 0) return true
+    const sec = sectionFromNaf(etab.activitePrincipaleEtablissement)
+    return sec !== null && filters.sections.includes(sec)
+  }
+
   const startTime = Date.now()
   const collectedEtablissements: SireneEtablissement[] = []
   let pagesLoaded = 0
@@ -608,10 +636,10 @@ export async function runAdaptiveSourcing(
         departements: filters.departements,
         excludeSirens: sirenSet,
       })
-      // Garde NAF (cohérent avec la branche legacy ligne ~670).
-      const filteredByNaf = fallbackEtabs.filter((e) =>
-        matchesAnyNaf(e.activitePrincipaleEtablissement, filters.nafCodes),
-      )
+      // Garde NAF puis garde sections (cohérent avec la branche cache).
+      const filteredByNaf = fallbackEtabs
+        .filter((e) => matchesAnyNaf(e.activitePrincipaleEtablissement, filters.nafCodes))
+        .filter(matchesSelectedSections)
       filteredByNaf.forEach((e) => sirenSet.add(e.siren))
       pushLog(
         'sourcing_page',
@@ -686,9 +714,10 @@ export async function runAdaptiveSourcing(
 
       if (cacheResult) {
         const beforeNafFilter = cacheResult.etablissements.length
-        const filteredByNaf = cacheResult.etablissements.filter((e) =>
+        const filteredByNafOnly = cacheResult.etablissements.filter((e) =>
           matchesAnyNaf(e.activitePrincipaleEtablissement, filters.nafCodes),
         )
+        const filteredByNaf = filteredByNafOnly.filter(matchesSelectedSections)
         filteredByNaf.forEach((e) => sirenSet.add(e.siren))
         pushLog(
           'sourcing_sirene',
@@ -697,7 +726,9 @@ export async function runAdaptiveSourcing(
           {
             cache_age_days: cacheResult.cacheAgeDays,
             rows_returned: beforeNafFilter,
-            kept_after_naf_filter: filteredByNaf.length,
+            kept_after_naf_filter: filteredByNafOnly.length,
+            kept_after_sections_filter: filteredByNaf.length,
+            sections_requested: filters.sections ?? [],
             target_candidates: targetCandidates,
           },
         )
@@ -848,10 +879,11 @@ export async function runAdaptiveSourcing(
     // hors-cible (bug API ou normalisation), on l'exclut ici avant insert DB.
     // `matchesAnyNaf` tolère les formats avec/sans point. Si `filters.nafCodes`
     // est vide, `matchesAnyNaf` retourne `true` — pas de régression legacy.
+    // Filtre par section appliqué en second (intersection des 2 contraintes).
     const beforeNafFilter = pageEtabs.length
-    const filteredByNaf = pageEtabs.filter((e) =>
-      matchesAnyNaf(e.activitePrincipaleEtablissement, filters.nafCodes),
-    )
+    const filteredByNaf = pageEtabs
+      .filter((e) => matchesAnyNaf(e.activitePrincipaleEtablissement, filters.nafCodes))
+      .filter(matchesSelectedSections)
     const droppedByNaf = beforeNafFilter - filteredByNaf.length
     if (droppedByNaf > 0) {
       pushLog(

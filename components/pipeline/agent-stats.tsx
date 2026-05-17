@@ -3,9 +3,11 @@ import type { AgentRun, Prospect } from '@/lib/types'
 import {
   formatDurationShort,
   sourcingMix,
-  topSectors,
+  sectorsByNafSection,
   toRunStat,
+  topSectors,
   type RunStat,
+  type NafSectionStat,
   type SectorStat,
 } from '@/lib/pipeline/analytics'
 import type { PipelineRange } from '@/lib/pipeline/range'
@@ -35,7 +37,7 @@ interface AgentStatsProps {
 export async function AgentStats({ range }: AgentStatsProps) {
   let runStats: RunStat[]
   let mix: ReturnType<typeof sourcingMix>
-  let sectors: SectorStat[]
+  let sectors: NafSectionStat[]
   try {
     const supabase = await createClient()
     const windowStart = rangeStartISO(range)
@@ -65,12 +67,13 @@ export async function AgentStats({ range }: AgentStatsProps) {
       runsQuery = runsQuery.gte('started_at', windowStart)
     }
 
-    // Pour `sourcingMix` + `topSectors` on n'a besoin que de 2 colonnes — pas
+    // Pour `sourcingMix` + `sectorsByNafSection` on n'a besoin que de 3 colonnes — pas
     // de récupérer tout score_details, signaux, contact_*, etc.
+    // `secteur_naf` est le code brut (ex. '86.10Z') — sectionFromNaf en dérive la section.
     // Range explicite jusqu'à 50k pour ne pas être coupé à 1000 par PostgREST.
     const prospectsQuery = supabase
       .from('prospects')
-      .select('source, secteur_libelle')
+      .select('source, secteur_naf')
       .is('archived_at', null)
       .range(0, 49_999)
 
@@ -93,7 +96,7 @@ export async function AgentStats({ range }: AgentStatsProps) {
     // Inverse les runs pour avoir le plus ancien à gauche dans la viz.
     runStats = runs.slice().reverse().map(toRunStat)
     mix = sourcingMix(prospects, runs)
-    sectors = topSectors(prospects, 5)
+    sectors = sectorsByNafSection(prospects)
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
     console.error('[AgentStats] Render error', { message: msg, stack: err instanceof Error ? err.stack : undefined })
@@ -119,7 +122,7 @@ export async function AgentStats({ range }: AgentStatsProps) {
       <div className="space-y-5">
         <RunsTimeSeries runs={runStats} />
         <SourcingMixBar sirene={mix.sirene} recherche={mix.recherche} sirenePct={mix.sirenePct} />
-        <TopSectors sectors={sectors} />
+        <NafSectionsChart sections={sectors} />
       </div>
     </section>
   )
@@ -285,38 +288,46 @@ function SourcingMixBar({ sirene, recherche, sirenePct }: SourcingMixBarProps) {
   )
 }
 
-// ── Top 5 secteurs (liste horizontale) ──────────────────────────────────────
+// ── Sections NAF (bar chart horizontal, 21 sections INSEE rev. 2) ────────────
 
-function TopSectors({ sectors }: { sectors: SectorStat[] }) {
-  if (sectors.length === 0) {
+function NafSectionsChart({ sections }: { sections: NafSectionStat[] }) {
+  if (sections.length === 0) {
     return (
       <div className="flex items-center justify-center rounded-lg border border-dashed border-white/[0.08] bg-white/[0.02] py-3 text-xs text-gray-400">
-        Aucun secteur identifié pour l&apos;instant.
+        Aucune section NAF identifiée pour l&apos;instant.
       </div>
     )
   }
+
+  const maxCount = Math.max(...sections.map((s) => s.count), 1)
+
   return (
     <div>
       <p className="mb-2 text-xs font-medium text-gray-200">
-        Top {sectors.length} secteurs sourcés
+        Répartition par section NAF ({sections.length} section
+        {sections.length > 1 ? 's' : ''})
       </p>
-      <ul className="space-y-1.5" aria-label="Répartition des prospects par secteur">
-        {sectors.map((s) => (
-          <li key={s.label} className="flex items-center gap-3">
+      <ul className="space-y-1.5" aria-label="Répartition des prospects par section NAF">
+        {sections.map((s) => (
+          <li key={s.code} className="flex items-center gap-2">
             <span
-              className="min-w-0 flex-1 truncate text-xs text-gray-300"
-              title={s.label}
+              className="w-5 flex-shrink-0 text-center font-mono text-xs font-semibold text-gray-400"
+              aria-hidden="true"
             >
-              {s.label}
+              {s.code}
             </span>
-            <div className="h-1.5 w-24 flex-shrink-0 overflow-hidden rounded-full bg-white/[0.05] dark:bg-gray-800">
+            <div
+              className="h-1.5 flex-1 overflow-hidden rounded-full bg-white/[0.05] dark:bg-gray-800"
+              role="img"
+              aria-label={`${s.libelle} : ${s.count} prospect${s.count > 1 ? 's' : ''} (${Math.round(s.sharePct)} %)`}
+              title={`${s.code} — ${s.libelle}`}
+            >
               <div
-                className="h-full bg-green-500"
-                style={{ width: `${Math.max(2, s.sharePct)}%` }}
-                aria-hidden="true"
+                className="h-full bg-cyan-500"
+                style={{ width: `${(s.count / maxCount) * 100}%` }}
               />
             </div>
-            <span className="w-8 flex-shrink-0 text-right text-xs tabular-nums text-gray-200">
+            <span className="w-7 flex-shrink-0 text-right text-xs tabular-nums text-gray-200">
               {s.count}
             </span>
           </li>
@@ -332,15 +343,15 @@ function AgentStatsError({ reason }: { reason: string }) {
   return (
     <section
       role="alert"
-      className="rounded-2xl border border-amber-200 bg-amber-50 p-5 dark:border-amber-900/40 dark:bg-amber-950/30"
+      className="rounded-2xl border border-amber-500/30 bg-amber-500/[0.08] p-5"
     >
-      <h2 className="text-sm font-semibold uppercase tracking-wider text-amber-700 dark:text-amber-400">
+      <h2 className="text-sm font-semibold uppercase tracking-wider text-amber-300">
         Activité agent — indisponible
       </h2>
-      <p className="mt-2 text-sm text-amber-700 dark:text-amber-400">
+      <p className="mt-2 text-sm text-amber-300">
         Le chargement des stats agent a échoué côté serveur. Le pipeline reste utilisable.
       </p>
-      <p className="mt-2 break-words font-mono text-xs text-amber-700 dark:text-amber-400">
+      <p className="mt-2 break-words font-mono text-xs text-amber-300/80">
         {reason}
       </p>
     </section>

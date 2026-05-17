@@ -203,9 +203,9 @@ export function SettingsForm({ initialSettings }: SettingsFormProps) {
           via PATCH /api/profile/settings (valeurs DB préservées). */}
       {/* <section
         aria-labelledby="sectors-title"
-        className="rounded-2xl border border-white/[0.08] bg-white/[0.03] backdrop-blur-md shadow-sm dark:border-gray-800 dark:bg-gray-900"
+        className="rounded-2xl border border-white/[0.08] bg-white/[0.03] backdrop-blur-md shadow-sm"
       >
-        <header className="border-b border-white/[0.06] px-6 py-5 dark:border-gray-800">
+        <header className="border-b border-white/[0.06] px-6 py-5">
           <h2 id="sectors-title" className="text-sm font-semibold uppercase tracking-wider text-gray-300">
             Secteurs cibles
           </h2>
@@ -233,7 +233,7 @@ export function SettingsForm({ initialSettings }: SettingsFormProps) {
           `target_postal_codes` restent fonctionnels via PATCH /api/profile/settings. */}
       {/* <section
         aria-labelledby="geo-title"
-        className="rounded-2xl border border-white/[0.08] bg-white/[0.03] backdrop-blur-md shadow-sm dark:border-gray-800 dark:bg-gray-900"
+        className="rounded-2xl border border-white/[0.08] bg-white/[0.03] backdrop-blur-md shadow-sm"
       >
         ... champs target_city + postal codes input ...
       </section> */}
@@ -241,9 +241,9 @@ export function SettingsForm({ initialSettings }: SettingsFormProps) {
       {/* ── Section : Pondération du scoring ──────────────────────────────── */}
       <section
         aria-labelledby="scoring-title"
-        className="rounded-2xl border border-white/[0.08] bg-white/[0.03] backdrop-blur-md shadow-sm dark:border-gray-800 dark:bg-gray-900"
+        className="rounded-2xl border border-white/[0.08] bg-white/[0.03] backdrop-blur-md shadow-sm"
       >
-        <header className="border-b border-white/[0.06] px-6 py-5 dark:border-gray-800">
+        <header className="border-b border-white/[0.06] px-6 py-5">
           <h2
             id="scoring-title"
             className="text-sm font-semibold uppercase tracking-wider text-gray-300"
@@ -291,8 +291,8 @@ export function SettingsForm({ initialSettings }: SettingsFormProps) {
           <div
             className={`flex flex-col gap-3 rounded-xl border px-4 py-3 sm:flex-row sm:items-center sm:justify-between ${
               isWeightsBalanced
-                ? 'border-green-200 bg-green-50 dark:border-green-900/50 dark:bg-green-950/30'
-                : 'border-orange-200 bg-orange-50 dark:border-orange-900/50 dark:bg-orange-950/30'
+                ? 'border-green-500/30 bg-green-500/[0.08]'
+                : 'border-orange-500/30 bg-orange-500/[0.08]'
             }`}
           >
             <p
@@ -307,14 +307,14 @@ export function SettingsForm({ initialSettings }: SettingsFormProps) {
               <span
                 className={`font-semibold tabular-nums ${
                   isWeightsBalanced
-                    ? 'text-green-700 dark:text-green-300'
-                    : 'text-orange-700 dark:text-orange-300'
+                    ? 'text-green-300'
+                    : 'text-orange-300'
                 }`}
               >
                 Total: {weightsSum} %
               </span>
               {!isWeightsBalanced && (
-                <span className="ml-2 text-xs text-orange-700 dark:text-orange-300">
+                <span className="ml-2 text-xs text-orange-300">
                   (normalisé automatiquement à la sauvegarde)
                 </span>
               )}
@@ -343,9 +343,9 @@ export function SettingsForm({ initialSettings }: SettingsFormProps) {
       {/* ── Section : Notifications ─────────────────────────────────────────── */}
       <section
         aria-labelledby="notifications-title"
-        className="rounded-2xl border border-white/[0.08] bg-white/[0.03] backdrop-blur-md shadow-sm dark:border-gray-800 dark:bg-gray-900"
+        className="rounded-2xl border border-white/[0.08] bg-white/[0.03] backdrop-blur-md shadow-sm"
       >
-        <header className="border-b border-white/[0.06] px-6 py-5 dark:border-gray-800">
+        <header className="border-b border-white/[0.06] px-6 py-5">
           <h2
             id="notifications-title"
             className="text-sm font-semibold uppercase tracking-wider text-gray-300"
@@ -384,7 +384,7 @@ export function SettingsForm({ initialSettings }: SettingsFormProps) {
           pitchs IA). */}
       {/* <section
         aria-labelledby="offer-title"
-        className="rounded-2xl border border-white/[0.08] bg-white/[0.03] backdrop-blur-md shadow-sm dark:border-gray-800 dark:bg-gray-900"
+        className="rounded-2xl border border-white/[0.08] bg-white/[0.03] backdrop-blur-md shadow-sm"
       >
         ... textarea offer_description ...
       </section> */}
@@ -394,7 +394,7 @@ export function SettingsForm({ initialSettings }: SettingsFormProps) {
           via PATCH /api/profile/settings (valeur DB préservée). */}
       {/* <section
         aria-labelledby="advanced-title"
-        className="rounded-2xl border border-white/[0.08] bg-white/[0.03] backdrop-blur-md shadow-sm dark:border-gray-800 dark:bg-gray-900"
+        className="rounded-2xl border border-white/[0.08] bg-white/[0.03] backdrop-blur-md shadow-sm"
       >
         ... toggle Avancé + slider sourcing_target_per_run ...
       </section> */}
@@ -402,7 +402,7 @@ export function SettingsForm({ initialSettings }: SettingsFormProps) {
       {/* ── Feedback ────────────────────────────────────────────────────────── */}
       {saveStatus === 'error' && errorMessage && (
         <div
-          className="flex items-center gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3.5 dark:border-red-800/50 dark:bg-red-950/30"
+          className="flex items-center gap-3 rounded-xl border border-red-500/30 bg-red-500/[0.08] px-4 py-3.5"
           role="alert"
         >
           <svg
@@ -415,23 +415,23 @@ export function SettingsForm({ initialSettings }: SettingsFormProps) {
             strokeWidth="2"
             strokeLinecap="round"
             strokeLinejoin="round"
-            className="flex-shrink-0 text-red-600 dark:text-red-400"
+            className="flex-shrink-0 text-red-400"
             aria-hidden="true"
           >
             <circle cx="12" cy="12" r="10" />
             <line x1="12" y1="8" x2="12" y2="12" />
             <line x1="12" y1="16" x2="12.01" y2="16" />
           </svg>
-          <p className="text-sm text-red-700 dark:text-red-400">{errorMessage}</p>
+          <p className="text-sm text-red-300">{errorMessage}</p>
         </div>
       )}
 
       {saveStatus === 'success' && (
         <div
-          className="flex items-center gap-3 rounded-xl border border-green-200 bg-green-50 px-4 py-3.5 dark:border-green-800/50 dark:bg-green-950/30"
+          className="flex items-center gap-3 rounded-xl border border-green-500/30 bg-green-500/[0.08] px-4 py-3.5"
           role="status"
         >
-          <div className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-green-100 dark:bg-green-900/50">
+          <div className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-green-500/[0.15]">
             <svg
               xmlns="http://www.w3.org/2000/svg"
               width="14"
@@ -442,13 +442,13 @@ export function SettingsForm({ initialSettings }: SettingsFormProps) {
               strokeWidth="2.5"
               strokeLinecap="round"
               strokeLinejoin="round"
-              className="text-green-600 dark:text-green-400"
+              className="text-green-400"
               aria-hidden="true"
             >
               <polyline points="20 6 9 17 4 12" />
             </svg>
           </div>
-          <p className="text-sm font-medium text-green-800 dark:text-green-300">
+          <p className="text-sm font-medium text-green-300">
             Paramètres sauvegardés avec succès.
           </p>
         </div>

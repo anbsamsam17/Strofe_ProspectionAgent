@@ -7,6 +7,7 @@
 // Permet de tester les calculs sans monter une DB.
 
 import type { AgentRun, AgentRunStatus, Prospect, ProspectStatus } from '@/lib/types'
+import { NAF_SECTIONS, sectionFromNaf, type NafSection } from '@/lib/agent/naf-labels'
 
 // ── Funnel ──────────────────────────────────────────────────────────────────
 
@@ -138,6 +139,48 @@ export function topSectors(prospects: Prospect[], limit = 5): SectorStat[] {
     count,
     sharePct: total > 0 ? (count / total) * 100 : 0,
   }))
+}
+
+// ── Répartition par section NAF (21 sections officielle INSEE rev. 2) ────────
+
+export interface NafSectionStat {
+  code: NafSection
+  libelle: string
+  count: number
+  /** Part du total (0-100). */
+  sharePct: number
+}
+
+/**
+ * Agrège les prospects par section NAF (lettre A-U, 21 sections INSEE rev. 2).
+ *
+ * - Utilise `prospect.secteur_naf` pour dériver la section via `sectionFromNaf`.
+ * - Les prospects sans NAF (null, vide, inconnu) sont ignorés.
+ * - Résultat trié par ordre officiel INSEE (A → U), sections avec count=0 exclues.
+ */
+export function sectorsByNafSection(prospects: Prospect[]): NafSectionStat[] {
+  if (prospects.length === 0) return []
+
+  const bySection = new Map<NafSection, number>()
+  let total = 0
+
+  for (const p of prospects) {
+    const section = sectionFromNaf(p.secteur_naf ?? null)
+    if (!section) continue
+    bySection.set(section, (bySection.get(section) ?? 0) + 1)
+    total += 1
+  }
+
+  if (total === 0) return []
+
+  return NAF_SECTIONS
+    .map((s) => ({
+      code: s.code,
+      libelle: s.libelle,
+      count: bySection.get(s.code) ?? 0,
+      sharePct: total > 0 ? ((bySection.get(s.code) ?? 0) / total) * 100 : 0,
+    }))
+    .filter((d) => d.count > 0)
 }
 
 // ── Stats sourcing : Sirene vs fallback ─────────────────────────────────────

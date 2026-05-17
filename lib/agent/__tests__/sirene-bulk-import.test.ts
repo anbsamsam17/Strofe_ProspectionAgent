@@ -162,9 +162,48 @@ vi.mock('@supabase/supabase-js', () => {
 // MOCK FETCH — sert un faux ZIP (peu importe le contenu, unzipper est mocké)
 // ------------------------------------------------------------
 
-const fetchMock = vi.fn().mockImplementation(async () => {
-  // Body bidon : unzipper est mocké, donc on n'a pas besoin d'un vrai ZIP valide.
-  // On stream un seul chunk vide pour que `pipeline()` se termine sans erreur.
+/**
+ * URL "résolue" par le mock de l'API métadonnée data.gouv.fr.
+ * Le script ne se soucie pas du contenu réel — il appelle ensuite `fetch` à
+ * nouveau sur cette URL, et notre mock répond avec le ReadableStream bidon.
+ */
+const MOCK_RESOLVED_URL = 'http://localhost/test-StockEtablissement_utf8.zip'
+
+const fetchMock = vi.fn().mockImplementation(async (url: string) => {
+  const urlStr = typeof url === 'string' ? url : String(url)
+
+  // Étape 1 : appel à l'API métadonnée data.gouv.fr (resolveStockEtablissementUrl).
+  // Le script cherche une ressource dont le titre contient "StockEtablissement"
+  // sans tokens exclus (Historique, parquet, etc.).
+  if (urlStr.includes('/api/1/datasets/')) {
+    return {
+      ok: true,
+      status: 200,
+      json: async () => ({
+        resources: [
+          {
+            title: 'Sirene : Fichier StockEtablissement du 01 test 2026',
+            id: 'mock-resource-id',
+            url: MOCK_RESOLVED_URL,
+          },
+          // Distracteurs pour vérifier que le filtre exclut bien les bons titres.
+          {
+            title: 'Sirene : Fichier StockUniteLegale du 01 test 2026',
+            url: 'http://localhost/unite-legale.zip',
+          },
+          {
+            title: 'Sirene : Fichier StockEtablissementHistorique du 01 test 2026',
+            url: 'http://localhost/historique.zip',
+          },
+        ],
+      }),
+      text: async () => '',
+    } as unknown as Response
+  }
+
+  // Étape 2 : téléchargement du ZIP (binaire). Body bidon : unzipper est mocké,
+  // donc on n'a pas besoin d'un vrai ZIP valide. On stream un seul chunk vide
+  // pour que `pipeline()` se termine sans erreur.
   const stream = new ReadableStream({
     start(controller) {
       controller.enqueue(new Uint8Array([0]))

@@ -16,6 +16,7 @@ import { PriorityDropdown } from '@/components/prospects/priority-dropdown'
 import { ContactsList, type ProspectContact } from '@/components/prospects/contacts-list'
 import { ExchangesPanel, type ProspectExchange } from '@/components/prospects/exchanges-panel'
 import { buildBegesUrl } from '@/lib/utils/beges-url'
+import { NafHierarchyView } from '@/components/prospects/naf-hierarchy-view'
 
 export const dynamic = 'force-dynamic'
 
@@ -303,21 +304,14 @@ export default async function ProspectDetailPage({ params }: PageProps) {
               {prospect.siret && (
                 <InfoRow label="SIRET" value={prospect.siret} />
               )}
-              {prospect.secteur_naf && (
-                <InfoRow
-                  label="Code NAF"
-                  value={
-                    <span>
-                      {prospect.secteur_naf}
-                      {prospect.secteur_libelle && (
-                        <span className="ml-1 text-gray-400">
-                          — {prospect.secteur_libelle}
-                        </span>
-                      )}
-                    </span>
-                  }
-                />
-              )}
+              <InfoRow
+                label="Activité NAF"
+                value={
+                  <NafHierarchyView
+                    rawNaf={prospect.secteur_naf ?? null}
+                  />
+                }
+              />
               {effectif && (
                 <InfoRow label="Effectif" value={effectif} />
               )}

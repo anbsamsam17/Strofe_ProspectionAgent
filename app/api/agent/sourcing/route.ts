@@ -37,6 +37,12 @@ export const dynamic = 'force-dynamic'
 //               une fuite vers `runSourcing` (defense in depth).
 const NAF_CODE_REGEX = /^\d{2}\.\d{2}[A-Z]$/
 const TARGET_REGION_REGEX = /^[\p{L}\d\s'\-]{1,30}$/u
+// 21 sections officielles NAF rev. 2 INSEE (lettres A-U).
+// Cf. lib/agent/naf-labels.ts → NAF_SECTIONS.
+const NAF_SECTION_VALUES = [
+  'A','B','C','D','E','F','G','H','I','J','K',
+  'L','M','N','O','P','Q','R','S','T','U',
+] as const
 
 const SourcingBodySchema = z
   .object({
@@ -53,6 +59,11 @@ const SourcingBodySchema = z
       .max(30)
       .regex(TARGET_REGION_REGEX, 'targetRegion contient des caractères non autorisés')
       .optional(),
+    /**
+     * Filtre par section NAF (lettres A-U). Vide ou absent = toutes sections.
+     * Multi-sélection. Filtrage post-fetch côté runner via `sectionFromNaf`.
+     */
+    sections: z.array(z.enum(NAF_SECTION_VALUES)).max(21).optional(),
   })
   .strict()
   .refine(
@@ -153,6 +164,7 @@ export async function POST(request: NextRequest) {
       effectifMax: body.effectifMax,
       targetSectors: body.targetSectors,
       targetRegion: body.targetRegion,
+      sections: body.sections,
     })
   } catch (err) {
     // Log structuré sans PII (pas de body brut, juste user_id)

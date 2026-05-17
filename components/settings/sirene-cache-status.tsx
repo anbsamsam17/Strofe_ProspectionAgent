@@ -206,9 +206,9 @@ export function SireneCacheStatus() {
   return (
     <section
       aria-labelledby="sirene-cache-title"
-      className="rounded-2xl border border-white/[0.08] bg-white/[0.03] backdrop-blur-md shadow-sm dark:border-gray-800 dark:bg-gray-900"
+      className="rounded-2xl border border-white/[0.08] bg-white/[0.03] backdrop-blur-md shadow-sm"
     >
-      <header className="border-b border-white/[0.06] px-6 py-5 dark:border-gray-800">
+      <header className="border-b border-white/[0.06] px-6 py-5">
         <h2
           id="sirene-cache-title"
           className="font-mono text-xs font-semibold uppercase tracking-widest text-cyan-300"
