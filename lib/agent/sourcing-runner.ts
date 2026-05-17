@@ -30,6 +30,7 @@ import {
   isGeminiAvailable,
 } from './gemini-scoring'
 import { resolveSectorFromNaf, sectionFromNaf, type NafSection } from './naf-labels'
+import { enrichirContact } from './contact-enrichment'
 import {
   enrichirProspect,
   getRePhoneCircuitState,
@@ -182,6 +183,14 @@ const SECTEUR_MAX_PER_SOURCING_RUN = 20
 
 /** Parallélisme du batch catégorisation (rate-limit Gemini Flash 30 req/min). */
 const SECTEUR_BATCH_PARALLELISM = 5
+
+/**
+ * Cap STRICT d'enrichissement contact (Pappers/Hunter) par run sourcing UI.
+ * Hunter free tier = 25 req/mois → cap à 5 permet ~5 sourcings UI/mois sans
+ * vider le quota. Les prospects non couverts seront enrichis par le cron
+ * nocturne qui passe par l'orchestrateur complet (cap plus élevé là-bas).
+ */
+const CONTACT_ENRICHMENT_MAX_PER_SOURCING_RUN = 5
 
 /**
  * Intervalle du heartbeat (ms) — pousse un log "vivant" dans `agent_runs.logs`
@@ -1458,6 +1467,128 @@ async function categoriserSecteursPostUpsert(
 }
 
 // ------------------------------------------------------------
+// PHASE — Enrichissement contact (Pappers/Hunter) post-upsert
+//
+// Sélectionne les top N prospects qualifiés et les enrichit via la cascade
+// Pappers → Hunter. Le contexte `{ userId, supabase }` passé à enrichirContact
+// active le tracking quota en DB (table `api_quotas`) — c'est ce qui fait
+// monter le compteur affiché par /glan/quota-widget.
+//
+// Cap dédié `CONTACT_ENRICHMENT_MAX_PER_SOURCING_RUN` (5) pour préserver le
+// Hunter free tier (25/mois) face aux sourcings UI répétés. Les prospects
+// non couverts seront enrichis par le cron nocturne.
+//
+// Skip silencieux si PAPPERS_API_KEY/HUNTER_API_KEY absentes (les fonctions
+// retournent null tôt avant consumeQuota).
+// ------------------------------------------------------------
+
+async function enrichContactsPostUpsert(
+  userId: string,
+  supabase: SupabaseAdminClient,
+  scored: Array<Partial<Prospect>>,
+  pushLog: (phase: string, message: string, level: 'info' | 'warn' | 'error', data?: Record<string, unknown>) => void,
+): Promise<void> {
+  try {
+    // Top N qualifiés (statut === 'qualified'), triés par score décroissant.
+    const candidates = scored
+      .filter((p) => p.statut === 'qualified' && p.siren && p.raison_sociale)
+      .sort((a, b) => (b.score_priorite ?? 0) - (a.score_priorite ?? 0))
+      .slice(0, CONTACT_ENRICHMENT_MAX_PER_SOURCING_RUN)
+
+    if (candidates.length === 0) {
+      pushLog(
+        'contact_enrichment',
+        'Aucun prospect qualifié à enrichir contact',
+        'info',
+        { selected: 0, cap: CONTACT_ENRICHMENT_MAX_PER_SOURCING_RUN },
+      )
+      return
+    }
+
+    let enrichedCount = 0
+    let echecsCount = 0
+
+    // Séquentiel par SIREN (la cascade Pappers/Hunter est elle-même séquentielle
+    // pour respecter l'isolation du _currentQuotaContext dans contact-enrichment.ts).
+    for (const p of candidates) {
+      const siren = p.siren as string
+      const raisonSociale = (p.raison_sociale as string | undefined) ?? ''
+      try {
+        const existing = {
+          contact_email: p.contact_email ?? undefined,
+          contact_telephone: p.contact_telephone ?? undefined,
+          contact_nom: p.contact_nom ?? undefined,
+          contact_prenom: p.contact_prenom ?? undefined,
+          contact_poste: p.contact_poste ?? undefined,
+        }
+        const nouveauxChamps = await enrichirContact(
+          siren,
+          existing,
+          raisonSociale,
+          { userId, supabase },
+        )
+
+        // UPDATE en DB uniquement si on a vraiment de nouveaux champs.
+        const updates: Record<string, string | null> = {}
+        if (nouveauxChamps.contact_email && !p.contact_email) {
+          updates.contact_email = nouveauxChamps.contact_email
+        }
+        if (nouveauxChamps.contact_telephone && !p.contact_telephone) {
+          updates.contact_telephone = nouveauxChamps.contact_telephone
+        }
+        if (nouveauxChamps.contact_nom && !p.contact_nom) {
+          updates.contact_nom = nouveauxChamps.contact_nom
+        }
+        if (nouveauxChamps.contact_prenom && !p.contact_prenom) {
+          updates.contact_prenom = nouveauxChamps.contact_prenom
+        }
+        if (nouveauxChamps.contact_poste && !p.contact_poste) {
+          updates.contact_poste = nouveauxChamps.contact_poste
+        }
+
+        if (Object.keys(updates).length > 0) {
+          const { error: updateError } = await supabase
+            .from('prospects')
+            .update(updates)
+            .eq('user_id', userId)
+            .eq('siren', siren)
+          if (updateError) {
+            echecsCount += 1
+            continue
+          }
+          enrichedCount += 1
+        }
+      } catch (err) {
+        echecsCount += 1
+        pushLog(
+          'contact_enrichment',
+          `Échec enrichissement contact SIREN ${siren}`,
+          'warn',
+          { siren, error: err instanceof Error ? err.message : String(err) },
+        )
+      }
+    }
+
+    pushLog(
+      'contact_enrichment',
+      `Enrichissement contact : ${candidates.length} sélectionnés, ${enrichedCount} enrichis, ${echecsCount} échecs`,
+      'info',
+      {
+        selected: candidates.length,
+        enriched: enrichedCount,
+        echecs: echecsCount,
+        cap: CONTACT_ENRICHMENT_MAX_PER_SOURCING_RUN,
+      },
+    )
+  } catch (err) {
+    // Phase strictement optionnelle — on n'interrompt jamais le sourcing.
+    pushLog('contact_enrichment', 'Enrichissement contact — erreur silencieuse', 'warn', {
+      error: err instanceof Error ? err.message : String(err),
+    })
+  }
+}
+
+// ------------------------------------------------------------
 // API PUBLIQUE : RUN ADAPTATIF END-TO-END
 // (utilisée par runSourcing UI + phaseSourcing orchestrator)
 // ------------------------------------------------------------
@@ -1634,6 +1765,14 @@ export async function runPipelineSourcing(
       // sourcings UI répétés. Skip silencieux si GEMINI_API_KEY absente.
       hbState.phase = 'secteur_categorisation'
       await categoriserSecteursPostUpsert(userId, supabase, scored, pushLog)
+
+      // 5e. Enrichissement contact (Pappers/Hunter) sur top N qualifiés.
+      // Active la persistance des quotas via table `api_quotas` (le widget
+      // /glan/quotas affiche les consommations en temps réel).
+      // Cap conservateur (CONTACT_ENRICHMENT_MAX_PER_SOURCING_RUN) pour
+      // préserver Hunter free tier (25/mois) face aux sourcings UI répétés.
+      hbState.phase = 'contact_enrichment'
+      await enrichContactsPostUpsert(userId, supabase, scored, pushLog)
     }
   } finally {
     // 6. Persiste TOUJOURS l'état partiel (succès ou erreur) — pas de curseur perdu.
