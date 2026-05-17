@@ -593,18 +593,26 @@ function buildLuceneQuery(
   effectifTranches: string[],
   codePostalRange: [string, string],
 ): string {
-  // Tranches : déduplication + tri + énumération via "OR" (toujours valide même pour 1 élément).
-  const uniqueTranches = [...new Set(effectifTranches)].sort()
-  const tranchesClause = `trancheEffectifsEtablissement:(${uniqueTranches.join(' OR ')})`
+  // TOUS les filtres sont conditionnels — un seul clause vide produit Sirene HTTP 400
+  // "Erreur de syntaxe dans le paramètre q" (cf. hindsight 2026-04-06 + 2026-05-17).
+  // L'invariant : ne pas générer `champ:()` ni `[ TO ]`. Toujours fallback sur "etatAdministratifEtablissement:A".
+  const queryParts: string[] = ['etatAdministratifEtablissement:A']
 
-  const queryParts: string[] = [
-    `codePostalEtablissement:[${codePostalRange[0]} TO ${codePostalRange[1]}]`,
-    tranchesClause,
-    'etatAdministratifEtablissement:A',
-  ]
+  // Code postal — range valide uniquement si les 2 bornes sont des chaînes 5 chars numériques.
+  const cp0 = codePostalRange[0]?.trim() ?? ''
+  const cp1 = codePostalRange[1]?.trim() ?? ''
+  const cpValid = /^\d{5}$/.test(cp0) && /^\d{5}$/.test(cp1)
+  if (cpValid) {
+    queryParts.push(`codePostalEtablissement:[${cp0} TO ${cp1}]`)
+  }
 
-  // N'ajouter le filtre NAF que si la liste est non vide — sinon on cible tous les secteurs
-  // (éviter le bug HTTP 400 sur `activitePrincipaleEtablissement:()`).
+  // Tranches d'effectif — clause conditionnelle (anti-`()` 400).
+  const uniqueTranches = [...new Set(effectifTranches.filter((t) => t.trim() !== ''))].sort()
+  if (uniqueTranches.length > 0) {
+    queryParts.push(`trancheEffectifsEtablissement:(${uniqueTranches.join(' OR ')})`)
+  }
+
+  // NAF — clause conditionnelle (anti-`()` 400, cf. hindsight 2026-04-06).
   if (nafCodes.length > 0) {
     queryParts.push(`activitePrincipaleEtablissement:(${nafCodes.join(' OR ')})`)
   }
