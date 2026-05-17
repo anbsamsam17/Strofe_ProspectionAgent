@@ -522,41 +522,52 @@ function validateSourcerParams(params: SourcerEntreprisesParams): {
 
 /**
  * Caractères Solr réservés (Lucene query syntax). Toute occurrence dans un
- * token NAF non validé doit être rejetée (et non escapée) — un code NAF
- * valide ne contient QUE [0-9A-Z], donc la présence d'un de ces caractères
- * signale une donnée corrompue qu'on ne veut pas envoyer à Solr.
+ * token NAF non validé doit être rejetée (et non escapée).
+ *
+ * Le POINT `.` est LÉGITIME dans un code NAF canonique (`01.21Z`) et NE figure
+ * PAS dans cette liste — cf. lib Python sne3ks/api_insee qui envoie le point
+ * tel quel à Sirene Solr.
  *
  * Référence : https://lucene.apache.org/core/2_9_4/queryparsersyntax.html#Escaping%20Special%20Characters
  */
 const SOLR_RESERVED_CHARS = /[+\-&|!(){}\[\]\^"~*?:\\\/\s]/
 
 /**
- * Normalise une liste de codes NAF au format attendu par Sirene (sans point, uppercase).
- * Filtre les entrées vides, déduplique en conservant l'ordre d'entrée (important pour
- * la stabilité du chunking entre runs), et REJETTE les codes contenant des caractères
- * Solr réservés (anti-injection + anti-bug HTTP 400 "Erreur de syntaxe dans le paramètre q").
+ * Normalise une liste de codes NAF au format attendu par Sirene (AVEC point, uppercase).
  *
- * Format final : [0-9A-Z]+ uniquement. Tout code mal formé (libellé humain, NAF tronqué,
- * caractère parasite) est silencieusement skippé — le mapping côté `naf-sector-mapping`
- * a déjà eu sa chance de logger.
+ * IMPORTANT 2026-05-17 : Sirene Solr v3.11 attend les codes NAF AU FORMAT INSEE NATIF
+ * `LL.NNF` (avec point) — pas `LLNNF`. La lib Python de référence sne3ks/api_insee
+ * confirme : `activitePrincipaleEtablissement:84.23Z` (cf. tests/test_siret.py).
  *
- * Exporté pour les tests Vitest (`sourcing-query.test.ts`).
+ * Avant 2026-05-17, on supprimait le point → l'index Solr ne trouvait pas les tokens
+ * (qui sont stockés avec le point) → HTTP 400 "Erreur de syntaxe dans le paramètre q".
+ *
+ * Filtre les entrées vides, déduplique en conservant l'ordre, normalise la casse,
+ * et REJETTE les codes contenant des caractères Solr réservés (anti-injection).
+ *
+ * Format final attendu : `[0-9]{2}\.?[0-9]{2}[A-Z]?` (ex. `01.21Z`, `84.23Z`).
+ *
+ * Exporté pour les tests Vitest (`sourcing-query.test.ts`, `sirene-integration.test.ts`).
  */
 export function normalizeNafCodes(nafCodes: string[]): string[] {
   const seen = new Set<string>()
   const out: string[] = []
   for (const c of nafCodes) {
     if (typeof c !== 'string') continue
-    // 1. Strip point + trim + uppercase. Remplacer TOUS les points (replaceAll '.')
-    //    pour tolérer un code mal formé comme '01.21.Z' (le `.replace('.', '')` legacy
-    //    ne supprimait que la première occurrence — ce qui laissait passer un point).
-    const cleaned = c.replaceAll('.', '').trim().toUpperCase()
+    // 1. Trim + uppercase. Le POINT est CONSERVÉ (format Sirene natif).
+    //    Si le code arrive sans point (legacy `0121Z`), on l'insère après les 2 chars.
+    let cleaned = c.trim().toUpperCase()
     if (cleaned.length === 0 || seen.has(cleaned)) continue
-    // 2. Reject codes contenant des caractères Solr réservés.
-    //    Un code NAF valide INSEE matche strictement /^[0-9]{4}[A-Z]$/ post-normalisation,
-    //    mais on tolère des longueurs variables (codes 3-6 chars pour formats étrangers).
-    //    L'invariant strict est : pas de caractère Solr réservé qui ferait planter Solr.
+    // 2. Si le code n'a pas de point ET fait 5 chars [0-9]{4}[A-Z], on insère le point
+    //    à la position 2 (canonical Sirene). Sinon on laisse tel quel.
+    if (/^[0-9]{4}[A-Z]$/.test(cleaned)) {
+      cleaned = `${cleaned.slice(0, 2)}.${cleaned.slice(2)}`
+    }
+    // 3. Reject codes contenant des caractères Solr réservés AUTRES que le point.
+    //    Le point `.` est autorisé (canonical NAF) — on l'exclut du regex de rejet.
     if (SOLR_RESERVED_CHARS.test(cleaned)) continue
+    // 4. Dedup sur la forme canonique avec point.
+    if (seen.has(cleaned)) continue
     seen.add(cleaned)
     out.push(cleaned)
   }
@@ -624,20 +635,27 @@ function serializeCompositeCursor(chunkIndex: number, rawCursor: string): string
 
 /**
  * Construit la requête Lucene Sirene à partir des filtres fournis.
- * Format attendu par INSEE (codes NAF sans point, range lexicographique).
  *
- * `nafCodes` doit être pré-normalisé (cf. `normalizeNafCodes`) et pré-chunké
- * (cf. `chunkNafCodes`) — cette fonction se contente d'assembler la query.
+ * Format attendu par INSEE v3.11 (oracle : lib Python sne3ks/api_insee + tests
+ * field/range/exact) :
+ *   - Codes NAF avec point au format natif (`01.21Z`)
+ *   - Valeurs string mono-token (NAF, tranches, état admin) NON quotées
+ *     (Solr `string` field — pas d'analyse phrase, le quoting déclencherait
+ *     une recherche phrase qui ne matche pas l'index)
+ *   - Range avec `TO` majuscule, bornes nues : `[33000 TO 33999]`
  *
  * Stratégie défensive contre Sirene HTTP 400 "Erreur de syntaxe dans le paramètre q" :
  *   - Toutes les clauses sont CONDITIONNELLES (pas de `champ:()` vide).
- *   - Les valeurs string (NAF, tranches, état admin) sont entre guillemets doubles
- *     pour signaler à Solr qu'il s'agit de tokens littéraux, pas d'expressions Lucene.
- *     Évite les édge cases sur les tokens alphanumériques mixtes (`0121Z` interprété
- *     comme `0121` + suffix `Z`) et les codes commençant par 0 (`0111Z` ≠ entier 111).
- *   - `etatAdministratifEtablissement:"A"` est l'invariant always-present (anti-`q=`).
+ *   - `etatAdministratifEtablissement:A` est l'invariant always-present (anti-`q=`).
  *
- * Exporté pour les tests Vitest (`sourcing-query.test.ts`).
+ * Historique :
+ *   - 2026-04-06 : fix clause NAF vide qui produisait `activitePrincipaleEtablissement:()`
+ *   - 2026-05-17 (jour) : tentative quoting défensif → AGGRAVE le bug HTTP 400
+ *     car Solr `string` field ne supporte pas la phrase-search
+ *   - 2026-05-17 (soir) : retour au format non-quoté + point dans NAF, conforme
+ *     à la lib Python de référence
+ *
+ * Exporté pour les tests Vitest (`sourcing-query.test.ts`, `sirene-integration.test.ts`).
  */
 export function buildLuceneQuery(
   nafCodes: string[],
@@ -647,8 +665,8 @@ export function buildLuceneQuery(
   // TOUS les filtres sont conditionnels — un seul clause vide produit Sirene HTTP 400
   // "Erreur de syntaxe dans le paramètre q" (cf. hindsight 2026-04-06 + 2026-05-17).
   // L'invariant : ne pas générer `champ:()` ni `[ TO ]`. Toujours fallback sur
-  // `etatAdministratifEtablissement:"A"` (quoted — voir docstring de la fonction).
-  const queryParts: string[] = ['etatAdministratifEtablissement:"A"']
+  // `etatAdministratifEtablissement:A` (non quoté — Solr `string` field).
+  const queryParts: string[] = ['etatAdministratifEtablissement:A']
 
   // Code postal — range valide uniquement si les 2 bornes sont des chaînes 5 chars numériques.
   const cp0 = codePostalRange[0]?.trim() ?? ''
@@ -658,8 +676,9 @@ export function buildLuceneQuery(
     queryParts.push(`codePostalEtablissement:[${cp0} TO ${cp1}]`)
   }
 
-  // Tranches d'effectif — clause conditionnelle (anti-`()` 400) + quoting défensif.
+  // Tranches d'effectif — clause conditionnelle (anti-`()` 400).
   // Filtre les codes contenant des caractères Solr réservés (ceinture + bretelles).
+  // Valeurs NON quotées (Solr `string` field — la lib Python de référence le fait ainsi).
   const uniqueTranches = [
     ...new Set(
       effectifTranches
@@ -668,16 +687,14 @@ export function buildLuceneQuery(
     ),
   ].sort()
   if (uniqueTranches.length > 0) {
-    const quotedTranches = uniqueTranches.map((t) => `"${t}"`).join(' OR ')
-    queryParts.push(`trancheEffectifsEtablissement:(${quotedTranches})`)
+    queryParts.push(`trancheEffectifsEtablissement:(${uniqueTranches.join(' OR ')})`)
   }
 
-  // NAF — clause conditionnelle (anti-`()` 400, cf. hindsight 2026-04-06) + quoting défensif.
-  // `normalizeNafCodes` rejette déjà les caractères Solr réservés ; on ne re-filtre pas ici
-  // pour éviter un double-skip silencieux (caller a une garantie que sa liste sera utilisée).
+  // NAF — clause conditionnelle, codes AVEC POINT, NON quotés.
+  // `normalizeNafCodes` produit le format canonique `LL.NNF` et rejette les caractères
+  // Solr réservés (à part le `.` qui est légitime).
   if (nafCodes.length > 0) {
-    const quotedNafs = nafCodes.map((c) => `"${c}"`).join(' OR ')
-    queryParts.push(`activitePrincipaleEtablissement:(${quotedNafs})`)
+    queryParts.push(`activitePrincipaleEtablissement:(${nafCodes.join(' OR ')})`)
   }
 
   return queryParts.join(' AND ')

@@ -2,14 +2,53 @@
 
 Toutes les intégrations sortantes du pipeline. Variables d'env à configurer dans `.env.local` (dev) et Vercel project settings (prod).
 
-## Sirene INSEE (sourcing primaire)
+## Sirene INSEE v3.11 (sourcing primaire, depuis sept. 2025)
+
+> Migration majeure de sept. 2025 : l'INSEE a **abandonné OAuth2** au profit d'une API Key simple par header. Les anciennes vars `INSEE_CLIENT_ID` / `INSEE_CLIENT_SECRET` sont mortes. Cf. hindsight `2026-04-06 — INSEE API : migration OAuth2 → API Key`.
+
+### Identité de l'endpoint
 
 - **URL base** : `https://api.insee.fr/api-sirene/3.11/siret` (cf. `lib/agent/sourcing.ts`, constante `INSEE_SIRET_URL`).
-- **Auth** : **API Key simple** (depuis sept. 2025, l'INSEE a abandonné OAuth2). Header `X-INSEE-Api-Key-Integration: <key>`. Clé générée sur https://portail-api.insee.fr/ → Applications → API Key.
-- **Variables d'env** : `INSEE_API_KEY` (anciennes `INSEE_CLIENT_ID` / `INSEE_CLIENT_SECRET` mortes).
-- **Rate limit** : ~30 req/min. `SIRENE_DELAY_MS = 2100 ms` entre les pages (~28 req/min, marge de sécurité).
-- **Pagination** : **CURSEUR officiel INSEE v3.11** (Wave 2). Premier appel `curseur=*`, pages suivantes utilisent `header.curseurSuivant`, fin d'univers détectée par `curseurSuivant === curseur` (page terminale). L'ancien mode offset `debut=N` est abandonné.
-- **API exposée** : `sourcerEntreprises(params: SourcerEntreprisesParams): Promise<SourcerEntreprisesResult>`. Types exportés depuis `lib/agent/sourcing.ts` :
+- **Doc officielle** : https://www.sirene.fr/sirene/public/static/api-sirene
+- **Portail développeur** (génération clé + gestion plans) : https://portail-api.insee.fr/ → Applications → ton app → API Keys.
+- **Attention vocabulaire** : `portail-api.insee.fr` = UI de gestion, **pas** l'API. L'API est sur `api.insee.fr`.
+
+### Authentification (depuis 2025-09)
+
+- **Header attendu** : `X-INSEE-Api-Key-Integration: <key>` (plan gratuit "Intégration") **ou** `X-INSEE-Api-Key-Production: <key>` (plan payant "Production").
+- **Variables d'env** : `INSEE_API_KEY` (unique clé, plus de paire client_id/client_secret). Helper `getInseeApiKey()` dans `lib/agent/sourcing.ts` lignes 432-448.
+- **Plans disponibles** :
+  - **Intégration** — gratuit, destiné au développement. Clé à émettre sur le portail, header `X-INSEE-Api-Key-Integration`.
+  - **Production** — payant ou sur demande motivée. Header `X-INSEE-Api-Key-Production`. Quotas relevés.
+- **Précondition CRITIQUE** : l'app sur portail-api.insee.fr doit être explicitement **abonnée à l'API Sirene** (onglet APIs → Subscribe → Sirene). Une clé valide mais non abonnée Sirene retourne 401/403 silencieux.
+
+### Quotas et rate limits (plan Intégration gratuit, valeurs à confirmer sur le portail)
+
+- **30 requêtes / minute** — `SIRENE_DELAY_MS = 2100 ms` entre les pages dans le code (~28 req/min, marge de sécurité).
+- **500 requêtes / jour** indicatif sur plan gratuit (vérifier sur le dashboard portail-api après quelques runs réels). Au-delà : HTTP 429 ou throttle silencieux.
+- **Production** : limites relevées sur demande.
+
+### Format de query Solr (anti-bug HTTP 400)
+
+L'API Sirene v3.11 utilise un parser **Solr / Lucene** pour le paramètre `q=`. Règles critiques :
+
+1. **Codes NAF** : 5 caractères alphanumériques `LLNNF` (sans point, ex. `0121Z`, `49.41A` → `4941A`). Voir `normalizeNafCodes()` dans `sourcing.ts:545-564`.
+2. **Quoting OBLIGATOIRE des valeurs string** : `activitePrincipaleEtablissement:("0121Z" OR "0122Z")`. Sans guillemets, Solr interprète les tokens commençant par chiffre comme expressions numériques → **HTTP 400 "Erreur de syntaxe dans le paramètre q"**. Voir `buildLuceneQuery()` dans `sourcing.ts:642-684`.
+3. **Pas de clause vide `champ:()`** : tous les filtres sont conditionnels (cf. hindsight 2026-04-06).
+4. **Invariant always-present** : `etatAdministratifEtablissement:"A"` (anti-`q=` vide).
+5. **Chunking NAF** : Solr Sirene refuse > ~25 termes par OR. Constante `SIRENE_MAX_NAF_PER_QUERY = 20` dans `sourcing.ts:102`. Au-delà, chunking transparent via curseur composite `chunk:<index>|<rawCursor>`.
+
+### Pagination par CURSEUR (Wave 2, v3.11)
+
+- Premier appel : `curseur=*` (URLSearchParams encode `*` → `%2A`).
+- Pages suivantes : passer `header.curseurSuivant` reçu en `curseur` du prochain appel.
+- Fin d'univers : `curseurSuivant === curseur` (page terminale).
+- Curseur composite multi-chunks : `chunk:0|*` → `chunk:0|abc123` → ... → `chunk:1|*` → ... Voir `parseCompositeCursor` / `serializeCompositeCursor` dans `sourcing.ts:596-623`. **Important** : le `|` du curseur composite ne va JAMAIS dans le param `q=` — il est uniquement dans le param `curseur=`.
+- L'ancien mode offset `debut=N` est abandonné.
+
+### API exposée
+
+- `sourcerEntreprises(params: SourcerEntreprisesParams): Promise<SourcerEntreprisesResult>`. Types exportés depuis `lib/agent/sourcing.ts` :
   - `SourcerEntreprisesParams` — `nafCodes`, `effectifTranches`, `codePostalRange`, `departements`, `curseur`, `pageSize`, `maxPages`, `excludeSirens` (toutes optionnelles avec défauts legacy : Gironde, 50+ salariés, NAF prioritaires).
   - `SourcerEntreprisesResult` — `etablissements`, `curseur`, `curseurSuivant`, `totalAvailable`, `pagesLoaded`, `exhausted`.
   - `SireneApiError` — sur HTTP 5xx persistant ou parse JSON échoué. Le caller doit l'attraper pour basculer en fallback.
@@ -17,16 +56,50 @@ Toutes les intégrations sortantes du pipeline. Variables d'env à configurer da
   - `AdemeBegesDataFairRecord` — type record ADEME (auparavant interne, désormais exporté ; les fixtures `fixtures/ademe.ts` ne sont plus un mirror).
 - **Header type** : `SireneHeader` (dans `lib/types.ts`) inclut désormais `curseur?` et `curseurSuivant?` ; `debut` / `nombre` legacy sont optionnels.
 - **Utilisation** : recherche d'établissements par codes NAF + tranches d'effectif + range code postal. Filtrage post-fetch `excludeSirens` (l'API Sirene ne supporte pas NOT IN — dedup côté code).
-- **Logging** : chaque page fetchée émet un log JSON structuré `{ phase: 'sirene_page', page, curseur, curseurSuivant, returned, header_total }`.
+- **Logging** : chaque page fetchée émet un log JSON structuré `{ phase: 'sirene_page', page, curseur, curseurSuivant, returned, header_total }` + un log diag `sirene_query_diag` avec la query exacte (cf. `sourcing.ts:758-773`).
 - **Fallback** : si exception (`SireneApiError`) ou 0 résultats → Recherche Entreprises gouv (ci-dessous). Sur 4xx (auth/validation), `sourcerEntreprises` renvoie un résultat vide avec `exhausted=true` pour permettre la bascule fallback sans throw.
+
+### Troubleshooting HTTP 400 "Erreur de syntaxe dans le paramètre q"
+
+Hypothèses classées par fréquence observée (session debug 2026-05-17) :
+
+1. **Token NAF non-quoté** — le piège n°1 de v3.11.
+   - `activitePrincipaleEtablissement:(0121Z OR 0122Z)` → **HTTP 400**. Solr interprète `0121Z` comme expression numérique.
+   - Fix : quoter chaque valeur. `activitePrincipaleEtablissement:("0121Z" OR "0122Z")` → **HTTP 200**.
+   - Implémentation : `buildLuceneQuery()` dans `sourcing.ts:678-681` génère systématiquement les guillemets.
+2. **Filtre vide `champ:()`** — si `nafCodes=[]`, `effectifTranches=[]` ou `codePostalRange=['','']`, NE PAS générer la clause. Cf. `buildLuceneQuery()` (toutes les clauses sont conditionnelles, fallback sur `etatAdministratifEtablissement:"A"`).
+3. **Mauvais header pour le plan de la clé** — clé "Production" envoyée sur header "Integration" (ou l'inverse) → 401 ou 400 selon la version Gravitee. Vérifier le plan rattaché à la clé sur portail-api.insee.fr.
+4. **API Sirene non abonnée sur l'app INSEE** — clé valide mais l'app n'a pas souscrit à l'API Sirene → 401/403. Aller sur portail-api.insee.fr → ton app → APIs → Subscribe à Sirene.
+5. **Curseur composite `chunk:0|*` dans `q=`** au lieu de `?curseur=` — le `|` casse la query Solr. Doit être strictement dans le param séparé `curseur=`. Toujours via `url.searchParams.set('curseur', ...)`, jamais concaténé dans `q=`.
+6. **Caractères Solr réservés non escapés** dans une valeur — `+ - && || ! ( ) { } [ ] ^ " ~ * ? : \ /` + espace. `normalizeNafCodes()` filtre ces caractères en amont (cf. `sourcing.ts:531`).
+7. **Query trop longue** — au-delà de ~8 KB l'URL peut être tronquée par la gateway Gravitee. Constante `SIRENE_MAX_NAF_PER_QUERY = 20` borne le risque ; chunking automatique au-delà.
+
+### Scripts de test
+
+- **`scripts/test-insee-sirene.ps1`** — test minimal d'une `INSEE_API_KEY` contre l'endpoint v3.11 (1 requête, NAF unique, Gironde). Sortie : HTTP status + nb résultats. À lancer après chaque rotation de clé.
+- **`scripts/test-sirene-queries.ps1`** — bench de 14 variantes de query Lucene (quoting, ranges, OR multiples, codes NAF mixtes, etc.) pour identifier précisément ce qui passe et ce qui retourne 400. Utilisé lors de la session debug 2026-05-17.
+
+### Plan B : bulk SIRENE download (POC)
+
+Quand l'API live pose problème de manière persistante (rate-limit chronique, panne INSEE, quotas dépassés en prod), un import bulk mensuel reste possible :
+
+- **Source** : https://files.data.gouv.fr/insee-sirene/
+- **Fichier** : `StockEtablissementHistorique_utf8.zip` (~3 GB décompressé)
+- **Cadence** : mensuelle (snapshot du 1er du mois)
+- **Setup en cours** : `scripts/import-sirene-bulk.ts` (POC d'ingestion vers une table miroir Postgres). Non encore en prod.
+- **Trade-off** : pas de fraîcheur intra-mois sur créations/cessations, mais 0 dépendance API.
 
 ## Recherche Entreprises (data.gouv.fr) — fallback gratuit
 
-- **URL base** : `https://recherche-entreprises.api.gouv.fr/search` (à confirmer dans le code).
-- **Auth** : aucune. Open data.
-- **Rate limit** : ~7 req/s documenté, illimité en volume quotidien.
+- **URL base** : `https://recherche-entreprises.api.gouv.fr/search`
+- **Doc officielle** : https://api.gouv.fr/les-api/api-recherche-entreprises
+- **Auth** : aucune (open data, miroir SIRENE indexé différemment).
+- **Rate limit** : **7 req/sec** documenté, illimité en volume quotidien.
+- **Couverture** : ~95 % des entreprises FR (miroir SIRENE re-indexé). Manque parfois les très récentes (≤ 7 jours) et les modifications administratives intra-mois.
+- **Format NAF** : avec point (`49.41A`), contrairement à Sirene qui utilise sans point (`4941A`). Cf. hindsight 2026-04-06 — Fallback sourcing.
 - **Utilisation** : **filet de sécurité** déclenché par la boucle adaptative à la 1ère page si Sirene throw `SireneApiError` (cf. `lib/agent/sourcing-runner.ts:473-494`). Un seul appel (pas de curseur) → l'univers est marqué `exhausted=true` après. `excludeSirens` passé pour skip les SIREN déjà connus de l'user.
 - **Variables d'env** : aucune.
+- **Recommandation projet (2026-05-17)** : activer le fallback en mode **prioritaire** (sans tenter Sirene en amont) si Sirene est KO sur **> 3 runs consécutifs**. La métrique de santé est calculée dans `lib/observability/sirene-health.ts` (compteur d'échecs successifs sur les N derniers `agent_runs`). Au-delà du seuil, l'orchestrator route directement vers Recherche Entreprises pour éviter les 2s de timeout Sirene × N pages × N users.
 
 ## ADEME BEGES (enrichissement)
 
@@ -100,7 +173,9 @@ SUPABASE_SERVICE_ROLE_KEY=
 # OpenAI
 OPENAI_API_KEY=
 
-# Sirene INSEE (API Key depuis sept. 2025 — anciennes vars OAuth2 mortes)
+# Sirene INSEE (API Key depuis sept. 2025 — anciennes vars OAuth2 INSEE_CLIENT_ID/SECRET mortes)
+# Génération : https://portail-api.insee.fr/ → Applications → ton app → API Keys
+# Plan "Intégration" (gratuit) → header X-INSEE-Api-Key-Integration côté code
 INSEE_API_KEY=
 
 # Enrichissement contacts (optionnels — phase 4.5 skippée sans)
