@@ -51,6 +51,7 @@ import {
 } from './naf-sector-mapping'
 import { calculerScore, determinerPriorite, getScoreDetails } from './scoring'
 import { searchSireneCache } from './sirene-cache'
+import { fetchRaisonSocialesBatch } from './sources/lookup-raison-sociale'
 
 // ------------------------------------------------------------
 // TYPES PUBLICS
@@ -732,6 +733,32 @@ export async function runAdaptiveSourcing(
             target_candidates: targetCandidates,
           },
         )
+
+        // Enrichissement raison_sociale via Recherche Entreprises pour les étabs
+        // dont denominationUniteLegale est manquante (le bulk SIRENE ne contient
+        // pas la dénomination de l'unité légale — cf. StockEtablissement vs StockUniteLegale).
+        const sirensSansRS = filteredByNaf
+          .filter((e) => !e.denominationUniteLegale)
+          .map((e) => e.siren)
+
+        if (sirensSansRS.length > 0) {
+          const rsMap = await fetchRaisonSocialesBatch(sirensSansRS, {
+            parallelism: 7,
+            throttleMs: 1_100,
+          })
+          for (const e of filteredByNaf) {
+            if (!e.denominationUniteLegale) {
+              const rs = rsMap.get(e.siren)
+              if (rs) e.denominationUniteLegale = rs
+            }
+          }
+          pushLog(
+            'enrichissement_raison_sociale',
+            `Recherche Entreprises : ${rsMap.size}/${sirensSansRS.length} noms récupérés`,
+            'info',
+            { requested: sirensSansRS.length, resolved: rsMap.size },
+          )
+        }
 
         return {
           etablissements: filteredByNaf,
