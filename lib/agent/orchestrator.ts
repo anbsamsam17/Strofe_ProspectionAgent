@@ -30,6 +30,7 @@ import {
   scoreLeadAvecGemini,
   type GeminiProspectInput,
 } from './gemini-scoring'
+import { resolveSectorFromNaf } from './naf-labels'
 import {
   runPipelineSourcing,
   type AdaptiveSourcingOutcome,
@@ -323,13 +324,9 @@ async function phaseSecteurCategorisation(
 ): Promise<void> {
   run.phase = 'secteur_categorisation'
 
-  if (!isGeminiAvailable()) {
-    log(run, 'secteur_categorisation', 'GEMINI_API_KEY absente — phase skippée', 'info')
-    return
-  }
-
-  log(run, 'secteur_categorisation', 'Démarrage catégorisation secteur via Gemini', 'info', {
+  log(run, 'secteur_categorisation', 'Démarrage catégorisation secteur (cascade NAF puis Gemini)', 'info', {
     cap: SECTEUR_MAX_PER_RUN,
+    gemini_available: isGeminiAvailable(),
   })
 
   // Charger les prospects sans secteur_libelle exploitable : NULL, chaîne vide
@@ -355,80 +352,117 @@ async function phaseSecteurCategorisation(
   const selected = prospects?.length ?? 0
 
   if (!prospects || selected === 0) {
-    log(run, 'secteur_categorisation', 'Gemini : 0 prospects sélectionnés (rien à catégoriser)', 'info', {
+    log(run, 'secteur_categorisation', 'Catégorisation : 0 prospects sélectionnés (rien à catégoriser)', 'info', {
       selected: 0,
-      categorises: 0,
+      resolus_par_naf: 0,
+      categorises_par_gemini: 0,
       echecs: 0,
       cap: SECTEUR_MAX_PER_RUN,
     })
     return
   }
 
-  log(run, 'secteur_categorisation', `Gemini : ${selected} prospects sélectionnés`, 'info', {
+  log(run, 'secteur_categorisation', `Catégorisation : ${selected} prospects sélectionnés`, 'info', {
     selected,
     cap: SECTEUR_MAX_PER_RUN,
   })
 
-  let categorisesCount = 0
+  // ---- ÉTAPE 1 — Résolution déterministe via mapping NAF rev. 2 INSEE ----
+  // Couvre 99% des cas. Aucun appel réseau, aucun quota consommé.
+  let resolusParNaf = 0
+  let categorisesParGemini = 0
   let echecsCount = 0
+  const prospectsBesoinGemini: typeof prospects = []
 
-  for (
-    let groupStart = 0;
-    groupStart < prospects.length;
-    groupStart += SECTEUR_BATCH_PARALLELISM
-  ) {
-    const groupEnd = Math.min(groupStart + SECTEUR_BATCH_PARALLELISM, prospects.length)
-    const group = prospects.slice(groupStart, groupEnd)
-
-    const results = await Promise.all(
-      group.map(async (p) => {
-        const id = p.id as string
-        const result = await categoriserSecteurAvecGemini({
-          nafCode: (p.secteur_naf as string | null) ?? null,
-          raisonSociale: (p.raison_sociale as string | null) ?? '',
-          effectifMin: (p.effectif_min as number | null) ?? null,
-        })
-        return { id, result }
-      }),
-    )
-
-    for (const { id, result } of results) {
-      if (!result) {
-        echecsCount += 1
-        continue
-      }
-
+  for (const p of prospects) {
+    const nafResult = resolveSectorFromNaf((p.secteur_naf as string | null) ?? null)
+    if (nafResult) {
       const { error: updateError } = await supabase
         .from('prospects')
-        .update({ secteur_libelle: result.secteur_libelle })
-        .eq('id', id)
-
+        .update({ secteur_libelle: nafResult.libelle })
+        .eq('id', p.id as string)
       if (updateError) {
         echecsCount += 1
         log(
           run,
           'secteur_categorisation',
-          `Échec UPDATE secteur_libelle prospect ${id}`,
+          `Échec UPDATE secteur_libelle (via NAF) prospect ${p.id}`,
           'warn',
-          { prospect_id: id, error: updateError.message },
+          { prospect_id: p.id, error: updateError.message },
         )
-        continue
+      } else {
+        resolusParNaf += 1
       }
-      categorisesCount += 1
+    } else {
+      prospectsBesoinGemini.push(p)
     }
+  }
+
+  // ---- ÉTAPE 2 — Fallback Gemini pour les NAF non résolubles ----
+  if (prospectsBesoinGemini.length > 0 && isGeminiAvailable()) {
+    for (
+      let groupStart = 0;
+      groupStart < prospectsBesoinGemini.length;
+      groupStart += SECTEUR_BATCH_PARALLELISM
+    ) {
+      const groupEnd = Math.min(groupStart + SECTEUR_BATCH_PARALLELISM, prospectsBesoinGemini.length)
+      const group = prospectsBesoinGemini.slice(groupStart, groupEnd)
+
+      const results = await Promise.all(
+        group.map(async (p) => {
+          const id = p.id as string
+          const result = await categoriserSecteurAvecGemini({
+            nafCode: (p.secteur_naf as string | null) ?? null,
+            raisonSociale: (p.raison_sociale as string | null) ?? '',
+            effectifMin: (p.effectif_min as number | null) ?? null,
+          })
+          return { id, result }
+        }),
+      )
+
+      for (const { id, result } of results) {
+        if (!result) {
+          echecsCount += 1
+          continue
+        }
+
+        const { error: updateError } = await supabase
+          .from('prospects')
+          .update({ secteur_libelle: result.secteur_libelle })
+          .eq('id', id)
+
+        if (updateError) {
+          echecsCount += 1
+          log(
+            run,
+            'secteur_categorisation',
+            `Échec UPDATE secteur_libelle (via Gemini) prospect ${id}`,
+            'warn',
+            { prospect_id: id, error: updateError.message },
+          )
+          continue
+        }
+        categorisesParGemini += 1
+      }
+    }
+  } else if (prospectsBesoinGemini.length > 0) {
+    // Gemini indisponible et NAF non résoluble → on log mais on ne plante pas.
+    echecsCount += prospectsBesoinGemini.length
   }
 
   log(
     run,
     'secteur_categorisation',
-    `Gemini : ${selected} sélectionnés, ${categorisesCount} catégorisés, ${echecsCount} échecs`,
+    `Catégorisation : ${selected} sélectionnés, ${resolusParNaf} via NAF, ${categorisesParGemini} via Gemini, ${echecsCount} échecs`,
     'info',
     {
       selected,
-      categorises: categorisesCount,
+      resolus_par_naf: resolusParNaf,
+      categorises_par_gemini: categorisesParGemini,
       echecs: echecsCount,
       cap: SECTEUR_MAX_PER_RUN,
-      source: 'gemini-2.0-flash',
+      gemini_available: isGeminiAvailable(),
+      source: 'naf-labels + gemini-2.0-flash',
     },
   )
 }

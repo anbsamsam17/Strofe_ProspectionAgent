@@ -29,6 +29,7 @@ import {
   categoriserSecteurAvecGemini,
   isGeminiAvailable,
 } from './gemini-scoring'
+import { resolveSectorFromNaf } from './naf-labels'
 import {
   enrichirProspect,
   getRePhoneCircuitState,
@@ -1258,8 +1259,6 @@ async function categoriserSecteursPostUpsert(
   scored: Array<Partial<Prospect>>,
   pushLog: (phase: string, message: string, level: 'info' | 'warn' | 'error', data?: Record<string, unknown>) => void,
 ): Promise<void> {
-  if (!isGeminiAvailable()) return
-
   try {
     // Cible : nouveaux prospects sourcés sans secteur_libelle mais avec NAF dispo.
     // Le filtre inclut désormais la valeur littérale "Inconnu*" en plus de NULL/vide.
@@ -1283,7 +1282,7 @@ async function categoriserSecteursPostUpsert(
     if (sirensSansSecteur.length === 0) {
       pushLog(
         'secteur_categorisation',
-        'Gemini : 0 prospects sélectionnés (sourcing) — tous ont déjà un secteur_libelle',
+        'Catégorisation : 0 prospects sélectionnés — tous ont déjà un secteur_libelle',
         'info',
         { selected: 0, cap: SECTEUR_MAX_PER_SOURCING_RUN },
       )
@@ -1305,7 +1304,7 @@ async function categoriserSecteursPostUpsert(
       } else {
         pushLog(
           'secteur_categorisation',
-          'Gemini : 0 rows DB pour les SIREN sélectionnés — incohérence ?',
+          'Catégorisation : 0 rows DB pour les SIREN sélectionnés — incohérence ?',
           'warn',
           { siren_count: sirensSansSecteur.length },
         )
@@ -1313,51 +1312,82 @@ async function categoriserSecteursPostUpsert(
       return
     }
 
-    let categorisesCount = 0
+    // Cascade : pour chaque prospect, on tente d'abord la résolution déterministe
+    // via le mapping NAF rev. 2 INSEE (lib/agent/naf-labels.ts). Si null, on
+    // bascule sur Gemini en fallback. Évite 99% des appels Gemini (NAF présent
+    // sur la quasi-totalité des prospects sourcés depuis sirene_cache).
+    let resolusParNaf = 0
+    let categorisesParGemini = 0
     let echecsCount = 0
+    const rowsBesoinGemini: typeof rows = []
 
-    for (let groupStart = 0; groupStart < rows.length; groupStart += SECTEUR_BATCH_PARALLELISM) {
-      const groupEnd = Math.min(groupStart + SECTEUR_BATCH_PARALLELISM, rows.length)
-      const group = rows.slice(groupStart, groupEnd)
-
-      const results = await Promise.all(
-        group.map(async (r) => {
-          const result = await categoriserSecteurAvecGemini({
-            nafCode: (r.secteur_naf as string | null) ?? null,
-            raisonSociale: (r.raison_sociale as string | null) ?? '',
-            effectifMin: (r.effectif_min as number | null) ?? null,
-          })
-          return { id: r.id as string, result }
-        }),
-      )
-
-      for (const { id, result } of results) {
-        if (!result) {
-          echecsCount += 1
-          continue
-        }
+    for (const r of rows) {
+      const nafResult = resolveSectorFromNaf((r.secteur_naf as string | null) ?? null)
+      if (nafResult) {
         const { error: updateError } = await supabase
           .from('prospects')
-          .update({ secteur_libelle: result.secteur_libelle })
-          .eq('id', id)
+          .update({ secteur_libelle: nafResult.libelle })
+          .eq('id', r.id as string)
         if (updateError) {
           echecsCount += 1
-          continue
+        } else {
+          resolusParNaf += 1
         }
-        categorisesCount += 1
+      } else {
+        rowsBesoinGemini.push(r)
       }
+    }
+
+    // Fallback Gemini pour les prospects sans NAF résoluble.
+    if (rowsBesoinGemini.length > 0 && isGeminiAvailable()) {
+      for (let groupStart = 0; groupStart < rowsBesoinGemini.length; groupStart += SECTEUR_BATCH_PARALLELISM) {
+        const groupEnd = Math.min(groupStart + SECTEUR_BATCH_PARALLELISM, rowsBesoinGemini.length)
+        const group = rowsBesoinGemini.slice(groupStart, groupEnd)
+
+        const results = await Promise.all(
+          group.map(async (r) => {
+            const result = await categoriserSecteurAvecGemini({
+              nafCode: (r.secteur_naf as string | null) ?? null,
+              raisonSociale: (r.raison_sociale as string | null) ?? '',
+              effectifMin: (r.effectif_min as number | null) ?? null,
+            })
+            return { id: r.id as string, result }
+          }),
+        )
+
+        for (const { id, result } of results) {
+          if (!result) {
+            echecsCount += 1
+            continue
+          }
+          const { error: updateError } = await supabase
+            .from('prospects')
+            .update({ secteur_libelle: result.secteur_libelle })
+            .eq('id', id)
+          if (updateError) {
+            echecsCount += 1
+            continue
+          }
+          categorisesParGemini += 1
+        }
+      }
+    } else if (rowsBesoinGemini.length > 0) {
+      // Gemini indisponible et NAF non résoluble → on log mais on ne plante pas.
+      echecsCount += rowsBesoinGemini.length
     }
 
     pushLog(
       'secteur_categorisation',
-      `Gemini (sourcing) : ${rows.length} sélectionnés, ${categorisesCount} catégorisés, ${echecsCount} échecs`,
+      `Catégorisation : ${rows.length} sélectionnés, ${resolusParNaf} via NAF, ${categorisesParGemini} via Gemini, ${echecsCount} échecs`,
       'info',
       {
         selected: rows.length,
-        categorises: categorisesCount,
+        resolus_par_naf: resolusParNaf,
+        categorises_par_gemini: categorisesParGemini,
         echecs: echecsCount,
         cap: SECTEUR_MAX_PER_SOURCING_RUN,
-        source: 'gemini-2.0-flash',
+        gemini_available: isGeminiAvailable(),
+        source: 'naf-labels + gemini-2.0-flash',
       },
     )
   } catch (err) {
