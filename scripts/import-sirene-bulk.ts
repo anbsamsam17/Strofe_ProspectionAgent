@@ -59,23 +59,34 @@ import unzipper from 'unzipper'
 // CONFIG — variables d'environnement + constantes
 // ---------------------------------------------------------------------------
 
-// URL mise à jour 2026-05-17 : INSEE a migré les fichiers SIRENE depuis
-// files.data.gouv.fr/insee-sirene/ (404 depuis août 2025) vers l'API
-// data.gouv.fr datasets. URLs trouvées sur :
-// https://www.data.gouv.fr/datasets/base-sirene-des-entreprises-et-de-leurs-etablissements-siren-siret/
-//
-// Stock Établissements (~1.1 GB ZIP, ~30M lignes, MAJ mensuelle) :
-const DEFAULT_SIRENE_URL =
-  'https://www.data.gouv.fr/api/1/datasets/r/0835cd60-2c2a-497b-bc64-404de704ce89'
+// INSEE publie plusieurs ressources sous le même dataset data.gouv.fr :
+//   - StockEtablissement_utf8 (~1.1 GB ZIP, ~41M établissements) ← celle dont on a besoin
+//   - StockUniteLegale_utf8
+//   - StockEtablissementHistorique_utf8
+//   - StockUniteLegaleHistorique_utf8 (~69M lignes, schéma DIFFÉRENT, pas d'etablissementSiege)
+// Les resource IDs changent à chaque republication mensuelle, donc on RÉSOUT
+// dynamiquement via l'API métadonnée (sauf override explicite via env).
+const SIRENE_DATASET_SLUG =
+  'base-sirene-des-entreprises-et-de-leurs-etablissements-siren-siret'
+const SIRENE_DATASET_META_URL =
+  `https://www.data.gouv.fr/api/1/datasets/${SIRENE_DATASET_SLUG}/`
 
-const SIRENE_DOWNLOAD_URL =
-  process.env.SIRENE_DOWNLOAD_URL ?? DEFAULT_SIRENE_URL
+// Nom de fichier attendu après unzip (garde-fou contre les mauvaises resources).
+const EXPECTED_CSV_PREFIX = 'StockEtablissement_utf8'
+
+const SIRENE_DOWNLOAD_URL_OVERRIDE = process.env.SIRENE_DOWNLOAD_URL ?? null
 
 const MAX_STORAGE_MB = parseInt(process.env.MAX_STORAGE_MB ?? '100', 10)
 const BATCH_SIZE = parseInt(process.env.SIRENE_BATCH_SIZE ?? '500', 10)
 
 const LOG_EVERY_ROWS = 10_000
 const STORAGE_CHECK_EVERY_ROWS = 10_000
+
+// Mode diagnostic : on parse les N premières lignes, on log les colonnes
+// réelles + un échantillon + les compteurs de rejet par cause, puis on sort.
+// Pas d'upsert, pas de check storage.
+const DRY_RUN = process.env.SIRENE_DRYRUN === '1'
+const DRY_RUN_LIMIT = parseInt(process.env.SIRENE_DRYRUN_LIMIT ?? '2000', 10)
 
 const DOWNLOAD_MAX_RETRIES = 3
 const DOWNLOAD_INITIAL_BACKOFF_MS = 2_000
@@ -242,24 +253,71 @@ function buildRaisonSociale(row: SireneCsvRow): string | null {
   )
 }
 
+// Compteurs de rejet par cause (mis à jour par mapRow, lus par main pour log final).
+const rejectionCounts = {
+  etat: 0,
+  siege: 0,
+  tranche_missing: 0,
+  tranche_excluded: 0,
+  naf_missing: 0,
+  naf_excluded: 0,
+  siren_missing: 0,
+  siret_missing: 0,
+  siren_format: 0,
+  siret_format: 0,
+}
+
 function mapRow(row: SireneCsvRow, sourceFile: string): SireneCacheRow | null {
   // ---- Filtre BEGES strict (early-skip) ----
-  if (row.etatAdministratifEtablissement !== 'A') return null
-  if (row.etablissementSiege !== 'true') return null
+  if (row.etatAdministratifEtablissement !== 'A') {
+    rejectionCounts.etat++
+    return null
+  }
+  if (row.etablissementSiege !== 'true') {
+    rejectionCounts.siege++
+    return null
+  }
 
   const tranche = row.trancheEffectifsEtablissement?.trim()
-  if (!tranche || !KEPT_TRANCHES.has(tranche)) return null
+  if (!tranche) {
+    rejectionCounts.tranche_missing++
+    return null
+  }
+  if (!KEPT_TRANCHES.has(tranche)) {
+    rejectionCounts.tranche_excluded++
+    return null
+  }
 
   const naf = normalizeNaf(row.activitePrincipaleEtablissement)
   const section = sectionFromNaf(naf)
-  if (!section || !KEPT_NAF_SECTIONS.has(section)) return null
+  if (!section) {
+    rejectionCounts.naf_missing++
+    return null
+  }
+  if (!KEPT_NAF_SECTIONS.has(section)) {
+    rejectionCounts.naf_excluded++
+    return null
+  }
 
   const siren = row.siren?.trim()
   const siret = row.siret?.trim()
-  if (!siren || !siret) return null
+  if (!siren) {
+    rejectionCounts.siren_missing++
+    return null
+  }
+  if (!siret) {
+    rejectionCounts.siret_missing++
+    return null
+  }
   // Validation format : SIREN = 9 chiffres, SIRET = 14 chiffres.
-  if (!/^\d{9}$/.test(siren)) return null
-  if (!/^\d{14}$/.test(siret)) return null
+  if (!/^\d{9}$/.test(siren)) {
+    rejectionCounts.siren_format++
+    return null
+  }
+  if (!/^\d{14}$/.test(siret)) {
+    rejectionCounts.siret_format++
+    return null
+  }
 
   const range = TRANCHE_RANGES[tranche]
 
@@ -358,6 +416,75 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
+/**
+ * Résout dynamiquement l'URL de la ressource `StockEtablissement_utf8` via
+ * l'API métadonnée data.gouv.fr. Les resource IDs changent à chaque
+ * republication mensuelle INSEE — un ID en dur finit toujours par pointer
+ * sur le mauvais fichier (cf. bug 2026-05-17 où `0835cd60-...` est devenu
+ * `StockUniteLegaleHistorique_utf8`).
+ */
+async function resolveStockEtablissementUrl(): Promise<string> {
+  log('info', 'resolve', 'Résolution dynamique de la resource StockEtablissement', {
+    meta_url: SIRENE_DATASET_META_URL,
+  })
+
+  const res = await fetch(SIRENE_DATASET_META_URL, {
+    headers: {
+      Accept: 'application/json',
+      'User-Agent': 'prospection-agent/etl-sirene-bulk',
+    },
+  })
+  if (!res.ok) {
+    throw new Error(
+      `HTTP ${res.status} sur API métadonnée data.gouv.fr — résolution impossible`,
+    )
+  }
+
+  const meta = (await res.json()) as {
+    resources?: Array<{ title?: string; url?: string; id?: string }>
+  }
+  const resources = meta.resources ?? []
+
+  // On veut la ressource CSV (zip) StockEtablissement, hors variantes
+  // historique / liens / doublons / parquet / UniteLegale.
+  // Titres réels data.gouv.fr (2026-05) :
+  //   "Sirene : Fichier StockEtablissement du 01 Mai 2026"           ← CIBLE
+  //   "Sirene : Fichier StockEtablissement du 01 Mai 2026 (format parquet)"
+  //   "Sirene : Fichier StockEtablissementHistorique du 01 Mai 2026"
+  //   "Sirene : Fichier StockEtablissementLiensSuccession du 01 Mai 2026"
+  //   "Sirene : Fichier StockUniteLegale du 01 Mai 2026"
+  //   "Sirene : Fichier StockDoublons du 01 Mai 2026"
+  const EXCLUDED_TITLE_TOKENS = [
+    'Historique',
+    'LiensSuccession',
+    'Doublons',
+    'UniteLegale',
+    'parquet',
+    '.pdf',
+    '.csv', // les "liste-csv-des-variables-..." sont des docs, pas le ZIP
+  ]
+  const match = resources.find((r) => {
+    const t = r.title ?? ''
+    if (!t.includes('StockEtablissement')) return false
+    if (EXCLUDED_TITLE_TOKENS.some((tok) => t.includes(tok))) return false
+    return !!r.url
+  })
+
+  if (!match?.url) {
+    throw new Error(
+      `Resource ${EXPECTED_CSV_PREFIX} introuvable dans le dataset ${SIRENE_DATASET_SLUG}. ` +
+        `Ressources disponibles : ${resources.map((r) => r.title).join(', ')}`,
+    )
+  }
+
+  log('info', 'resolve', 'Resource résolue', {
+    title: match.title,
+    id: match.id,
+    url: match.url,
+  })
+  return match.url
+}
+
 async function downloadToTmp(url: string): Promise<string> {
   log('info', 'download', 'Téléchargement bulk SIRENE', {
     url,
@@ -453,6 +580,15 @@ async function processZip(
   if (!csvEntry) {
     throw new Error('Aucun .csv trouvé dans le ZIP SIRENE')
   }
+  // Garde-fou : si on a téléchargé la mauvaise resource (ex. UniteLegale,
+  // Historique, etc.), les colonnes ne matcheront pas et on rejetterait 100%.
+  // On échoue tôt avec un message clair plutôt qu'après 30 min de parsing.
+  if (!csvEntry.path.startsWith(EXPECTED_CSV_PREFIX)) {
+    throw new Error(
+      `Mauvais CSV téléchargé : "${csvEntry.path}" (attendu "${EXPECTED_CSV_PREFIX}*"). ` +
+        `Si SIRENE_DOWNLOAD_URL est défini, vérifie qu'il pointe sur StockEtablissement_utf8.zip.`,
+    )
+  }
   log('info', 'parse', 'Entrée CSV trouvée dans le ZIP', { csv: csvEntry.path })
 
   const csvStream = csvEntry.stream()
@@ -466,15 +602,63 @@ async function processZip(
 
   csvStream.pipe(parser)
 
+  // Échantillon de lignes brutes pour diagnostic (premières lignes).
+  const rawSamples: Array<Record<string, unknown>> = []
+  let headersLogged = false
+
   for await (const rawRow of parser) {
     processed++
+
+    // DIAGNOSTIC : log les colonnes réelles du CSV (1ère ligne uniquement).
+    if (!headersLogged) {
+      headersLogged = true
+      log('info', 'parse', 'Colonnes CSV détectées', {
+        column_count: Object.keys(rawRow as object).length,
+        columns: Object.keys(rawRow as object),
+      })
+    }
+
+    // DIAGNOSTIC : échantillon des 5 premières lignes (raw).
+    if (DRY_RUN && rawSamples.length < 5) {
+      rawSamples.push(rawRow as Record<string, unknown>)
+    }
+
     const mapped = mapRow(rawRow as SireneCsvRow, sourceFile)
     if (mapped) {
       kept++
       batch.push(mapped)
-      if (batch.length >= BATCH_SIZE) {
+      if (!DRY_RUN && batch.length >= BATCH_SIZE) {
         upserted += await flushBatch(supabase, batch)
         batch = []
+      }
+    }
+
+    // En mode dry-run, on s'arrête après DRY_RUN_LIMIT lignes parsées
+    // (le download du ZIP a déjà eu lieu — on ne paie que le parse).
+    if (DRY_RUN && processed >= DRY_RUN_LIMIT) {
+      log('info', 'dryrun', 'DRY-RUN — limite atteinte, diagnostic complet', {
+        processed,
+        kept,
+        rejection_counts: rejectionCounts,
+        // Sur les 5 lignes raw : on extrait les champs critiques pour
+        // confirmer/infirmer le nommage et les valeurs.
+        samples_critical_fields: rawSamples.map((r) => ({
+          siren: r.siren,
+          siret: r.siret,
+          etat: r.etatAdministratifEtablissement,
+          siege: r.etablissementSiege,
+          tranche: r.trancheEffectifsEtablissement,
+          naf: r.activitePrincipaleEtablissement,
+        })),
+        first_sample_full: rawSamples[0] ?? null,
+      })
+      // Sortie propre via return — main loggera "done" avec les stats.
+      return {
+        processed,
+        filtered_out: processed - kept,
+        kept,
+        upserted: 0,
+        final_size_mb: null,
       }
     }
 
@@ -489,7 +673,8 @@ async function processZip(
     }
 
     // Garde-fou storage : on ne check pas trop souvent pour ne pas peser sur l'ETL.
-    if (processed % STORAGE_CHECK_EVERY_ROWS === 0) {
+    // Skip en dry-run (pas d'upsert → pas de croissance à surveiller).
+    if (!DRY_RUN && processed % STORAGE_CHECK_EVERY_ROWS === 0) {
       // On flush avant de mesurer pour avoir une taille à jour.
       if (batch.length > 0) {
         upserted += await flushBatch(supabase, batch)
@@ -563,7 +748,7 @@ async function main() {
   }
 
   log('info', 'init', 'ETL SIRENE — démarrage', {
-    download_url: SIRENE_DOWNLOAD_URL,
+    download_url_override: SIRENE_DOWNLOAD_URL_OVERRIDE,
     max_storage_mb: MAX_STORAGE_MB,
     batch_size: BATCH_SIZE,
     kept_tranches: [...KEPT_TRANCHES],
@@ -579,7 +764,9 @@ async function main() {
   let zipPath: string | null = null
   let exitCode = 0
   try {
-    zipPath = await downloadToTmp(SIRENE_DOWNLOAD_URL)
+    const downloadUrl =
+      SIRENE_DOWNLOAD_URL_OVERRIDE ?? (await resolveStockEtablissementUrl())
+    zipPath = await downloadToTmp(downloadUrl)
     const stats = await processZip(zipPath, sourceFile, supabase)
     const durationMs = Date.now() - startedAt
     log('info', 'done', 'ETL SIRENE terminé', {
@@ -587,9 +774,11 @@ async function main() {
       total_kept: stats.kept,
       total_upserted: stats.upserted,
       total_filtered_out: stats.filtered_out,
+      rejection_counts: rejectionCounts,
       duration_min: +(durationMs / 60_000).toFixed(2),
       final_size_mb: stats.final_size_mb,
       source_file: sourceFile,
+      dry_run: DRY_RUN,
     })
   } catch (err) {
     if (err instanceof StorageLimitReachedError) {
