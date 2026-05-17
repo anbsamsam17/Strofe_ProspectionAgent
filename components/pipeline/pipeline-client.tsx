@@ -17,7 +17,7 @@
 // Click sur une card : ouvre le KanbanSidePanel (détails + dropdowns).
 // ============================================================
 
-import { useCallback, useEffect, useId, useMemo, useState } from 'react'
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import {
   DndContext,
   DragOverlay,
@@ -303,30 +303,38 @@ export function PipelineClient({
         }}
         onDragEnd={handleDragEnd}
       >
-        {/* Kanban — scroll horizontal sur 8 colonnes */}
-        <div
-          className="flex gap-4 overflow-x-auto pb-6"
-          role="region"
-          aria-label="Pipeline CRM — vue kanban"
-        >
-          {columns.map((column) => {
-            const items = prospects[column.status] ?? []
-            const styles = COLUMN_STYLES[column.color] ?? COLUMN_STYLES.gray
-            const isOver = overColumn === column.status && activeDragId !== null
+        {/* Scrollbar dupliquée en haut — sync bidirectionnelle avec le Kanban
+            pour permettre de naviguer entre les 8 colonnes sans devoir scroller
+            tout en bas. Pattern classique double-scroll avec ResizeObserver pour
+            suivre la largeur du contenu (qui change quand on filtre les cards). */}
+        <DualScrollKanban>
+          {(kanbanRef) => (
+            <div
+              ref={kanbanRef}
+              className="flex gap-4 overflow-x-auto pb-6"
+              role="region"
+              aria-label="Pipeline CRM — vue kanban"
+            >
+              {columns.map((column) => {
+                const items = prospects[column.status] ?? []
+                const styles = COLUMN_STYLES[column.color] ?? COLUMN_STYLES.gray
+                const isOver = overColumn === column.status && activeDragId !== null
 
-            return (
-              <DroppableColumn
-                key={column.status}
-                column={column}
-                items={items}
-                styles={styles}
-                isOver={isOver}
-                activeDragId={activeDragId}
-                onSelect={setSelectedProspect}
-              />
-            )
-          })}
-        </div>
+                return (
+                  <DroppableColumn
+                    key={column.status}
+                    column={column}
+                    items={items}
+                    styles={styles}
+                    isOver={isOver}
+                    activeDragId={activeDragId}
+                    onSelect={setSelectedProspect}
+                  />
+                )
+              })}
+            </div>
+          )}
+        </DualScrollKanban>
 
         <DragOverlay dropAnimation={null}>
           {activeProspect ? (
@@ -566,5 +574,82 @@ function ProspectCardPreview({ prospect }: { prospect: Prospect }) {
         </span>
       </div>
     </div>
+  )
+}
+
+// ── Scrollbar synchronisée en haut + bas du Kanban ──────────────────────────
+// Pattern : faux div scrollable au-dessus du Kanban, dont la largeur interne
+// suit la largeur réelle du contenu Kanban (via ResizeObserver). Sync
+// bidirectionnelle des `scrollLeft` via event listener.
+//
+// Permet à l'utilisateur de naviguer rapidement entre les colonnes sans
+// devoir scroller en bas de la page pour atteindre la scrollbar native.
+
+function DualScrollKanban({
+  children,
+}: {
+  children: (ref: React.RefObject<HTMLDivElement | null>) => React.ReactNode
+}): React.ReactElement {
+  const topScrollRef = useRef<HTMLDivElement>(null)
+  const kanbanRef = useRef<HTMLDivElement>(null)
+  const [contentWidth, setContentWidth] = useState(0)
+
+  // Suit la largeur du contenu Kanban (peut changer avec les filtres / cards).
+  useEffect(() => {
+    const kanban = kanbanRef.current
+    if (!kanban) return
+    const ro = new ResizeObserver(() => {
+      setContentWidth(kanban.scrollWidth)
+    })
+    ro.observe(kanban)
+    // Observe aussi les enfants pour capter l'ajout/retrait de cards.
+    for (const child of Array.from(kanban.children)) {
+      ro.observe(child)
+    }
+    setContentWidth(kanban.scrollWidth)
+    return () => ro.disconnect()
+  }, [])
+
+  // Sync bidirectionnelle des scrollLeft.
+  function handleTopScroll() {
+    const top = topScrollRef.current
+    const kanban = kanbanRef.current
+    if (!top || !kanban) return
+    if (kanban.scrollLeft !== top.scrollLeft) {
+      kanban.scrollLeft = top.scrollLeft
+    }
+  }
+
+  function handleKanbanScroll() {
+    const top = topScrollRef.current
+    const kanban = kanbanRef.current
+    if (!top || !kanban) return
+    if (top.scrollLeft !== kanban.scrollLeft) {
+      top.scrollLeft = kanban.scrollLeft
+    }
+  }
+
+  // Attache le listener au kanban via effet (le ref est setté par le children
+  // render-prop, donc on doit lire kanbanRef.current dans un effet et y poser
+  // un addEventListener manuel pour éviter onScroll sur un node dnd-kit).
+  useEffect(() => {
+    const kanban = kanbanRef.current
+    if (!kanban) return
+    kanban.addEventListener('scroll', handleKanbanScroll)
+    return () => kanban.removeEventListener('scroll', handleKanbanScroll)
+  }, [])
+
+  return (
+    <>
+      <div
+        ref={topScrollRef}
+        onScroll={handleTopScroll}
+        className="mb-2 h-3 overflow-x-auto overflow-y-hidden [scrollbar-color:oklch(70%_0.18_152_/_0.5)_transparent] [scrollbar-width:thin]"
+        aria-hidden="true"
+      >
+        <div style={{ width: contentWidth, height: 1 }} />
+      </div>
+      {children(kanbanRef)}
+    </>
   )
 }
