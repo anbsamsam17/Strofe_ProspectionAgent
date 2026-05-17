@@ -7,6 +7,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
+import type { SupabaseClient } from '@supabase/supabase-js'
 import { createClient } from '@/lib/supabase/server'
 
 export const dynamic = 'force-dynamic'
@@ -62,7 +63,9 @@ export async function PATCH(req: NextRequest) {
   // RLS implicite : la session SSR garantit que seul le propriétaire peut mettre
   // à jour ses propres échanges. Si l'échange appartient à un autre user, la
   // query retourne data=[] (pas d'erreur 403 — comportement RLS attendu).
-  const { data: updated, error } = await supabase
+  // Cast local : migration 014 (callback_done) pas encore dans database.types.ts.
+  const sb = supabase as unknown as SupabaseClient
+  const { data: updated, error } = await sb
     .from('prospect_exchanges')
     .update({ callback_done: true })
     .eq('id', parsed.data.exchange_id)

@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
+import type { SupabaseClient } from '@supabase/supabase-js'
 
 import { createClient } from '@/lib/supabase/server'
 import { DismissButton } from '@/components/notifications/dismiss-button'
@@ -282,13 +283,18 @@ function ExchangeCard({
 
 async function fetchNotificationsData(userId: string) {
   const supabase = await createClient()
+  // Migration 014 ajoute `callback_done` mais `database.types.ts` n'a pas
+  // encore ete regenere — on cast localement vers SupabaseClient<any> pour
+  // unblocker le type-check. Pattern deja utilise dans le projet pour les
+  // vues/colonnes recentes (cf. app/api/admin/sirene-status/route.ts).
+  const sb = supabase as unknown as SupabaseClient
   const now = new Date()
   const inSevenDays = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000)
   const fourteenDaysAgo = new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000)
 
   // Relances actives (callback_date non nulle, non traitées, dans les 7 prochains jours
   // + en retard).
-  const callbacksPromise = supabase
+  const callbacksPromise = sb
     .from('prospect_exchanges')
     .select('id, prospect_id, occurred_at, type, result, notes, callback_date, callback_done')
     .eq('callback_done', false)
@@ -297,7 +303,7 @@ async function fetchNotificationsData(userId: string) {
     .order('callback_date', { ascending: true })
 
   // Échanges chauds des 14 derniers jours (interested ou callback).
-  const hotExchangesPromise = supabase
+  const hotExchangesPromise = sb
     .from('prospect_exchanges')
     .select('id, prospect_id, occurred_at, type, result, notes, callback_date, callback_done')
     .in('result', HOT_RESULTS as unknown as string[])

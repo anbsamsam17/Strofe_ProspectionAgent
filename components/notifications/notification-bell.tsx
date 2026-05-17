@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import type { SupabaseClient } from '@supabase/supabase-js'
 import { createClient } from '@/lib/supabase/server'
 
 // Compte les relances dues dans les 7 prochains jours (non traitées).
@@ -11,10 +12,14 @@ async function getPendingCallbackCount(): Promise<number> {
   } = await supabase.auth.getUser()
   if (!user) return 0
 
+  // Migration 014 ajoute `callback_done` mais `database.types.ts` n'a pas
+  // encore ete regenere — cast local pour unblocker le type-check.
+  const sb = supabase as unknown as SupabaseClient
+
   const now = new Date()
   const inSevenDays = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000)
 
-  const { count } = await supabase
+  const { count } = await sb
     .from('prospect_exchanges')
     .select('id', { count: 'exact', head: true })
     .not('callback_date', 'is', null)
