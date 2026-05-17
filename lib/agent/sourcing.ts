@@ -89,10 +89,15 @@ const RETRY_DELAY_MS = 1_000
  * Sirene v3.11 (Solr en backend) refuse les disjonctions trop larges sur les
  * champs multivalués avec HTTP 400 "Erreur de syntaxe dans le paramètre q".
  * La limite empirique observée en prod (2026-05-12) est entre 25 et 32 termes.
- * On vise 20 par marge de sécurité — au-delà on chunke et on construit un
- * curseur composite `chunkN|rawCursor` pour itérer chunk après chunk.
  *
- * Cf. memory/hindsight.md 2026-04-06 (filtre Lucene vide) et 2026-05-12 (41 NAFs).
+ * Historique :
+ *   - 2026-05-12 : initialement 20 (marge de sécurité vs limite empirique 25-32).
+ *   - 2026-05-17 : conservé à 20 — le HTTP 400 persistant a été tracé à un
+ *     problème de SYNTAXE Solr (tokens alphanumériques non quotés) et non à
+ *     un dépassement de taille. Fix appliqué en quotant les NAF/tranches.
+ *
+ * Cf. memory/hindsight.md 2026-04-06 (filtre Lucene vide), 2026-05-12 (41 NAFs),
+ * 2026-05-17 (HTTP 400 résolu par quoting des tokens).
  */
 const SIRENE_MAX_NAF_PER_QUERY = 20
 
@@ -126,7 +131,18 @@ const COMPOSITE_CURSOR_PREFIX = 'chunk:'
 // ------------------------------------------------------------
 
 const RE_PHONE_TIMEOUT_MS = 5_000
-const RE_PHONE_CIRCUIT_BREAKER_THRESHOLD = 5
+/**
+ * Seuil d'ouverture du circuit breaker Recherche Entreprises (téléphone).
+ *
+ * Historique :
+ *   - 5 (initial 2026-05-12) — agressif pour protéger le timeout Vercel 300s.
+ *   - 30 (2026-05-17) — relevé après que Recherche Entreprises est devenue la
+ *     SOURCE PRIMAIRE de sourcing (cf. bug HTTP 400 Sirene). Cap plus haut +
+ *     backoff exponentiel : on tolère plus d'échecs ponctuels avant de couper
+ *     l'enrichissement téléphone. Pire cas : 30 × 5s timeout = 150s, encore
+ *     sous le budget 180s d'`ENRICH_SOFT_TIMEOUT_MS`.
+ */
+const RE_PHONE_CIRCUIT_BREAKER_THRESHOLD = 30
 let _rePhoneConsecutiveFailures = 0
 let _rePhoneCircuitOpenedAt: number | null = null
 
@@ -505,17 +521,42 @@ function validateSourcerParams(params: SourcerEntreprisesParams): {
 }
 
 /**
- * Normalise une liste de codes NAF au format attendu par Sirene (sans point, uppercase).
- * Filtre les entrées vides et déduplique en conservant l'ordre d'entrée (important pour
- * la stabilité du chunking entre runs : tant que `nafCodes` ne change pas, le découpage
- * en chunks reste identique et le curseur composite reste valide).
+ * Caractères Solr réservés (Lucene query syntax). Toute occurrence dans un
+ * token NAF non validé doit être rejetée (et non escapée) — un code NAF
+ * valide ne contient QUE [0-9A-Z], donc la présence d'un de ces caractères
+ * signale une donnée corrompue qu'on ne veut pas envoyer à Solr.
+ *
+ * Référence : https://lucene.apache.org/core/2_9_4/queryparsersyntax.html#Escaping%20Special%20Characters
  */
-function normalizeNafCodes(nafCodes: string[]): string[] {
+const SOLR_RESERVED_CHARS = /[+\-&|!(){}\[\]\^"~*?:\\\/\s]/
+
+/**
+ * Normalise une liste de codes NAF au format attendu par Sirene (sans point, uppercase).
+ * Filtre les entrées vides, déduplique en conservant l'ordre d'entrée (important pour
+ * la stabilité du chunking entre runs), et REJETTE les codes contenant des caractères
+ * Solr réservés (anti-injection + anti-bug HTTP 400 "Erreur de syntaxe dans le paramètre q").
+ *
+ * Format final : [0-9A-Z]+ uniquement. Tout code mal formé (libellé humain, NAF tronqué,
+ * caractère parasite) est silencieusement skippé — le mapping côté `naf-sector-mapping`
+ * a déjà eu sa chance de logger.
+ *
+ * Exporté pour les tests Vitest (`sourcing-query.test.ts`).
+ */
+export function normalizeNafCodes(nafCodes: string[]): string[] {
   const seen = new Set<string>()
   const out: string[] = []
   for (const c of nafCodes) {
-    const cleaned = c.replace('.', '').trim().toUpperCase()
+    if (typeof c !== 'string') continue
+    // 1. Strip point + trim + uppercase. Remplacer TOUS les points (replaceAll '.')
+    //    pour tolérer un code mal formé comme '01.21.Z' (le `.replace('.', '')` legacy
+    //    ne supprimait que la première occurrence — ce qui laissait passer un point).
+    const cleaned = c.replaceAll('.', '').trim().toUpperCase()
     if (cleaned.length === 0 || seen.has(cleaned)) continue
+    // 2. Reject codes contenant des caractères Solr réservés.
+    //    Un code NAF valide INSEE matche strictement /^[0-9]{4}[A-Z]$/ post-normalisation,
+    //    mais on tolère des longueurs variables (codes 3-6 chars pour formats étrangers).
+    //    L'invariant strict est : pas de caractère Solr réservé qui ferait planter Solr.
+    if (SOLR_RESERVED_CHARS.test(cleaned)) continue
     seen.add(cleaned)
     out.push(cleaned)
   }
@@ -587,16 +628,27 @@ function serializeCompositeCursor(chunkIndex: number, rawCursor: string): string
  *
  * `nafCodes` doit être pré-normalisé (cf. `normalizeNafCodes`) et pré-chunké
  * (cf. `chunkNafCodes`) — cette fonction se contente d'assembler la query.
+ *
+ * Stratégie défensive contre Sirene HTTP 400 "Erreur de syntaxe dans le paramètre q" :
+ *   - Toutes les clauses sont CONDITIONNELLES (pas de `champ:()` vide).
+ *   - Les valeurs string (NAF, tranches, état admin) sont entre guillemets doubles
+ *     pour signaler à Solr qu'il s'agit de tokens littéraux, pas d'expressions Lucene.
+ *     Évite les édge cases sur les tokens alphanumériques mixtes (`0121Z` interprété
+ *     comme `0121` + suffix `Z`) et les codes commençant par 0 (`0111Z` ≠ entier 111).
+ *   - `etatAdministratifEtablissement:"A"` est l'invariant always-present (anti-`q=`).
+ *
+ * Exporté pour les tests Vitest (`sourcing-query.test.ts`).
  */
-function buildLuceneQuery(
+export function buildLuceneQuery(
   nafCodes: string[],
   effectifTranches: string[],
   codePostalRange: [string, string],
 ): string {
   // TOUS les filtres sont conditionnels — un seul clause vide produit Sirene HTTP 400
   // "Erreur de syntaxe dans le paramètre q" (cf. hindsight 2026-04-06 + 2026-05-17).
-  // L'invariant : ne pas générer `champ:()` ni `[ TO ]`. Toujours fallback sur "etatAdministratifEtablissement:A".
-  const queryParts: string[] = ['etatAdministratifEtablissement:A']
+  // L'invariant : ne pas générer `champ:()` ni `[ TO ]`. Toujours fallback sur
+  // `etatAdministratifEtablissement:"A"` (quoted — voir docstring de la fonction).
+  const queryParts: string[] = ['etatAdministratifEtablissement:"A"']
 
   // Code postal — range valide uniquement si les 2 bornes sont des chaînes 5 chars numériques.
   const cp0 = codePostalRange[0]?.trim() ?? ''
@@ -606,15 +658,26 @@ function buildLuceneQuery(
     queryParts.push(`codePostalEtablissement:[${cp0} TO ${cp1}]`)
   }
 
-  // Tranches d'effectif — clause conditionnelle (anti-`()` 400).
-  const uniqueTranches = [...new Set(effectifTranches.filter((t) => t.trim() !== ''))].sort()
+  // Tranches d'effectif — clause conditionnelle (anti-`()` 400) + quoting défensif.
+  // Filtre les codes contenant des caractères Solr réservés (ceinture + bretelles).
+  const uniqueTranches = [
+    ...new Set(
+      effectifTranches
+        .map((t) => t.trim())
+        .filter((t) => t !== '' && !SOLR_RESERVED_CHARS.test(t)),
+    ),
+  ].sort()
   if (uniqueTranches.length > 0) {
-    queryParts.push(`trancheEffectifsEtablissement:(${uniqueTranches.join(' OR ')})`)
+    const quotedTranches = uniqueTranches.map((t) => `"${t}"`).join(' OR ')
+    queryParts.push(`trancheEffectifsEtablissement:(${quotedTranches})`)
   }
 
-  // NAF — clause conditionnelle (anti-`()` 400, cf. hindsight 2026-04-06).
+  // NAF — clause conditionnelle (anti-`()` 400, cf. hindsight 2026-04-06) + quoting défensif.
+  // `normalizeNafCodes` rejette déjà les caractères Solr réservés ; on ne re-filtre pas ici
+  // pour éviter un double-skip silencieux (caller a une garantie que sa liste sera utilisée).
   if (nafCodes.length > 0) {
-    queryParts.push(`activitePrincipaleEtablissement:(${nafCodes.join(' OR ')})`)
+    const quotedNafs = nafCodes.map((c) => `"${c}"`).join(' OR ')
+    queryParts.push(`activitePrincipaleEtablissement:(${quotedNafs})`)
   }
 
   return queryParts.join(' AND ')

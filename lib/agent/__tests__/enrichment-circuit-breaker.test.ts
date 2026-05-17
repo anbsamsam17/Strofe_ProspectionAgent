@@ -81,37 +81,41 @@ describe('rechercherTelephone — circuit breaker', () => {
     expect(getRePhoneCircuitState().openedAt).toBeNull()
   })
 
-  it('arme le breaker après 5 fetch failed consécutifs', async () => {
+  // Seuil source de vérité : `RE_PHONE_CIRCUIT_BREAKER_THRESHOLD` dans sourcing.ts.
+  // Relevé de 5 → 30 le 2026-05-17 (Recherche Entreprises devient source primaire).
+  const BREAKER_THRESHOLD = 30
+
+  it('arme le breaker après N fetch failed consécutifs (seuil = BREAKER_THRESHOLD)', async () => {
     // Arrange : tous les fetch échouent en "fetch failed"
     const fetchMock = vi.fn().mockRejectedValue(new TypeError('fetch failed'))
     vi.stubGlobal('fetch', fetchMock)
 
-    // Act : 5 SIREN successifs
-    for (let i = 0; i < 5; i++) {
+    // Act : N SIREN successifs jusqu'au seuil
+    for (let i = 0; i < BREAKER_THRESHOLD; i++) {
       const result = await rechercherTelephone(syntheticSiren(i))
       expect(result).toBeNull()
     }
 
-    // Assert : breaker ouvert après le 5e échec
+    // Assert : breaker ouvert après le N-ième échec
     expect(isRePhoneCircuitOpen()).toBe(true)
-    expect(getRePhoneCircuitState().consecutiveFailures).toBe(5)
+    expect(getRePhoneCircuitState().consecutiveFailures).toBe(BREAKER_THRESHOLD)
     expect(getRePhoneCircuitState().openedAt).not.toBeNull()
-    expect(fetchMock).toHaveBeenCalledTimes(5)
+    expect(fetchMock).toHaveBeenCalledTimes(BREAKER_THRESHOLD)
   })
 
   it('une fois ouvert : skip les appels suivants sans nouveau fetch', async () => {
-    // Arrange : 5 échecs initiaux pour armer le breaker
+    // Arrange : N échecs initiaux pour armer le breaker
     const fetchMock = vi.fn().mockRejectedValue(new TypeError('fetch failed'))
     vi.stubGlobal('fetch', fetchMock)
 
-    for (let i = 0; i < 5; i++) {
+    for (let i = 0; i < BREAKER_THRESHOLD; i++) {
       await rechercherTelephone(syntheticSiren(i))
     }
     expect(isRePhoneCircuitOpen()).toBe(true)
     fetchMock.mockClear()
 
     // Act : 10 SIREN supplémentaires
-    for (let i = 100; i < 110; i++) {
+    for (let i = 1000; i < 1010; i++) {
       const result = await rechercherTelephone(syntheticSiren(i))
       expect(result).toBeNull()
     }
@@ -121,7 +125,7 @@ describe('rechercherTelephone — circuit breaker', () => {
   })
 
   it('reset au premier succès (auto-reprise du breaker)', async () => {
-    // Arrange : 3 échecs (pas encore au seuil de 5)
+    // Arrange : 3 échecs (pas encore au seuil)
     const fetchMock = vi.fn()
       .mockRejectedValueOnce(new TypeError('fetch failed'))
       .mockRejectedValueOnce(new TypeError('fetch failed'))
@@ -180,15 +184,15 @@ describe('rechercherTelephone — circuit breaker', () => {
   })
 
   it('HTTP 503 : incrémente le compteur (un upstream down répété justifie le breaker)', async () => {
-    // Arrange : 5 réponses 503 successives
+    // Arrange : N réponses 503 successives
     const fetchMock = vi.fn()
-    for (let i = 0; i < 5; i++) {
+    for (let i = 0; i < BREAKER_THRESHOLD; i++) {
       fetchMock.mockResolvedValueOnce(makeResponse({ status: 503, ok: false }))
     }
     vi.stubGlobal('fetch', fetchMock)
 
     // Act
-    for (let i = 0; i < 5; i++) {
+    for (let i = 0; i < BREAKER_THRESHOLD; i++) {
       const result = await rechercherTelephone(syntheticSiren(i))
       expect(result).toBeNull()
     }
@@ -202,7 +206,7 @@ describe('rechercherTelephone — circuit breaker', () => {
     const fetchMock = vi.fn().mockRejectedValue(new TypeError('fetch failed'))
     vi.stubGlobal('fetch', fetchMock)
 
-    for (let i = 0; i < 5; i++) {
+    for (let i = 0; i < BREAKER_THRESHOLD; i++) {
       await rechercherTelephone(syntheticSiren(i))
     }
     expect(isRePhoneCircuitOpen()).toBe(true)

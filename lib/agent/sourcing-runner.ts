@@ -529,6 +529,13 @@ export interface RunAdaptiveSourcingOptions {
   targetCandidates: number
   /** Callback de log structuré (pousse dans `agent_runs.logs`). */
   pushLog: (phase: string, message: string, level: 'info' | 'warn' | 'error', data?: Record<string, unknown>) => void
+  /**
+   * Si `true` (settings.prefer_fallback_recherche_entreprises = true), court-circuite
+   * l'appel Sirene et passe directement par `sourcerEntreprisesFallback` (Recherche
+   * Entreprises). Use case : Sirene HTTP 400 / 5xx récurrents (cf. bug prod 2026-05-17).
+   * Défaut `false` = comportement legacy (Sirene puis fallback réactif sur erreur).
+   */
+  preferFallback?: boolean
 }
 
 /**
@@ -547,7 +554,7 @@ export interface RunAdaptiveSourcingOptions {
 export async function runAdaptiveSourcing(
   options: RunAdaptiveSourcingOptions,
 ): Promise<AdaptiveSourcingOutcome> {
-  const { filters, startCurseur, sirenSet, targetCandidates, pushLog } = options
+  const { filters, startCurseur, sirenSet, targetCandidates, pushLog, preferFallback } = options
 
   const startTime = Date.now()
   const collectedEtablissements: SireneEtablissement[] = []
@@ -558,6 +565,79 @@ export async function runAdaptiveSourcing(
   let exhausted = false
   let universeEmpty = false
   let usedFallback = false
+
+  // ----------------------------------------------------------------
+  // MODE PRÉFÉRENCE FALLBACK — court-circuit Sirene
+  // ----------------------------------------------------------------
+  // Si l'utilisateur a explicitement préféré Recherche Entreprises (settings),
+  // on n'appelle JAMAIS Sirene. Utile en production tant que l'API INSEE est
+  // instable (cf. bug HTTP 400 prod 2026-05-17 — chunks NAF rejetés malgré
+  // les fixes successifs). On considère l'univers épuisé après un seul passage
+  // fallback (pas de pagination curseur côté Recherche Entreprises).
+  if (preferFallback) {
+    pushLog(
+      'sourcing_sirene',
+      'Skip Sirene — settings.prefer_fallback_recherche_entreprises = true',
+      'warn',
+      { target_candidates: targetCandidates },
+    )
+    try {
+      const fallbackEtabs = await sourcerEntreprisesFallback({
+        maxResults: Math.max(targetCandidates * 3, 200),
+        nafCodes: filters.nafCodes,
+        effectifTranches: filters.tranches,
+        departements: filters.departements,
+        excludeSirens: sirenSet,
+      })
+      // Garde NAF (cohérent avec la branche legacy ligne ~670).
+      const filteredByNaf = fallbackEtabs.filter((e) =>
+        matchesAnyNaf(e.activitePrincipaleEtablissement, filters.nafCodes),
+      )
+      filteredByNaf.forEach((e) => sirenSet.add(e.siren))
+      pushLog(
+        'sourcing_page',
+        `Fallback direct : ${filteredByNaf.length} étabs collectés`,
+        'info',
+        {
+          collected: filteredByNaf.length,
+          dropped_by_naf: fallbackEtabs.length - filteredByNaf.length,
+          target: targetCandidates,
+          used_fallback: true,
+        },
+      )
+      return {
+        etablissements: filteredByNaf,
+        curseurInitial: startCurseur,
+        curseurFinal: startCurseur,
+        filtersSignature: filters.signature,
+        totalAvailable: 0,
+        pagesLoaded: 1,
+        exhausted: true,
+        universeEmpty: filteredByNaf.length === 0,
+        usedFallback: true,
+      }
+    } catch (err) {
+      // Le fallback direct a échoué — on n'a pas de plan B (Sirene KO supposé par config).
+      pushLog(
+        'sourcing_sirene',
+        'FATAL: fallback Recherche Entreprises (mode préférence) échoué',
+        'error',
+        { error: err instanceof Error ? err.message : String(err) },
+      )
+      captureWithContext(err, {
+        pipeline_phase: 'sourcing',
+        api: 'recherche_entreprises',
+        run_id: options.runId,
+        user_id: options.userId,
+        extra: { phase: 'sourcing_prefer_fallback_failure' },
+      })
+      throw new Error(
+        `runAdaptiveSourcing: fallback préféré échoué — ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      )
+    }
+  }
 
   while (collectedEtablissements.length < targetCandidates && !exhausted && pagesLoaded < HARD_CAP_PAGES) {
     if (Date.now() - startTime > HARD_CAP_DURATION_MS) {
@@ -1289,6 +1369,9 @@ export async function runPipelineSourcing(
       sirenSet,
       targetCandidates,
       pushLog,
+      // Permet au user de court-circuiter Sirene en cas de pannes récurrentes
+      // (cf. bug HTTP 400 prod 2026-05-17). Défaut `false` = comportement legacy.
+      preferFallback: settings?.prefer_fallback_recherche_entreprises === true,
     })
     hbState.counters.pages_loaded = outcome.pagesLoaded
     hbState.counters.candidates_collected = outcome.etablissements.length

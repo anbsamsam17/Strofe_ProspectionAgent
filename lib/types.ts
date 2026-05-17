@@ -89,6 +89,20 @@ export interface ProfileSettings {
    * Normalisée systématiquement à l'usage (re-projection si user fournit 25/25/25).
    */
   scoring_weights?: ScoringWeights
+  /**
+   * Court-circuite l'appel Sirene en allant directement sur Recherche Entreprises
+   * (api.gouv.fr — open data, sans clé).
+   *
+   * Use case : Sirene INSEE est en panne récurrente ou refuse durablement la query
+   * (cf. bug HTTP 400 prod 2026-05-17). L'utilisateur peut activer ce flag dans
+   * settings pour ne pas dépendre d'INSEE et accepter le compromis pagination
+   * limitée du fallback (pas de curseur, max ~200 résultats par run).
+   *
+   * Défaut `false` (= comportement legacy : Sirene puis fallback réactif sur erreur).
+   * Quand `true`, `runAdaptiveSourcing` skip directement `sourcerEntreprises` et
+   * appelle `sourcerEntreprisesFallback`. Le résultat est marqué `usedFallback=true`.
+   */
+  prefer_fallback_recherche_entreprises?: boolean
 }
 
 /**

@@ -453,7 +453,7 @@ describe('sourcerEntreprises — construction de requête Lucene (Cat. E)', () =
     })
 
     const url = decodeFetchUrl(getFetchedUrls(fetchMock)[0])
-    expect(url).toContain('activitePrincipaleEtablissement:(1011Z OR 3030Z)')
+    expect(url).toContain('activitePrincipaleEtablissement:("1011Z" OR "3030Z")')
   })
 
   it('inclut codePostalEtablissement:[33000 TO 33999] avec codePostalRange', async () => {
@@ -485,10 +485,10 @@ describe('sourcerEntreprises — construction de requête Lucene (Cat. E)', () =
     })
 
     const url = decodeFetchUrl(getFetchedUrls(fetchMock)[0])
-    expect(url).toContain('trancheEffectifsEtablissement:(21 OR 22)')
+    expect(url).toContain('trancheEffectifsEtablissement:("21" OR "22")')
   })
 
-  it('inclut etatAdministratifEtablissement:A par défaut', async () => {
+  it('inclut etatAdministratifEtablissement:"A" par défaut (token quoté défensivement)', async () => {
     const fetchMock = vi.fn().mockResolvedValueOnce(
       makeJsonResponse(sireneCursorSequence.page1),
     )
@@ -500,7 +500,7 @@ describe('sourcerEntreprises — construction de requête Lucene (Cat. E)', () =
     })
 
     const url = decodeFetchUrl(getFetchedUrls(fetchMock)[0])
-    expect(url).toContain('etatAdministratifEtablissement:A')
+    expect(url).toContain('etatAdministratifEtablissement:"A"')
   })
 
   it('passe le curseur dans la query string', async () => {
@@ -836,7 +836,8 @@ describe('sourcerEntreprises — chunking NAF (Cat. H — régression bug prod 2
     const url = decodeFetchUrl(getFetchedUrls(fetchMock)[0])
     const nafClauseMatch = url.match(/activitePrincipaleEtablissement:\(([^)]+)\)/)
     expect(nafClauseMatch).not.toBeNull()
-    const nafsInQuery = nafClauseMatch![1].split(' OR ')
+    // Les NAF sont désormais quotés ("0121Z") pour défense Solr — on strip les guillemets ici.
+    const nafsInQuery = nafClauseMatch![1].split(' OR ').map((t) => t.replace(/^"|"$/g, ''))
     expect(nafsInQuery.length).toBeLessThanOrEqual(20)
     // Vérifier qu'on a bien envoyé le chunk 0 (= 20 premiers NAF) en premier.
     expect(nafsInQuery[0]).toBe('0121Z')
@@ -1064,7 +1065,8 @@ describe('sourcerEntreprises — chunking NAF (Cat. H — régression bug prod 2
 
     const url = decodeFetchUrl(getFetchedUrls(fetchMock)[0])
     const nafClauseMatch = url.match(/activitePrincipaleEtablissement:\(([^)]+)\)/)
-    const nafsInQuery = nafClauseMatch![1].split(' OR ')
+    // Strip les guillemets de quoting Solr ajoutés depuis 2026-05-17.
+    const nafsInQuery = nafClauseMatch![1].split(' OR ').map((t) => t.replace(/^"|"$/g, ''))
     expect(nafsInQuery).toEqual(['0121Z', '0122Z', '3030Z'])
   })
 })
