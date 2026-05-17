@@ -25,10 +25,22 @@ interface ExchangeRow {
 interface ProspectRow {
   id: string
   raison_sociale: string
+  statut: string | null
+}
+
+interface ContactRow {
+  prospect_id: string
+  prenom: string | null
+  nom: string | null
+  poste: string | null
+  is_primary: boolean | null
 }
 
 interface EnrichedExchange extends ExchangeRow {
   raison_sociale: string
+  statut: string | null
+  contact_name: string | null
+  contact_poste: string | null
 }
 
 // ── Constantes ────────────────────────────────────────────────────────────────
@@ -83,6 +95,20 @@ const RESULT_MAP: Record<string, { label: string; className: string }> = {
   },
 }
 
+// Statuts CRM — labels et couleurs alignés avec prospects-filters.
+const STATUT_MAP: Record<string, { label: string; className: string }> = {
+  sourced: { label: 'Pas de contact', className: 'bg-white/[0.06] text-gray-300 ring-1 ring-white/[0.08]' },
+  qualified: { label: 'Qualifié', className: 'bg-blue-500/15 text-blue-200 ring-1 ring-blue-500/25' },
+  contacted: { label: 'Contacté', className: 'bg-yellow-500/15 text-yellow-200 ring-1 ring-yellow-500/25' },
+  interested: { label: 'Intéressé', className: 'bg-green-500/15 text-green-200 ring-1 ring-green-500/25' },
+  rdv: { label: 'Intéressé', className: 'bg-green-500/15 text-green-200 ring-1 ring-green-500/25' },
+  offer_sent: { label: 'Offre envoyée', className: 'bg-indigo-500/15 text-indigo-200 ring-1 ring-indigo-500/25' },
+  converted: { label: 'Affaire conclue', className: 'bg-emerald-500/15 text-emerald-200 ring-1 ring-emerald-500/25' },
+  rejected: { label: 'Sans suite', className: 'bg-red-500/15 text-red-200 ring-1 ring-red-500/25' },
+  on_hold: { label: 'En stand-by', className: 'bg-orange-500/15 text-orange-200 ring-1 ring-orange-500/25' },
+  do_not_contact: { label: 'Ne pas contacter', className: 'bg-slate-500/20 text-slate-300 ring-1 ring-slate-500/30' },
+}
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function safeTypeMeta(type: string): { label: string; className: string } {
@@ -91,6 +117,11 @@ function safeTypeMeta(type: string): { label: string; className: string } {
     label: TYPE_LABELS[key] ?? type,
     className: TYPE_CLASSES[key] ?? TYPE_CLASSES.autre,
   }
+}
+
+function safeStatutMeta(statut: string | null): { label: string; className: string } | null {
+  if (!statut) return null
+  return STATUT_MAP[statut] ?? null
 }
 
 function safeResultMeta(result: string | null): { label: string; className: string } | null {
@@ -212,7 +243,13 @@ function ExchangeCard({
 }) {
   const typeMeta = safeTypeMeta(exchange.type)
   const resultMeta = safeResultMeta(exchange.result)
+  const statutMeta = safeStatutMeta(exchange.statut)
   const notes = truncateNotes(exchange.notes)
+  const contactLabel = exchange.contact_name
+    ? exchange.contact_poste
+      ? `${exchange.contact_name} · ${exchange.contact_poste}`
+      : exchange.contact_name
+    : null
 
   return (
     <li className="flex gap-3 rounded-xl border border-white/[0.06] bg-white/[0.02] p-4 transition-colors hover:border-white/[0.1] hover:bg-white/[0.04]">
@@ -234,9 +271,28 @@ function ExchangeCard({
           >
             {exchange.raison_sociale}
           </Link>
+          {statutMeta && (
+            <span
+              className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium ${statutMeta.className}`}
+              title={`Statut CRM : ${statutMeta.label}`}
+            >
+              {statutMeta.label}
+            </span>
+          )}
         </div>
 
-        {/* Ligne 2 : badges type + résultat */}
+        {/* Ligne 2 : contact principal */}
+        {contactLabel && (
+          <div className="flex items-center gap-1.5 text-xs text-gray-300">
+            <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="flex-shrink-0 text-gray-500" aria-hidden="true">
+              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+              <circle cx="12" cy="7" r="4" />
+            </svg>
+            <span className="truncate">{contactLabel}</span>
+          </div>
+        )}
+
+        {/* Ligne 3 : badges type + résultat + rappel */}
         <div className="flex flex-wrap items-center gap-2">
           <span
             className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium ${typeMeta.className}`}
@@ -258,7 +314,7 @@ function ExchangeCard({
                 <circle cx="12" cy="12" r="10" />
                 <polyline points="12 6 12 12 16 14" />
               </svg>
-              {formatCallbackLabel(exchange.callback_date, now)}
+              Rappel · {formatCallbackLabel(exchange.callback_date, now)}
             </span>
           )}
         </div>
@@ -292,14 +348,14 @@ async function fetchNotificationsData(userId: string) {
   const inSevenDays = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000)
   const fourteenDaysAgo = new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000)
 
-  // Relances actives (callback_date non nulle, non traitées, dans les 7 prochains jours
-  // + en retard).
+  // Relances actives : TOUTES les relances futures non traitées + en retard.
+  // Pas de cap supérieur sur callback_date — on veut voir aussi les relances
+  // à 1 mois, 3 mois, etc. (sections "Plus tard").
   const callbacksPromise = sb
     .from('prospect_exchanges')
     .select('id, prospect_id, occurred_at, type, result, notes, callback_date, callback_done')
     .eq('callback_done', false)
     .not('callback_date', 'is', null)
-    .lte('callback_date', inSevenDays.toISOString())
     .order('callback_date', { ascending: true })
 
   // Échanges chauds des 14 derniers jours (interested ou callback).
@@ -311,33 +367,64 @@ async function fetchNotificationsData(userId: string) {
     .order('occurred_at', { ascending: false })
     .limit(30)
 
-  // Prospects liés (pour récupérer raison_sociale) — RLS filtre automatiquement.
+  // Prospects liés (raison_sociale + statut CRM) — RLS filtre automatiquement.
   const prospectsPromise = supabase
     .from('prospects')
-    .select('id, raison_sociale')
+    .select('id, raison_sociale, statut')
 
-  const [callbacksRes, hotRes, prospectsRes] = await Promise.all([
+  // Contacts liés — on prend le contact primaire pour chaque prospect.
+  const contactsPromise = supabase
+    .from('prospect_contacts')
+    .select('prospect_id, prenom, nom, poste, is_primary')
+
+  const [callbacksRes, hotRes, prospectsRes, contactsRes] = await Promise.all([
     callbacksPromise,
     hotExchangesPromise,
     prospectsPromise,
+    contactsPromise,
   ])
 
-  // Map prospect_id → raison_sociale pour l'enrichissement des lignes.
-  const prospectMap = new Map<string, string>(
-    ((prospectsRes.data ?? []) as ProspectRow[]).map((p) => [p.id, p.raison_sociale]),
+  // Map prospect_id → { raison_sociale, statut } pour l'enrichissement.
+  const prospectMap = new Map<string, { raison_sociale: string; statut: string | null }>(
+    ((prospectsRes.data ?? []) as ProspectRow[]).map((p) => [
+      p.id,
+      { raison_sociale: p.raison_sociale, statut: p.statut },
+    ]),
   )
 
+  // Map prospect_id → contact principal (is_primary=true, sinon 1er contact dispo).
+  // `full_name` = "prenom nom" joint (les 2 colonnes brutes en DB).
+  const contactMap = new Map<string, { full_name: string | null; poste: string | null }>()
+  for (const c of (contactsRes.data ?? []) as ContactRow[]) {
+    const existing = contactMap.get(c.prospect_id)
+    // On garde toujours le primary si trouvé, sinon le 1er rencontré.
+    if (!existing || c.is_primary) {
+      const fullName = [c.prenom, c.nom]
+        .filter((p): p is string => Boolean(p && p.trim()))
+        .join(' ')
+        .trim() || null
+      contactMap.set(c.prospect_id, { full_name: fullName, poste: c.poste })
+    }
+  }
+
   function enrich(rows: ExchangeRow[]): EnrichedExchange[] {
-    return rows.map((ex) => ({
-      ...ex,
-      raison_sociale: prospectMap.get(ex.prospect_id) ?? 'Prospect inconnu',
-    }))
+    return rows.map((ex) => {
+      const prospectInfo = prospectMap.get(ex.prospect_id)
+      const contactInfo = contactMap.get(ex.prospect_id)
+      return {
+        ...ex,
+        raison_sociale: prospectInfo?.raison_sociale ?? 'Prospect inconnu',
+        statut: prospectInfo?.statut ?? null,
+        contact_name: contactInfo?.full_name ?? null,
+        contact_poste: contactInfo?.poste ?? null,
+      }
+    })
   }
 
   const callbacks = enrich((callbacksRes.data ?? []) as ExchangeRow[])
   const hotExchanges = enrich((hotRes.data ?? []) as ExchangeRow[])
 
-  // Sous-sections relances : en retard / aujourd'hui / cette semaine.
+  // Sous-sections relances : en retard / aujourd'hui / cette semaine / plus tard.
   const todayMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate())
   const tomorrowMidnight = new Date(todayMidnight.getTime() + 24 * 60 * 60 * 1000)
 
@@ -350,13 +437,17 @@ async function fetchNotificationsData(userId: string) {
     const d = new Date(ex.callback_date)
     return d >= todayMidnight && d < tomorrowMidnight
   })
-  const upcoming = callbacks.filter((ex) => {
+  const thisWeek = callbacks.filter((ex) => {
     if (!ex.callback_date) return false
     const d = new Date(ex.callback_date)
-    return d >= tomorrowMidnight
+    return d >= tomorrowMidnight && d <= inSevenDays
+  })
+  const later = callbacks.filter((ex) => {
+    if (!ex.callback_date) return false
+    return new Date(ex.callback_date) > inSevenDays
   })
 
-  return { overdue, today, upcoming, hotExchanges, now }
+  return { overdue, today, thisWeek, later, hotExchanges, now }
 }
 
 // ── Page ──────────────────────────────────────────────────────────────────────
@@ -369,10 +460,10 @@ export default async function NotificationsPage() {
   } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
-  const { overdue, today, upcoming, hotExchanges, now } =
+  const { overdue, today, thisWeek, later, hotExchanges, now } =
     await fetchNotificationsData(user.id)
 
-  const totalCallbacks = overdue.length + today.length + upcoming.length
+  const totalCallbacks = overdue.length + today.length + thisWeek.length + later.length
 
   return (
     <div className="mx-auto max-w-3xl space-y-8">
@@ -463,15 +554,37 @@ export default async function NotificationsPage() {
             )}
 
             {/* Cette semaine */}
-            {upcoming.length > 0 && (
+            {thisWeek.length > 0 && (
               <div>
                 <p className="mb-3 flex items-center gap-2 font-mono text-[9px] uppercase tracking-[0.2em] text-cyan-400/70">
                   <span className="h-px flex-1 bg-cyan-500/20" aria-hidden="true" />
-                  Cette semaine ({upcoming.length})
+                  Cette semaine ({thisWeek.length})
                   <span className="h-px flex-1 bg-cyan-500/20" aria-hidden="true" />
                 </p>
                 <ul className="space-y-2" aria-label="Relances cette semaine">
-                  {upcoming.map((ex) => (
+                  {thisWeek.map((ex: EnrichedExchange) => (
+                    <ExchangeCard
+                      key={ex.id}
+                      exchange={ex}
+                      now={now}
+                      showDismiss
+                      relativeDate={ex.callback_date ? formatCallbackLabel(ex.callback_date, now) : ''}
+                    />
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {/* Plus tard (> 7 jours) */}
+            {later.length > 0 && (
+              <div>
+                <p className="mb-3 flex items-center gap-2 font-mono text-[9px] uppercase tracking-[0.2em] text-gray-400/70">
+                  <span className="h-px flex-1 bg-white/[0.08]" aria-hidden="true" />
+                  Plus tard ({later.length})
+                  <span className="h-px flex-1 bg-white/[0.08]" aria-hidden="true" />
+                </p>
+                <ul className="space-y-2" aria-label="Relances futures">
+                  {later.map((ex: EnrichedExchange) => (
                     <ExchangeCard
                       key={ex.id}
                       exchange={ex}
