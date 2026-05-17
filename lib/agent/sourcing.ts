@@ -668,11 +668,14 @@ export function buildLuceneQuery(
   // `etatAdministratifEtablissement:A` (non quoté — Solr `string` field).
   const queryParts: string[] = ['etatAdministratifEtablissement:A']
 
-  // Code postal — range valide uniquement si les 2 bornes sont des chaînes 5 chars numériques.
+  // Code postal — range valide uniquement si les 2 bornes sont des chaînes 5 chars numériques
+  // ET que le range ne couvre PAS tout l'univers (`[00000 TO 99999]` ferait planter Sirene 400
+  // car la cardinalité matchée dépasse la limite Solr — cf. hindsight 2026-05-17).
   const cp0 = codePostalRange[0]?.trim() ?? ''
   const cp1 = codePostalRange[1]?.trim() ?? ''
   const cpValid = /^\d{5}$/.test(cp0) && /^\d{5}$/.test(cp1)
-  if (cpValid) {
+  const cpCoversAllUniverse = cp0 === '00000' && cp1 === '99999'
+  if (cpValid && !cpCoversAllUniverse) {
     queryParts.push(`codePostalEtablissement:[${cp0} TO ${cp1}]`)
   }
 
@@ -792,6 +795,9 @@ export async function sourcerEntreprises(
         q: queryString,
         q_length: queryString.length,
         url_length: url.toString().length,
+        // URL post-encoding (ce qui est envoyé sur le réseau).
+        // Permet de voir si les espaces sont en %20 ou en + (cause HTTP 400 historique).
+        url_full: url.toString(),
         curseur: currentRawCursor,
         chunk_naf_count: nafChunks[currentChunkIndex]?.length ?? 0,
         chunk_first_codes: nafChunks[currentChunkIndex]?.slice(0, 3) ?? [],
