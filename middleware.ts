@@ -70,7 +70,13 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
+  // Exclusions :
+  //   - _next/static, _next/image : assets Next.js
+  //   - favicon.ico, manifest.json : conventions web
+  //   - sitemap.xml, robots.txt : SEO — DOIVENT être servis 200 publiquement
+  //     (sinon Google reçoit un 307 -> /login et n'indexe rien)
+  //   - extensions image : optimisations Next/Image servies depuis /public
   matcher: [
-    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
+    '/((?!_next/static|_next/image|favicon.ico|manifest.json|sitemap.xml|robots.txt|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
   ],
 }

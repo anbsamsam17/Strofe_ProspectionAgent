@@ -7,25 +7,143 @@ import {
   StaggerChildren,
   StaggerItem,
 } from '@/components/ui/stagger-children'
+import { JsonLd } from '@/components/seo/json-ld'
 
 // Refonte 2026-05-15 : <GlanHeroLoader> est un Client Component qui rend
 // <GlanHero> (PNG portrait + Framer Motion). Plus de R3F = bundle initial
 // allégé, animations plus prédictibles, H1 garanti lisible (text-white +
 // gradient lumineux sur navy).
 
+// TODO: remplacer par le domaine prod une fois publié
+const SITE_URL = 'https://prospection-agent.vercel.app'
+const OG_IMAGE_PATH = '/og-glan.png'
+// TODO: image OG 1200x630 à produire et placer en public/og-glan.png (< 300 KB)
+const LOGO_URL = `${SITE_URL}/logo-strofe.png`
+
+// ------------------------------------------------------------------ //
+// JSON-LD payloads (schema.org)                                        //
+// ------------------------------------------------------------------ //
+
+const softwareApplicationLd = {
+  '@context': 'https://schema.org',
+  '@type': 'SoftwareApplication',
+  name: 'Glan',
+  applicationCategory: 'BusinessApplication',
+  applicationSubCategory: 'SalesIntelligence',
+  operatingSystem: 'Web Browser',
+  description:
+    "Agent de prospection BEGES pour consultants bilan carbone. Croise Sirene et ADEME pour identifier les entreprises soumises à l'article L229-25.",
+  url: SITE_URL,
+  inLanguage: 'fr-FR',
+  publisher: {
+    '@type': 'Organization',
+    name: 'STROFE',
+    url: SITE_URL,
+    logo: LOGO_URL,
+  },
+  offers: {
+    '@type': 'Offer',
+    price: '0',
+    priceCurrency: 'EUR',
+    availability: 'https://schema.org/InStock',
+    category: 'free trial',
+  },
+  featureList: [
+    'Sourcing Sirene officiel (INSEE)',
+    'Croisement ADEME BEGES (publication, validité, fraîcheur)',
+    'Scoring transparent 3 piliers (taille, BEGES, contact)',
+    'Pipeline commercial 8 statuts',
+    'Multi-contacts par prospect (DG, DAF, RSE)',
+    "Journal d'échanges horodaté (appel, email, RDV)",
+    'Pondérations de scoring paramétrables',
+    'Conformité RGPD CNIL (purge auto 3 ans, opt-out)',
+  ],
+  screenshot: [
+    // TODO: remplacer par des captures d'écran réelles uploadées
+    `${SITE_URL}/screenshots/pipeline.png`,
+    `${SITE_URL}/screenshots/scoring.png`,
+  ],
+}
+
+const organizationLd = {
+  '@context': 'https://schema.org',
+  '@type': 'Organization',
+  name: 'STROFE',
+  url: SITE_URL, // TODO(samir): utiliser le domaine corporate STROFE si distinct
+  logo: LOGO_URL,
+  // contactPoint volontairement absent : on n'expose pas d'email personnel dans
+  // un JSON-LD public indexé par Google. À réactiver UNIQUEMENT avec une adresse
+  // pro non-personnelle (ex. contact@strofe.fr) — cf. code-review BLOCKER-2.
+  sameAs: [
+    // TODO(samir): ajouter les URLs des profils sociaux une fois créés
+    // 'https://www.linkedin.com/company/strofe',
+    // 'https://x.com/glan_strofe',
+  ],
+  areaServed: 'FR',
+}
+
 // Page publique marketing — opt-in à l'indexation (override du noindex global
 // défini dans app/layout.tsx, qui s'applique aux routes dashboard/auth).
 export const metadata: Metadata = {
-  title: 'Glan — Vos prospects bilan carbone, qualifiés pendant la nuit',
+  metadataBase: new URL(SITE_URL),
+  title: 'Prospection BEGES — agent IA pour consultants bilan carbone',
   description:
-    "Pendant que vous dormez, Glan scanne Sirene et ADEME pour identifier les entreprises soumises à l'obligation BEGES. Votre liste s'enrichit chaque nuit, vous gérez le pipeline commercial.",
-  robots: { index: true, follow: true },
+    "Identifiez les entreprises soumises à l'obligation BEGES (L229-25). Glan croise Sirene et ADEME, score 3 piliers, pipeline commercial intégré.",
+  keywords: [
+    'prospection BEGES',
+    'consultant bilan carbone',
+    'article L229-25',
+    'outil prospection RSE',
+    'prospection décarbonation',
+    'agent IA prospection carbone',
+    'Sirene ADEME prospection',
+    'lead generation bilan carbone',
+    'obligation bilan GES',
+    'sourcing entreprises BEGES',
+    'pipeline commercial RSE',
+    'scoring prospects carbone',
+  ],
+  alternates: {
+    canonical: '/', // résolu via metadataBase → URL absolue
+  },
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: {
+      index: true,
+      follow: true,
+      'max-snippet': -1,
+      'max-image-preview': 'large',
+      'max-video-preview': -1,
+    },
+  },
   openGraph: {
-    title: 'Glan — Vos prospects bilan carbone, qualifiés pendant la nuit',
+    title: 'Prospection BEGES — agent IA pour consultants bilan carbone',
     description:
-      'Sourcing nocturne Sirene + ADEME. Scoring transparent 3 piliers. Pipeline Kanban 8 statuts, multi-contacts, échanges horodatés.',
+      'Croise Sirene et ADEME, score 3 piliers, pipeline commercial intégré pour consultants bilan carbone.',
     type: 'website',
     locale: 'fr_FR',
+    siteName: 'Glan',
+    url: SITE_URL,
+    images: [
+      {
+        url: OG_IMAGE_PATH, // résolu en absolu via metadataBase
+        width: 1200,
+        height: 630,
+        alt: 'Glan — agent de prospection BEGES, sources Sirene et ADEME, scoring 3 piliers',
+        type: 'image/png',
+      },
+    ],
+  },
+  twitter: {
+    card: 'summary_large_image',
+    // TODO: remplacer par handles réels si comptes créés, sinon supprimer les deux lignes
+    site: '@glan_strofe',
+    creator: '@glan_strofe',
+    title: 'Prospection BEGES — agent IA pour consultants bilan carbone',
+    description:
+      'Croise Sirene et ADEME, score 3 piliers, pipeline commercial intégré.',
+    images: [OG_IMAGE_PATH],
   },
 }
 
@@ -173,8 +291,8 @@ function IconLightning() {
 const STATS = [
   {
     value: 'L. 229-25',
-    label: 'Article BEGES',
-    sublabel: "L'obligation sur laquelle je travaille",
+    label: 'ARTICLE BEGES',
+    sublabel: "L'obligation sur laquelle je travaille en exclusivité",
     valueGradient: 'from-white to-cyan-200',
     labelColor: 'text-cyan-400/80',
     accentTop:
@@ -184,8 +302,8 @@ const STATS = [
   },
   {
     value: '3',
-    label: 'Piliers de scoring',
-    sublabel: 'Taille / BEGES / Contact — paramétrables',
+    label: 'PILIERS DE SCORING',
+    sublabel: 'Taille / BEGES / Contact, paramétrables',
     valueGradient: 'from-white to-green-200',
     labelColor: 'text-green-400/80',
     accentTop:
@@ -195,8 +313,8 @@ const STATS = [
   },
   {
     value: '8',
-    label: 'Statuts du pipeline',
-    sublabel: 'Sourcé → Qualifié → … → Converti',
+    label: 'STATUTS DU PIPELINE',
+    sublabel: 'Sourcé → Qualifié → Contacté → … → Converti',
     valueGradient: 'from-white to-violet-200',
     labelColor: 'text-violet-400/80',
     accentTop:
@@ -209,6 +327,7 @@ const STATS = [
 function StatsSection() {
   return (
     <section className="py-14 px-6 lg:px-8">
+      <h2 className="sr-only">Glan en chiffres</h2>
       <div className="mx-auto max-w-5xl">
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
           {STATS.map((stat) => (
@@ -252,10 +371,10 @@ const HOW_STEPS = [
       'before:bg-gradient-to-r before:from-transparent before:via-cyan-400/60 before:to-transparent',
     accentGlow:
       'hover:shadow-[0_0_0_1px_oklch(70%_0.16_188_/_0.35),0_8px_32px_-8px_oklch(70%_0.16_188_/_0.25)]',
-    title: 'Je scanne Sirene et ADEME',
+    title: 'Je glane Sirene et l’ADEME',
     description:
-      "Chaque nuit, je parcours Sirene (INSEE) et l'ADEME. J'identifie les entreprises soumises à l'obligation Article L. 229-25 dans vos secteurs cibles.",
-    tag: 'Sourcing nocturne',
+      "Quand vous me lancez, je parcours Sirene (INSEE) et le registre officiel ADEME. J'identifie les entreprises soumises à l'article L. 229-25 dans vos secteurs cibles, en moins de quelques minutes.",
+    tag: 'Sourcing officiel',
     tagClass: 'bg-cyan-500/10 text-cyan-300 ring-1 ring-cyan-500/20',
   },
   {
@@ -270,7 +389,7 @@ const HOW_STEPS = [
       'hover:shadow-[0_0_0_1px_oklch(70%_0.18_285_/_0.35),0_8px_32px_-8px_oklch(70%_0.18_285_/_0.25)]',
     title: 'Je score sur 3 piliers',
     description:
-      'Chaque prospect reçoit un score 0-100 sur trois axes : taille, BEGES (publié, valide, échu), qualité du contact. Pondérations modifiables.',
+      "Chaque prospect reçoit un score 0-100 sur trois axes lisibles : taille (effectif), BEGES (publié, valide, échu), qualité du contact (dirigeant identifié, email pro). Pondérations sous votre contrôle.",
     tag: 'Scoring transparent',
     tagClass: 'bg-violet-500/10 text-violet-300 ring-1 ring-violet-500/20',
   },
@@ -286,7 +405,7 @@ const HOW_STEPS = [
       'hover:shadow-[0_0_0_1px_oklch(70%_0.18_152_/_0.35),0_8px_32px_-8px_oklch(70%_0.18_152_/_0.25)]',
     title: 'Vous pilotez la relation',
     description:
-      "Les prospects prioritaires sont enrichis (dirigeants, emails). Vous gérez le pipeline en 8 statuts, multi-contacts par prospect et journal d'échanges horodaté.",
+      "J'enrichis les prospects prioritaires (téléphone Pappers, email Hunter). Vous pilotez ensuite un pipeline à 8 statuts, multi-contacts par entreprise, journal d'échanges horodaté. Pas d'écriture en votre nom.",
     tag: 'Pipeline commercial',
     tagClass: 'bg-green-500/10 text-green-300 ring-1 ring-green-500/20',
   },
@@ -301,11 +420,12 @@ function HowItWorksSection() {
             Comment ça marche
           </p>
           <h2 className="bg-gradient-to-br from-white to-gray-300 bg-clip-text text-3xl font-bold tracking-tight text-transparent sm:text-4xl">
-            Trois étapes, exécutées chaque nuit
+            Trois étapes, sans boîte noire, sources officielles
           </h2>
           <p className="mx-auto mt-4 max-w-2xl text-base leading-relaxed text-gray-300 sm:text-lg">
             De Sirene au pipeline commercial : trois étapes transparentes, sans
-            boîte noire, exécutées chaque nuit.
+            boîte noire. Vous gardez la main sur les pondérations, j&apos;exécute,
+            vous voyez chaque signal détecté.
           </p>
         </div>
 
@@ -374,54 +494,54 @@ function HowItWorksSection() {
 const FEATURES = [
   {
     icon: <IconSearch />,
+    label: '[01] SOURCING',
     title: 'Source Sirene officielle',
     description:
-      "J'interroge directement la base Sirene de l'INSEE. Filtrage par tranche d'effectif, code NAF, zone géographique. Données à jour à 24 heures près.",
+      "J'interroge directement la base Sirene de l'INSEE. Filtrage par tranche d'effectif, code NAF rév. 2, zone géographique. Données rafraîchies via le registre INSEE complet le premier de chaque mois, sans intervention.",
     iconAccent: 'bg-cyan-500/10 ring-1 ring-cyan-500/20 text-cyan-300',
     accentTop:
       'before:bg-gradient-to-r before:from-transparent before:via-cyan-400/60 before:to-transparent',
     accentGlow:
       'hover:shadow-[0_0_0_1px_oklch(70%_0.16_188_/_0.35),0_8px_32px_-8px_oklch(70%_0.16_188_/_0.25)]',
-    label: '[01] Sourcing',
     labelColor: 'text-cyan-400/80',
   },
   {
     icon: <IconChart />,
+    label: '[02] SCORING',
     title: 'Scoring transparent 3 piliers',
     description:
-      'Aucune boîte noire. Taille (effectif), BEGES (publié, valide, échu), contact (dirigeant identifié, email vérifié). Vous voyez le détail pilier par pilier.',
+      "Aucune boîte noire. Pour chaque prospect, je détaille la contribution de chaque pilier : taille, BEGES, contact. Vous pondérez à 60-30-10 ou à 40-40-20, l'algorithme se réaligne dès le run suivant.",
     iconAccent: 'bg-violet-500/10 ring-1 ring-violet-500/20 text-violet-300',
     accentTop:
       'before:bg-gradient-to-r before:from-transparent before:via-violet-400/60 before:to-transparent',
     accentGlow:
       'hover:shadow-[0_0_0_1px_oklch(70%_0.18_285_/_0.35),0_8px_32px_-8px_oklch(70%_0.18_285_/_0.25)]',
-    label: '[02] Scoring',
     labelColor: 'text-violet-400/80',
   },
   {
     icon: <IconDocument />,
+    label: '[03] ADEME',
     title: 'Croisement ADEME BEGES',
     description:
-      "Pour chaque entreprise sourcée, je vérifie auprès de l'ADEME : un BEGES a-t-il été publié, à quelle date, pour quelle année. Signal direct des entreprises en retard d'obligation.",
+      "Pour chaque entreprise sourcée, je vérifie auprès du registre ADEME : un BEGES a-t-il été publié, à quelle date, pour quelle année de référence. Je signale directement les entités en retard d'obligation ou avec un bilan expiré.",
     iconAccent: 'bg-amber-500/10 ring-1 ring-amber-500/20 text-amber-300',
     accentTop:
       'before:bg-gradient-to-r before:from-transparent before:via-amber-400/60 before:to-transparent',
     accentGlow:
       'hover:shadow-[0_0_0_1px_oklch(78%_0.15_75_/_0.35),0_8px_32px_-8px_oklch(78%_0.15_75_/_0.25)]',
-    label: '[03] ADEME',
     labelColor: 'text-amber-400/80',
   },
   {
     icon: <IconLightning />,
-    title: 'Pipeline 8 statuts',
+    label: '[04] PIPELINE',
+    title: 'Pipeline 8 statuts CRM',
     description:
-      'Sourcé → Qualifié → Contacté → Intéressé → Offre envoyée → Converti. Multi-contacts par prospect (DG, DAF, RSE). Échanges horodatés et typés (appel, email, RDV).',
+      "Sourcé → Qualifié → Contacté → Intéressé → Offre envoyée → Converti, plus Rejeté et En attente. Multi-contacts par prospect (DG, DAF, RSE). Échanges horodatés et typés : appel, email, LinkedIn, RDV, autre. Tout est tracé.",
     iconAccent: 'bg-green-500/10 ring-1 ring-green-500/20 text-green-300',
     accentTop:
       'before:bg-gradient-to-r before:from-transparent before:via-green-400/60 before:to-transparent',
     accentGlow:
       'hover:shadow-[0_0_0_1px_oklch(70%_0.18_152_/_0.35),0_8px_32px_-8px_oklch(70%_0.18_152_/_0.25)]',
-    label: '[04] Pipeline',
     labelColor: 'text-green-400/80',
   },
 ] as const
@@ -476,6 +596,126 @@ function FeaturesSection() {
             </StaggerItem>
           ))}
         </StaggerChildren>
+      </div>
+    </section>
+  )
+}
+
+// ------------------------------------------------------------------ //
+// Section : Pipeline mensuel — base technique rafraîchie 1er du mois //
+// ------------------------------------------------------------------ //
+function PipelineMensuelSection() {
+  return (
+    <section className="py-24 px-6 lg:px-8">
+      <div className="mx-auto max-w-5xl">
+        <div className="mb-12 text-center">
+          <p className="mb-3 font-mono text-[10px] uppercase tracking-[0.18em] text-amber-400/80">
+            Pipeline mensuel
+          </p>
+          <h2 className="bg-gradient-to-br from-white to-amber-200 bg-clip-text text-3xl font-bold tracking-tight text-transparent sm:text-4xl">
+            Une base technique fraîche, le premier de chaque mois
+          </h2>
+        </div>
+
+        {/* Carte large à accent or — signale l&apos;automatisme silencieux */}
+        <div className="relative overflow-hidden rounded-3xl border border-amber-500/15 bg-white/[0.025] p-10 backdrop-blur-md before:absolute before:inset-x-12 before:top-0 before:h-px before:bg-gradient-to-r before:from-transparent before:via-amber-400/50 before:to-transparent">
+          <p className="mx-auto max-w-3xl text-base leading-relaxed text-gray-300 sm:text-lg">
+            Le premier de chaque mois à 04:00, je rafraîchis automatiquement ma
+            base technique avec le dernier registre officiel INSEE. Plus de 41
+            millions d&apos;établissements parcourus, filtrés selon les secteurs
+            prioritaires de l&apos;article L. 229-25 (effectif ≥ 10, industrie,
+            énergie, transport, agriculture, construction).{' '}
+            <span className="font-semibold text-amber-300">
+              Aucune action de votre part.
+            </span>
+          </p>
+        </div>
+      </div>
+    </section>
+  )
+}
+
+// ------------------------------------------------------------------ //
+// Section : Pipelines automatisés — hygiène et conformité            //
+// ------------------------------------------------------------------ //
+function PipelinesAutoSection() {
+  return (
+    <section className="py-24 px-6 lg:px-8">
+      <div className="mx-auto max-w-5xl">
+        <div className="mb-12 text-center">
+          <p className="mb-3 font-mono text-[10px] uppercase tracking-[0.18em] text-violet-400/80">
+            Hygiène et conformité
+          </p>
+          <h2 className="bg-gradient-to-br from-white to-gray-300 bg-clip-text text-3xl font-bold tracking-tight text-transparent sm:text-4xl">
+            Pipelines automatisés, hygiène et conformité
+          </h2>
+        </div>
+
+        <div className="relative rounded-3xl border border-white/[0.08] bg-white/[0.025] p-10 backdrop-blur-md before:absolute before:inset-x-12 before:top-0 before:h-px before:bg-gradient-to-r before:from-transparent before:via-violet-400/50 before:to-transparent">
+          <ul className="mx-auto max-w-3xl space-y-5">
+            {/* Nettoyage quotidien — accent cyan, icône horloge */}
+            <li className="flex items-start gap-4 text-base leading-relaxed text-gray-300">
+              <svg
+                className="mt-1 h-5 w-5 flex-shrink-0 text-cyan-400"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                strokeWidth={1.8}
+                aria-hidden="true"
+              >
+                <circle cx="12" cy="12" r="10" />
+                <polyline points="12 6 12 12 16 14" />
+              </svg>
+              <span>
+                Nettoyage quotidien des runs interrompus (
+                <code className="rounded bg-white/[0.06] px-1.5 py-0.5 font-mono text-sm text-gray-200">
+                  reap-stale
+                </code>
+                , 04:00) pour relancer sereinement.
+              </span>
+            </li>
+
+            {/* Surveillance BODACC — accent violet, icône loupe */}
+            <li className="flex items-start gap-4 text-base leading-relaxed text-gray-300">
+              <svg
+                className="mt-1 h-5 w-5 flex-shrink-0 text-violet-400"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                strokeWidth={1.8}
+                aria-hidden="true"
+              >
+                <circle cx="11" cy="11" r="8" />
+                <line x1="21" y1="21" x2="16.65" y2="16.65" />
+              </svg>
+              <span>
+                Surveillance hebdomadaire BODACC le lundi : changements de
+                dirigeants signalés sur vos contacts.
+              </span>
+            </li>
+
+            {/* Purge RGPD — accent rouge, icône corbeille */}
+            <li className="flex items-start gap-4 text-base leading-relaxed text-gray-300">
+              <svg
+                className="mt-1 h-5 w-5 flex-shrink-0 text-red-400"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                strokeWidth={1.8}
+                aria-hidden="true"
+              >
+                <polyline points="3 6 5 6 21 6" />
+                <path d="M19 6l-1 14H6L5 6" />
+                <path d="M10 11v6M14 11v6" />
+                <path d="M9 6V4h6v2" />
+              </svg>
+              <span>
+                Purge RGPD quotidienne à 03:00 : prospects de plus de 3 ans
+                supprimés, durée alignée CNIL.
+              </span>
+            </li>
+          </ul>
+        </div>
       </div>
     </section>
   )
@@ -545,12 +785,14 @@ function CtaSection() {
             </p>
 
             <h2 className="bg-gradient-to-br from-white to-green-200 bg-clip-text text-3xl font-extrabold tracking-tight text-transparent sm:text-4xl">
-              Prêt à laisser un agent travailler la nuit pour vous ?
+              Prêt à laisser Glan glaner pour vous ?
             </h2>
             <p className="mx-auto mt-4 max-w-xl text-base leading-relaxed text-gray-300">
-              Configuration en 5 minutes : votre offre, vos secteurs cibles,
-              vos pondérations de scoring. À partir de la nuit suivante, votre
-              liste de prospects BEGES s&apos;enrichit toute seule.
+              Configuration en quelques minutes : votre offre, vos secteurs
+              cibles, vos pondérations de scoring. Vous me lancez, je glane
+              Sirene et l&apos;ADEME, je vous livre une liste priorisée. Sources
+              publiques uniquement, conformité RGPD CNIL, vos données restent
+              dans votre espace isolé.
             </p>
 
             <div className="mt-10 flex flex-col justify-center gap-4 sm:flex-row">
@@ -560,7 +802,7 @@ function CtaSection() {
                   href="/signup"
                   className="inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-green-500 to-emerald-500 px-7 py-3.5 font-bold text-white shadow-[0_0_20px_-4px_oklch(70%_0.19_152_/_0.55)] transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_0_28px_-2px_oklch(70%_0.19_152_/_0.70)] active:scale-95"
                 >
-                  Activer l&apos;agent
+                  Lancer Glan
                   <svg
                     className="h-4 w-4"
                     fill="none"
@@ -628,7 +870,7 @@ function Footer() {
             </span>
           </div>
           <p className="text-xs leading-relaxed text-gray-500">
-            Prospection BEGES, par un agent qui dort la nuit pour vous.
+            Prospection BEGES, par un agent sobre, sourcé et transparent.
           </p>
         </div>
 
@@ -672,7 +914,10 @@ function Footer() {
 export default function HomePage() {
   return (
     <div className="min-h-screen">
-      {/* Hero refondu — orbe 3D R3F + copy persona Glan. */}
+      {/* JSON-LD données structurées schema.org — Server Component, aucun JS embarqué */}
+      <JsonLd payload={softwareApplicationLd} />
+      <JsonLd payload={organizationLd} />
+      {/* Hero refondu — portrait PNG + Framer Motion. */}
       <GlanHeroLoader />
       <StatsSection />
       {/* Scroll-reveal : chaque section monte de 24px + fade au scroll. */}
@@ -681,6 +926,12 @@ export default function HomePage() {
       </ScrollReveal>
       <ScrollReveal>
         <FeaturesSection />
+      </ScrollReveal>
+      <ScrollReveal>
+        <PipelineMensuelSection />
+      </ScrollReveal>
+      <ScrollReveal>
+        <PipelinesAutoSection />
       </ScrollReveal>
       <ScrollReveal>
         <CtaSection />

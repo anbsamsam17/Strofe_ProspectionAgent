@@ -531,6 +531,49 @@ export default async function ProspectsPage({
           même si l'utilisateur a navigué hors du dashboard. */}
       <RunStatusBanner />
 
+      {/* ── Bandeau onboarding — conditionnel : 0 prospects ET aucun run ── */}
+      {totalCount === 0 && !lastRunStartedAt && (
+        <div className="relative overflow-hidden rounded-2xl border border-green-500/20 bg-white/[0.03] p-6 backdrop-blur-md">
+          {/* Accent top */}
+          <div
+            className="pointer-events-none absolute inset-x-8 top-0 h-px bg-gradient-to-r from-transparent via-green-400/50 to-transparent"
+            aria-hidden="true"
+          />
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="space-y-1">
+              <p className="text-sm font-semibold text-white">
+                Bienvenue. Je n&apos;ai encore rien glané pour vous.
+              </p>
+              <p className="max-w-xl text-xs leading-relaxed text-gray-400">
+                Quelques minutes de configuration (offre, secteurs cibles,
+                pondérations 3 piliers), puis vous me lancez. Je glane Sirene et
+                l&apos;ADEME, vous récupérez une liste priorisée.
+              </p>
+            </div>
+            <Link
+              href="/glan"
+              className="inline-flex flex-shrink-0 items-center gap-2 rounded-xl border border-green-500/30 bg-green-500/10 px-5 py-2.5 text-sm font-semibold text-green-300 transition-colors hover:border-green-500/50 hover:bg-green-500/20"
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+              >
+                <path d="M5 12h14m-7-7 7 7-7 7" />
+              </svg>
+              Lancer Glan
+            </Link>
+          </div>
+        </div>
+      )}
+
       {/* ── En-tête tech cockpit ─────────────────────────────────────────── */}
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
@@ -829,8 +872,30 @@ export default async function ProspectsPage({
                       <p className="text-xs text-gray-400">
                         {hasActiveFilters
                           ? 'Modifiez ou réinitialisez vos filtres.'
-                          : 'La prochaine campagne nocturne remplira cette liste.'}
+                          : "Lancez Glan depuis la page de l’agent pour glaner vos premiers prospects BEGES, ou ajustez vos critères."}
                       </p>
+                      {!hasActiveFilters && (
+                        <Link
+                          href="/glan"
+                          className="mt-2 inline-flex items-center gap-2 rounded-lg border border-green-500/30 bg-green-500/10 px-4 py-2 text-xs font-medium text-green-300 transition-colors hover:border-green-500/50 hover:bg-green-500/20"
+                        >
+                          <svg
+                            xmlns="http://www.w3.org/2000/svg"
+                            width="12"
+                            height="12"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2.5"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            aria-hidden="true"
+                          >
+                            <path d="M5 12h14m-7-7 7 7-7 7" />
+                          </svg>
+                          Lancer Glan
+                        </Link>
+                      )}
                       {hasActiveFilters && (
                         <Link
                           href="/prospects"

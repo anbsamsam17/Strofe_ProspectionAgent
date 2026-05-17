@@ -35,7 +35,7 @@ import { BorderBeam } from '@/components/ui/border-beam'
 // ── Stagger config ────────────────────────────────────────────────── //
 
 const HEADLINE_PART_1 = 'Vos prospects bilan carbone,'
-const HEADLINE_PART_2 = 'qualifiés pendant la nuit.'
+const HEADLINE_PART_2 = 'qualifiés à la demande.'
 
 const fadeUpVariants: Variants = {
   hidden: { opacity: 0, y: 16 },
@@ -96,7 +96,7 @@ function MagneticPrimaryCTA({ disabled }: { disabled: boolean }) {
             href="/signup"
             className="inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-green-500 to-emerald-500 px-7 py-3.5 font-bold text-white shadow-[0_0_24px_-4px_oklch(70%_0.19_152_/_0.55)] transition-shadow duration-200 hover:shadow-[0_0_36px_-2px_oklch(70%_0.19_152_/_0.70)]"
           >
-            Activer l&apos;agent
+            Lancer Glan
             <svg
               className="h-4 w-4"
               fill="none"
@@ -180,7 +180,7 @@ export function GlanHero() {
                 <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-green-400 opacity-75" />
                 <span className="relative inline-flex h-2 w-2 rounded-full bg-green-400" />
               </span>
-              Agent IA — Prospection BEGES
+              Agent de sourcing — Prospection BEGES
             </span>
           </m.div>
 
@@ -241,10 +241,11 @@ export function GlanHero() {
             variants={fadeUpVariants}
             className="mx-auto mt-6 max-w-xl text-lg leading-relaxed text-gray-300 sm:text-xl lg:mx-0"
           >
-            Pendant que vous dormez, je scanne Sirene et ADEME pour identifier
-            les entreprises soumises à l&apos;obligation BEGES (Article L. 229-25).
-            Chaque matin, votre liste s&apos;enrichit de prospects scorés et
-            priorisés.
+            Quand vous me lancez, je parcours Sirene et l&apos;ADEME pour identifier
+            les entreprises soumises à l&apos;article L. 229-25. Je vous livre une
+            liste priorisée, scorée sur trois piliers transparents. Je prépare
+            le terrain, vous appelez. Sources publiques uniquement, conformité
+            RGPD.
           </m.p>
 
           {/* CTAs */}
@@ -252,7 +253,7 @@ export function GlanHero() {
             variants={fadeUpVariants}
             className="mt-8 flex flex-wrap justify-center gap-3 lg:justify-start"
           >
-            <MagneticPrimaryCTA disabled={prefersReducedMotion} />
+            <MagneticPrimaryCTA disabled={prefersReducedMotion ?? false} />
 
             <m.div
               whileHover={prefersReducedMotion ? undefined : { scale: 1.03 }}
@@ -274,7 +275,7 @@ export function GlanHero() {
             variants={fadeUpVariants}
             className="mt-7 font-mono text-[10px] uppercase tracking-[0.18em] text-cyan-400/80"
           >
-            — Glan, votre agent de sourcing
+            — Glan, votre agent de sourcing BEGES
           </m.p>
         </div>
 
@@ -309,7 +310,7 @@ export function GlanHeroFallback() {
         <div className="text-center lg:text-left">
           <span className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3.5 py-1.5 text-sm font-medium text-green-300 backdrop-blur-md">
             <span className="h-2 w-2 rounded-full bg-green-400" />
-            Agent IA — Prospection BEGES
+            Agent de sourcing — Prospection BEGES
           </span>
           <h1 className="mt-6 text-5xl font-extrabold leading-[1.05] tracking-tight text-white sm:text-6xl xl:text-7xl">
             <span className="block text-white">Vos prospects bilan carbone,</span>
@@ -317,12 +318,12 @@ export function GlanHeroFallback() {
               className="mt-2 block bg-gradient-to-r from-green-400 via-emerald-300 to-cyan-300 bg-clip-text text-transparent"
               style={{ WebkitTextFillColor: 'transparent' }}
             >
-              qualifiés pendant la nuit.
+              qualifiés à la demande.
             </span>
           </h1>
           <p className="mx-auto mt-6 max-w-xl text-lg leading-relaxed text-gray-300 sm:text-xl lg:mx-0">
-            Pendant que vous dormez, je scanne Sirene et ADEME pour vos
-            prospects soumis à l&apos;obligation BEGES.
+            Quand vous me lancez, je parcours Sirene et l&apos;ADEME pour vos
+            prospects soumis à l&apos;article L. 229-25.
           </p>
         </div>
         {/* Placeholder portrait pendant le chargement */}

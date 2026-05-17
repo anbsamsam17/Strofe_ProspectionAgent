@@ -1,0 +1,13 @@
+# Glan — robots.txt
+User-agent: *
+Allow: /
+Disallow: /api/
+Disallow: /dashboard
+Disallow: /login
+Disallow: /signup
+Disallow: /onboarding
+Disallow: /_next/
+
+# Sitemap
+# TODO: remplacer par le domaine prod
+Sitemap: https://prospection-agent.vercel.app/sitemap.xml
