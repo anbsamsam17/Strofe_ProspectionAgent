@@ -19,14 +19,34 @@ async function getPendingCallbackCount(): Promise<number> {
   const now = new Date()
   const inSevenDays = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000)
 
-  const { count } = await sb
+  const primary = await sb
     .from('prospect_exchanges')
     .select('id', { count: 'exact', head: true })
     .not('callback_date', 'is', null)
     .eq('callback_done', false)
     .lte('callback_date', inSevenDays.toISOString())
 
-  return count ?? 0
+  if (!primary.error) {
+    return primary.count ?? 0
+  }
+
+  // Fallback si la migration 014 (callback_done) n'est pas encore appliquée.
+  // On renvoie 0 silencieusement : la cloche n'affiche pas de badge mais ne
+  // plante pas la sidebar.
+  const isColumnMissing =
+    primary.error.code === '42703' ||
+    (primary.error.message ?? '').toLowerCase().includes('callback_done')
+  if (isColumnMissing) {
+    console.log(JSON.stringify({
+      level: 'warn',
+      module: 'notification-bell',
+      msg: 'callback_done column missing — badge count = 0 (migration 014 non appliquée)',
+    }))
+    return 0
+  }
+
+  // Autre erreur DB : on retourne 0 pour ne pas casser la sidebar.
+  return 0
 }
 
 // Server Component : le badge est rendu côté serveur à chaque refresh du layout.

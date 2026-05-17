@@ -72,6 +72,24 @@ export async function PATCH(req: NextRequest) {
     .select('id')
 
   if (error) {
+    // Détecter spécifiquement la migration 014 manquante pour donner un message
+    // actionnable à l'admin plutôt qu'un 500 générique.
+    const isColumnMissing =
+      error.code === '42703' ||
+      (error.message ?? '').toLowerCase().includes('callback_done')
+    if (isColumnMissing) {
+      return NextResponse.json(
+        {
+          error: {
+            code: 'DB_ERROR',
+            message:
+              'Migration 014 non appliquée — la colonne callback_done est absente. ' +
+              'Appliquez supabase/migrations/014_notification_callback_done.sql sur la base de production.',
+          },
+        },
+        { status: 500 },
+      )
+    }
     return NextResponse.json(
       { error: { code: 'DB_ERROR', message: 'Erreur lors de la mise à jour' } },
       { status: 500 },

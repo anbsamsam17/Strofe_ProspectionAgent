@@ -337,6 +337,33 @@ function ExchangeCard({
 
 // ── Fetch data ─────────────────────────────────────────────────────────────────
 
+// ── Helpers résilients pour la migration 014 ─────────────────────────────────
+
+// Retourne vrai si une erreur Supabase/Postgres indique que la colonne
+// callback_done n'existe pas (migration 014 non appliquée).
+function isCallbackDoneMissing(err: { code?: string; message?: string }): boolean {
+  return (
+    err.code === '42703' ||
+    (err.message ?? '').toLowerCase().includes('callback_done')
+  )
+}
+
+// Normalise un tableau de rows bruts pour garantir la présence de callback_done.
+// Utilisé dans le fallback : quand la colonne n'existe pas en DB, on ajoute
+// callback_done=false côté client pour que le reste du code fonctionne.
+function normalizeWithCallbackDone(rows: unknown[]): ExchangeRow[] {
+  return (rows as Record<string, unknown>[]).map((r) => ({
+    id: r['id'] as string,
+    prospect_id: r['prospect_id'] as string,
+    occurred_at: r['occurred_at'] as string,
+    type: r['type'] as string,
+    result: (r['result'] as string | null) ?? null,
+    notes: (r['notes'] as string | null) ?? null,
+    callback_date: (r['callback_date'] as string | null) ?? null,
+    callback_done: typeof r['callback_done'] === 'boolean' ? r['callback_done'] : false,
+  }))
+}
+
 async function fetchNotificationsData(userId: string) {
   const supabase = await createClient()
   // Migration 014 ajoute `callback_done` mais `database.types.ts` n'a pas
@@ -351,21 +378,67 @@ async function fetchNotificationsData(userId: string) {
   // Relances actives : TOUTES les relances futures non traitées + en retard.
   // Pas de cap supérieur sur callback_date — on veut voir aussi les relances
   // à 1 mois, 3 mois, etc. (sections "Plus tard").
-  const callbacksPromise = sb
-    .from('prospect_exchanges')
-    .select('id, prospect_id, occurred_at, type, result, notes, callback_date, callback_done')
-    .eq('callback_done', false)
-    .not('callback_date', 'is', null)
-    .order('callback_date', { ascending: true })
+  // Fallback si la migration 014 (callback_done) n'est pas encore appliquée :
+  // on interroge sans le filtre callback_done et on considère toutes les
+  // relances avec callback_date comme actives (comportement conservateur).
+  async function fetchCallbacks(): Promise<ExchangeRow[]> {
+    const primary = await sb
+      .from('prospect_exchanges')
+      .select('id, prospect_id, occurred_at, type, result, notes, callback_date, callback_done')
+      .eq('callback_done', false)
+      .not('callback_date', 'is', null)
+      .order('callback_date', { ascending: true })
+
+    if (!primary.error) {
+      return normalizeWithCallbackDone(primary.data ?? [])
+    }
+
+    if (isCallbackDoneMissing(primary.error)) {
+      console.log(JSON.stringify({
+        level: 'warn',
+        module: 'notifications/page',
+        msg: 'callback_done column missing — using fallback (migration 014 non appliquée)',
+      }))
+      const fallback = await sb
+        .from('prospect_exchanges')
+        .select('id, prospect_id, occurred_at, type, result, notes, callback_date')
+        .not('callback_date', 'is', null)
+        .order('callback_date', { ascending: true })
+      return normalizeWithCallbackDone(fallback.data ?? [])
+    }
+
+    // Autre erreur DB non liée à callback_done — on remonte vide pour ne pas
+    // planter la page, mais l'erreur est déjà capturée par Sentry via Next.js.
+    return []
+  }
 
   // Échanges chauds des 14 derniers jours (interested ou callback).
-  const hotExchangesPromise = sb
-    .from('prospect_exchanges')
-    .select('id, prospect_id, occurred_at, type, result, notes, callback_date, callback_done')
-    .in('result', HOT_RESULTS as unknown as string[])
-    .gte('occurred_at', fourteenDaysAgo.toISOString())
-    .order('occurred_at', { ascending: false })
-    .limit(30)
+  async function fetchHotExchanges(): Promise<ExchangeRow[]> {
+    const primary = await sb
+      .from('prospect_exchanges')
+      .select('id, prospect_id, occurred_at, type, result, notes, callback_date, callback_done')
+      .in('result', HOT_RESULTS as unknown as string[])
+      .gte('occurred_at', fourteenDaysAgo.toISOString())
+      .order('occurred_at', { ascending: false })
+      .limit(30)
+
+    if (!primary.error) {
+      return normalizeWithCallbackDone(primary.data ?? [])
+    }
+
+    if (isCallbackDoneMissing(primary.error)) {
+      const fallback = await sb
+        .from('prospect_exchanges')
+        .select('id, prospect_id, occurred_at, type, result, notes, callback_date')
+        .in('result', HOT_RESULTS as unknown as string[])
+        .gte('occurred_at', fourteenDaysAgo.toISOString())
+        .order('occurred_at', { ascending: false })
+        .limit(30)
+      return normalizeWithCallbackDone(fallback.data ?? [])
+    }
+
+    return []
+  }
 
   // Prospects liés (raison_sociale + statut CRM) — RLS filtre automatiquement.
   const prospectsPromise = supabase
@@ -377,9 +450,9 @@ async function fetchNotificationsData(userId: string) {
     .from('prospect_contacts')
     .select('prospect_id, prenom, nom, poste, is_primary')
 
-  const [callbacksRes, hotRes, prospectsRes, contactsRes] = await Promise.all([
-    callbacksPromise,
-    hotExchangesPromise,
+  const [callbacksData, hotData, prospectsRes, contactsRes] = await Promise.all([
+    fetchCallbacks(),
+    fetchHotExchanges(),
     prospectsPromise,
     contactsPromise,
   ])
@@ -421,8 +494,8 @@ async function fetchNotificationsData(userId: string) {
     })
   }
 
-  const callbacks = enrich((callbacksRes.data ?? []) as ExchangeRow[])
-  const hotExchanges = enrich((hotRes.data ?? []) as ExchangeRow[])
+  const callbacks = enrich(callbacksData)
+  const hotExchanges = enrich(hotData)
 
   // Sous-sections relances : en retard / aujourd'hui / cette semaine / plus tard.
   const todayMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate())
