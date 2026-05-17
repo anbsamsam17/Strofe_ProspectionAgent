@@ -707,6 +707,7 @@ export function SourcingModal({ isOpen, onClose }: SourcingModalProps) {
                         return (
                           <label
                             key={code}
+                            title={libelle}
                             className={`group inline-flex cursor-pointer items-center gap-2 rounded-lg border px-2.5 py-1.5 text-xs transition-colors ${
                               checked
                                 ? 'border-green-500/40 bg-green-500/15 text-green-300 ring-1 ring-green-500/25'
@@ -726,12 +727,11 @@ export function SourcingModal({ isOpen, onClose }: SourcingModalProps) {
                                 })
                               }
                               className="h-3.5 w-3.5 flex-shrink-0 rounded border-white/20 bg-white/[0.04] text-green-500 accent-green-500 focus:ring-2 focus:ring-green-500/40 [color-scheme:dark]"
-                              aria-label={`Section ${code} — ${libelle}`}
+                              aria-label={libelle}
                             />
-                            <span className="font-mono text-[11px] font-semibold tabular-nums">
-                              {code}
+                            <span className="truncate" aria-hidden="true">
+                              {libelle}
                             </span>
-                            <span className="truncate">{libelle}</span>
                           </label>
                         )
                       })}
