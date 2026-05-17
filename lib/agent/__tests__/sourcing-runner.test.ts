@@ -1514,14 +1514,17 @@ describe('resolveSourcingFilters — résolution NAF (Cat. I)', () => {
     expect(filtersDefault.nafSource).toBe('naf_prioritaires_default')
   })
 
-  it('I8: params.targetSectors vide → fallback settings, puis défauts', () => {
+  it('I8: params.targetSectors=[] EXPLICITE → pas de filtre NAF (no fallback)', () => {
+    // Nouveau comportement post-LOT-C 2026-05-17 : la sourcing-modal envoie
+    // explicitement `targetSectors: []` pour signifier "pas de filtre NAF"
+    // (simplifie la query Sirene, contourne HTTP 400). Le runner doit
+    // respecter ce choix et NE PAS basculer sur settings ni sur le default.
     const filters = resolveSourcingFilters(
       { targetSectors: [] },
       { sourcing_target_per_run: 15, target_sectors: ['Agriculture'] },
     )
-    // 'Agriculture' → 01.21Z, 01.22Z (viticulture)
-    expect(filters.nafCodes).toEqual(['01.21Z', '01.22Z'])
-    expect(filters.nafSource).toBe('settings_user')
+    expect(filters.nafCodes).toEqual([])
+    expect(filters.nafSource).toBe('params_request')
   })
 
   it('I9: signature stable après normalisation (codes équivalents → même hash)', () => {

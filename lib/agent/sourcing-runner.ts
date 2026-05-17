@@ -301,10 +301,19 @@ export function resolveSourcingFilters(
     return { codes: [...NAF_PRIORITAIRES_DEFAULT], source: 'naf_prioritaires_default' }
   }
 
-  if (params.targetSectors && params.targetSectors.length > 0) {
-    const resolved = resolveFromInputs(params.targetSectors, 'params_request')
-    nafCodes = resolved.codes
-    nafSource = resolved.source
+  if (params.targetSectors !== undefined) {
+    // Le caller a explicitement fourni une liste (modal ou route). Si tableau
+    // vide → l'utilisateur veut PAS DE FILTRE NAF (pas de fallback sur le
+    // default). Cf. LOT-C 2026-05-17 : sourcing-modal envoie volontairement
+    // [] pour simplifier la query Sirene (cause HTTP 400 historique).
+    if (params.targetSectors.length > 0) {
+      const resolved = resolveFromInputs(params.targetSectors, 'params_request')
+      nafCodes = resolved.codes
+      nafSource = resolved.source
+    } else {
+      nafCodes = []
+      nafSource = 'params_request'
+    }
   } else if (settings?.target_sectors && settings.target_sectors.length > 0) {
     const resolved = resolveFromInputs(settings.target_sectors, 'settings_user')
     nafCodes = resolved.codes
