@@ -11,7 +11,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
-    "import-sirene": "node --experimental-strip-types --env-file=.env.local scripts/import-sirene-bulk.ts"
+    "import-sirene": "node --experimental-strip-types --env-file-if-exists=.env.local scripts/import-sirene-bulk.ts"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
