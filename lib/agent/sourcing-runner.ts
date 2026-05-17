@@ -49,6 +49,7 @@ import {
   resolveNafFromInput,
 } from './naf-sector-mapping'
 import { calculerScore, determinerPriorite, getScoreDetails } from './scoring'
+import { searchSireneCache } from './sirene-cache'
 
 // ------------------------------------------------------------
 // TYPES PUBLICS
@@ -545,6 +546,14 @@ export interface RunAdaptiveSourcingOptions {
    * Défaut `false` = comportement legacy (Sirene puis fallback réactif sur erreur).
    */
   preferFallback?: boolean
+  /**
+   * Client Supabase admin pour consulter le cache SIRENE local (migration 018+019).
+   * Si fourni, le cache est tenté EN PREMIER (zéro appel API). En cas de cache vide
+   * ou obsolète (> 60j), bascule transparente sur l'API Sirene live (comportement
+   * legacy). Optional pour préserver la rétrocompatibilité des tests directs
+   * qui n'instancient pas de client Supabase.
+   */
+  supabase?: SupabaseAdminClient
 }
 
 /**
@@ -563,7 +572,7 @@ export interface RunAdaptiveSourcingOptions {
 export async function runAdaptiveSourcing(
   options: RunAdaptiveSourcingOptions,
 ): Promise<AdaptiveSourcingOutcome> {
-  const { filters, startCurseur, sirenSet, targetCandidates, pushLog, preferFallback } = options
+  const { filters, startCurseur, sirenSet, targetCandidates, pushLog, preferFallback, supabase } = options
 
   const startTime = Date.now()
   const collectedEtablissements: SireneEtablissement[] = []
@@ -644,6 +653,89 @@ export async function runAdaptiveSourcing(
         `runAdaptiveSourcing: fallback préféré échoué — ${
           err instanceof Error ? err.message : String(err)
         }`,
+      )
+    }
+  }
+
+  // ----------------------------------------------------------------
+  // CACHE SIRENE LOCAL — tentative préalable (migration 018+019)
+  // ----------------------------------------------------------------
+  // Avant d'attaquer l'API Sirene live (instable + throttle 30 req/min),
+  // on tente une lecture du miroir local Supabase. Si frais (< 60j) :
+  //   - zéro appel réseau externe ;
+  //   - une seule requête PostgreSQL via la fonction PL/pgSQL ;
+  //   - retour direct au caller avec exhausted=true (le cache embarque
+  //     l'univers entier — pas de notion de curseur incrémental).
+  // Si null (vide / obsolète / erreur Supabase) → bascule transparente
+  // sur la boucle Sirene legacy ci-dessous.
+  if (supabase) {
+    try {
+      const cacheResult = await searchSireneCache(supabase, {
+        nafCodes: filters.nafCodes,
+        trancheEffectifs: filters.tranches,
+        codePostalRange: filters.codePostalRange,
+        excludeSirens: [...sirenSet],
+        // Cible : on demande exactement targetCandidates×2 pour garder une marge
+        // après le filtre matchesAnyNaf (au cas où le cache contiendrait des NAF
+        // hors-cible — peu probable, mais cohérent avec la garde post-fetch
+        // appliquée à l'API Sirene live).
+        pageSize: Math.max(targetCandidates * 2, 100),
+        offset: 0,
+      })
+
+      if (cacheResult) {
+        const beforeNafFilter = cacheResult.etablissements.length
+        const filteredByNaf = cacheResult.etablissements.filter((e) =>
+          matchesAnyNaf(e.activitePrincipaleEtablissement, filters.nafCodes),
+        )
+        filteredByNaf.forEach((e) => sirenSet.add(e.siren))
+        pushLog(
+          'sourcing_sirene',
+          `Cache SIRENE utilisé (zéro appel API) — ${filteredByNaf.length} étabs`,
+          'info',
+          {
+            cache_age_days: cacheResult.cacheAgeDays,
+            rows_returned: beforeNafFilter,
+            kept_after_naf_filter: filteredByNaf.length,
+            target_candidates: targetCandidates,
+          },
+        )
+
+        return {
+          etablissements: filteredByNaf,
+          curseurInitial: startCurseur,
+          // Le cache n'a pas de notion de curseur incrémental — on conserve le
+          // curseur initial pour ne pas casser la signature de filtres / persistance.
+          curseurFinal: startCurseur,
+          filtersSignature: filters.signature,
+          totalAvailable: beforeNafFilter,
+          pagesLoaded: 1,
+          // exhausted=true : le cache embarque l'univers complet pour ces filtres ;
+          // un prochain run rejouera la même requête (dedup via sirenSet en base).
+          exhausted: true,
+          universeEmpty: filteredByNaf.length === 0,
+          // usedFallback=false : le cache n'est PAS le fallback Recherche Entreprises.
+          // C'est une source distincte (mirroir INSEE local).
+          usedFallback: false,
+        }
+      } else {
+        // null = cache vide ou obsolète. Le log est déjà émis par searchSireneCache
+        // (niveau info/warn structuré). On bascule sur la boucle Sirene legacy.
+        pushLog(
+          'sourcing_sirene',
+          'Cache SIRENE vide ou obsolète — bascule sur API Sirene live',
+          'info',
+          { target_candidates: targetCandidates },
+        )
+      }
+    } catch (err) {
+      // Erreur inattendue côté cache → on log + continue avec l'API live.
+      // Pas de Sentry : `searchSireneCache` retourne null sur les erreurs prévues.
+      pushLog(
+        'sourcing_sirene',
+        'Erreur inattendue cache SIRENE — bascule sur API Sirene live',
+        'warn',
+        { error: err instanceof Error ? err.message : String(err) },
       )
     }
   }
@@ -1409,6 +1501,9 @@ export async function runPipelineSourcing(
       // Permet au user de court-circuiter Sirene en cas de pannes récurrentes
       // (cf. bug HTTP 400 prod 2026-05-17). Défaut `false` = comportement legacy.
       preferFallback: settings?.prefer_fallback_recherche_entreprises === true,
+      // Active le cache SIRENE local (migration 018+019) : tenté en PREMIER,
+      // fallback API Sirene live si vide / obsolète. Voir `lib/agent/sirene-cache.ts`.
+      supabase,
     })
     hbState.counters.pages_loaded = outcome.pagesLoaded
     hbState.counters.candidates_collected = outcome.etablissements.length

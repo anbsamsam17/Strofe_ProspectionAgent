@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { DEFAULT_SCORING_WEIGHTS, type Profile, type ProfileSettings } from '@/lib/types'
 import { SettingsForm } from '@/components/settings/settings-form'
 import { LogoutButton } from '@/components/settings/logout-button'
+import { SireneCacheStatus } from '@/components/settings/sirene-cache-status'
 
 // Force le rendu dynamique — les settings doivent toujours refléter la valeur
 // actuelle en base (pas de version cached servie après une mise à jour récente)
@@ -114,6 +115,9 @@ export default async function SettingsPage() {
 
       {/* ── Formulaire paramètres agent ──────────────────────── */}
       <SettingsForm initialSettings={settings} />
+
+      {/* ── Cache SIRENE (état + déclenchement import) ────────── */}
+      <SireneCacheStatus />
     </div>
   )
 }

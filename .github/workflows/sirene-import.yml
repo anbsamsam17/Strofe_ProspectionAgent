@@ -1,0 +1,72 @@
+name: Sirene Cache Monthly Import
+
+on:
+  # Cron mensuel : 1er du mois à 04:00 UTC (~05:00 Paris hiver / 06:00 ete)
+  schedule:
+    - cron: '0 4 1 * *'
+  # Trigger manuel via UI GitHub ou `gh workflow run`
+  workflow_dispatch:
+    inputs:
+      force:
+        description: 'Forcer meme si cache recent (< 25j)'
+        required: false
+        type: boolean
+        default: false
+
+jobs:
+  import-sirene:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60  # 1h max (largement plus que les 30 min attendues)
+
+    env:
+      NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      MAX_STORAGE_MB: '100'
+      SIRENE_BATCH_SIZE: '500'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Check cache freshness (skip if < 25 days)
+        if: ${{ !github.event.inputs.force }}
+        id: freshness
+        run: |
+          # Appel a /api/admin/sirene-status pour recuperer days_since_import
+          # Si < 25 jours, skip
+          DAYS=$(curl -s -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            "${{ secrets.APP_URL }}/api/admin/sirene-status" \
+            | jq -r '.data.days_since_import // 999')
+          echo "Days since last import: $DAYS"
+          if (( $(echo "$DAYS < 25" | bc -l) )); then
+            echo "skip=true" >> $GITHUB_OUTPUT
+            echo "::notice::Cache trop recent ($DAYS jours), import skip. Utilise force=true pour outrepasser."
+          else
+            echo "skip=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Run SIRENE import ETL
+        if: ${{ steps.freshness.outputs.skip != 'true' || github.event.inputs.force }}
+        run: npm run import-sirene
+        timeout-minutes: 45
+
+      - name: Verify post-import status
+        if: ${{ steps.freshness.outputs.skip != 'true' || github.event.inputs.force }}
+        run: |
+          curl -s -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            "${{ secrets.APP_URL }}/api/admin/sirene-status" | jq .
+
+      - name: Notify on failure (optional)
+        if: failure()
+        run: |
+          echo "::error::SIRENE import failed. Check logs."
+          # Optionnel : webhook Discord/Slack via curl
