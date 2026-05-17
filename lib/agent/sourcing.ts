@@ -765,10 +765,19 @@ export async function sourcerEntreprises(
   for (let page = 1; page <= maxPages; page++) {
     const url = new URL(INSEE_SIRET_URL)
     const queryString = buildQueryForChunk(currentChunkIndex)
-    url.searchParams.set('q', queryString)
-    url.searchParams.set('nombre', String(pageSize))
-    // URLSearchParams encode automatiquement les caractères spéciaux du curseur (* devient %2A, + → %2B, etc.)
-    url.searchParams.set('curseur', currentRawCursor)
+
+    // IMPORTANT 2026-05-17 (soir) : NE PAS utiliser URLSearchParams.set('q', ...)
+    // car il encode les espaces en `+`. Or Solr/Lucene interprète `+` comme
+    // l'opérateur MUST (`+token` = token obligatoire). Donc `clause1 AND clause2`
+    // devient `clause1+AND+clause2` qui casse le parser → HTTP 400.
+    //
+    // Solution : utiliser `encodeURIComponent` qui encode les espaces en `%20`
+    // (RFC 3986). Le serveur Solr décode `%20` en espace normal, et le parser
+    // Lucene interprète correctement `clause1 AND clause2`.
+    //
+    // Cf. hindsight 2026-05-17 soir : diff local PowerShell (`%20`) vs prod
+    // (`URLSearchParams` → `+`) — source root du HTTP 400 persistant.
+    url.search = `q=${encodeURIComponent(queryString)}&nombre=${pageSize}&curseur=${encodeURIComponent(currentRawCursor)}`
 
     // [DIAG 2026-05-17] Log la query exacte envoyée pour diagnostiquer le HTTP 400.
     // À retirer après résolution. NB : pas de PII, juste params techniques.
