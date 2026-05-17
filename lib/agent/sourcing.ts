@@ -684,10 +684,30 @@ export async function sourcerEntreprises(
 
   for (let page = 1; page <= maxPages; page++) {
     const url = new URL(INSEE_SIRET_URL)
-    url.searchParams.set('q', buildQueryForChunk(currentChunkIndex))
+    const queryString = buildQueryForChunk(currentChunkIndex)
+    url.searchParams.set('q', queryString)
     url.searchParams.set('nombre', String(pageSize))
     // URLSearchParams encode automatiquement les caractères spéciaux du curseur (* devient %2A, + → %2B, etc.)
     url.searchParams.set('curseur', currentRawCursor)
+
+    // [DIAG 2026-05-17] Log la query exacte envoyée pour diagnostiquer le HTTP 400.
+    // À retirer après résolution. NB : pas de PII, juste params techniques.
+    console.log(
+      JSON.stringify({
+        level: 'info',
+        module: 'sourcing',
+        phase: 'sirene_query_diag',
+        page,
+        chunk_index: currentChunkIndex,
+        chunk_count: nafChunks.length,
+        q: queryString,
+        q_length: queryString.length,
+        url_length: url.toString().length,
+        curseur: currentRawCursor,
+        chunk_naf_count: nafChunks[currentChunkIndex]?.length ?? 0,
+        chunk_first_codes: nafChunks[currentChunkIndex]?.slice(0, 3) ?? [],
+      }),
+    )
 
     let response: Response
     try {
