@@ -194,4 +194,22 @@ describe('ConversionFunnel', () => {
     expect(section?.className).toContain('w-full')
     expect(section?.className).not.toContain('max-w-md')
   })
+
+  it('le conteneur section a h-full et flex flex-col pour remplir la cellule grid parente', () => {
+    const counts = makeCounts({ sourced: 5 })
+    const { container } = render(<ConversionFunnel countsByStatus={counts} />)
+    const section = container.querySelector('section')
+    expect(section).not.toBeNull()
+    expect(section?.className).toContain('h-full')
+    expect(section?.className).toContain('flex')
+    expect(section?.className).toContain('flex-col')
+  })
+
+  it("l'état vide (EmptyFunnel) contient flex-1 pour occuper la hauteur disponible", () => {
+    const counts = makeCounts({})
+    const { container } = render(<ConversionFunnel countsByStatus={counts} />)
+    const emptyDiv = container.querySelector('[role="status"]')
+    expect(emptyDiv).not.toBeNull()
+    expect(emptyDiv?.className).toContain('flex-1')
+  })
 })

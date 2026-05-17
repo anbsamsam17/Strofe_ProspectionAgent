@@ -6,13 +6,17 @@ import { SourcingModal } from '@/components/dashboard/sourcing-modal'
 import { useAgentRunStatus } from '@/lib/hooks/use-agent-run-status'
 import { GlanStatusBar } from '@/components/glan/glan-status-bar'
 import { BorderBeam } from '@/components/ui/border-beam'
+import type { ReactNode } from 'react'
 
 interface DashboardHeaderProps {
   userName: string
   agentRun: AgentRun | null
+  // Slot Server Component pour la cloche de notifications (évite d'importer
+  // lib/supabase/server dans un Client Component).
+  notificationBell?: ReactNode
 }
 
-export function DashboardHeader({ userName, agentRun }: DashboardHeaderProps) {
+export function DashboardHeader({ userName, agentRun, notificationBell }: DashboardHeaderProps) {
   const [isModalOpen, setIsModalOpen] = useState(false)
 
   // Statut SSR (depuis layout) + statut live (polling /api/agent/status).
@@ -41,8 +45,9 @@ export function DashboardHeader({ userName, agentRun }: DashboardHeaderProps) {
         <GlanStatusBar className="min-w-0 max-w-full" />
       </div>
 
-      {/* Droite : bouton lancer + avatar user */}
+      {/* Droite : cloche notifications + bouton lancer + avatar user */}
       <div className="flex flex-shrink-0 items-center gap-3">
+        {notificationBell}
         <BorderBeam color="brand" thickness={1.5} paused={isAgentRunning}>
         <button
           onClick={handleLaunchAgent}

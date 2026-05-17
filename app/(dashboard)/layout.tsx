@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { Sidebar } from '@/components/layout/sidebar'
 import { DashboardHeader } from '@/components/layout/dashboard-header'
 import { PageTransition } from '@/components/layout/page-transition'
+import { NotificationBell } from '@/components/notifications/notification-bell'
 import type { AgentRun } from '@/lib/types'
 
 // Force le rendu dynamique sur TOUT le layout dashboard :
@@ -63,6 +64,7 @@ export default async function DashboardLayout({
         <DashboardHeader
           userName={userName ?? 'Utilisateur'}
           agentRun={agentRun}
+          notificationBell={<NotificationBell />}
         />
 
         <main className="flex-1 overflow-y-auto">

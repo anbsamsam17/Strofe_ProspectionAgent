@@ -53,7 +53,7 @@ export function ConversionFunnel({ countsByStatus }: ConversionFunnelProps) {
   return (
     <section
       aria-label="Entonnoir de conversion du pipeline"
-      className="relative w-full overflow-hidden rounded-2xl border border-white/[0.08] bg-white/[0.03] p-6 backdrop-blur-md"
+      className="relative flex h-full w-full min-h-[360px] flex-col overflow-hidden rounded-2xl border border-white/[0.08] bg-white/[0.03] p-6 backdrop-blur-md"
     >
       {/* Accent border-top gradient brand */}
       <span
@@ -61,7 +61,7 @@ export function ConversionFunnel({ countsByStatus }: ConversionFunnelProps) {
         className="pointer-events-none absolute inset-x-4 top-0 h-px bg-gradient-to-r from-transparent via-green-400/60 to-transparent"
       />
 
-      <header className="mb-5 flex flex-wrap items-baseline justify-between gap-3">
+      <header className="mb-5 flex flex-shrink-0 flex-wrap items-baseline justify-between gap-3">
         <h2 className="font-mono text-[10px] uppercase tracking-[0.18em] text-cyan-400/85">
           {'// Entonnoir de conversion'}
         </h2>
@@ -73,11 +73,11 @@ export function ConversionFunnel({ countsByStatus }: ConversionFunnelProps) {
       {total === 0 ? (
         <EmptyFunnel />
       ) : (
-        <>
+        <div className="flex min-h-0 flex-1 flex-col">
           <FunnelSvg stages={stages} />
           <MobileLegend stages={stages} />
           {noConversion && <NoConversionBadge />}
-        </>
+        </div>
       )}
     </section>
   )
@@ -154,12 +154,12 @@ function FunnelSvg({ stages }: { stages: FunnelStage[] }) {
   const calloutX = FUNNEL_AREA_X_OFFSET + FUNNEL_AREA_WIDTH + CALLOUT_GAP_X
 
   return (
-    <div className="relative w-full">
+    <div className="relative min-h-0 flex-1 w-full">
       <svg
         viewBox={`0 0 ${VIEWBOX_WIDTH} ${totalHeight}`}
         role="img"
         aria-label="Graphique entonnoir : largeur de chaque étage proportionnelle au nombre de prospects"
-        className="block h-auto w-full"
+        className="block h-full w-full"
         preserveAspectRatio="xMidYMid meet"
       >
         <defs>
@@ -386,7 +386,7 @@ function EmptyFunnel() {
   return (
     <div
       role="status"
-      className="flex flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-white/10 bg-white/[0.02] px-6 py-12 text-center"
+      className="flex min-h-[200px] flex-1 flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-white/10 bg-white/[0.02] px-6 py-12 text-center"
     >
       <span
         aria-hidden="true"
