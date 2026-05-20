@@ -103,6 +103,12 @@ export interface ProfileSettings {
    * appelle `sourcerEntreprisesFallback`. Le résultat est marqué `usedFallback=true`.
    */
   prefer_fallback_recherche_entreprises?: boolean
+  /**
+   * URL Calendly ou Cal.com de l'utilisateur — injectée dans les templates email
+   * prospection (GLN-120). Validation côté API : doit commencer par
+   * `https://calendly.com/` ou `https://cal.com/`.
+   */
+  calendly_url?: string
 }
 
 /**

@@ -17,6 +17,9 @@ import { ContactsList, type ProspectContact } from '@/components/prospects/conta
 import { ExchangesPanel, type ProspectExchange } from '@/components/prospects/exchanges-panel'
 import { buildBegesUrl } from '@/lib/utils/beges-url'
 import { NafHierarchyView } from '@/components/prospects/naf-hierarchy-view'
+import { SendEmailButton } from '@/components/email/send-email-button'
+import { TEMPLATES } from '@/lib/email/templates/prospection'
+import type { EmailPersona } from '@/lib/email/detect-persona'
 
 export const dynamic = 'force-dynamic'
 
@@ -193,6 +196,26 @@ export default async function ProspectDetailPage({ params }: PageProps) {
   const begesUrl = buildBegesUrl(prospect)
   const currentPriorite: ManualPriority = prospect.priorite ?? 'moyenne'
 
+  // GLN-020 : préparation données EmailComposer
+  // first_contact_at est ajouté par migration 022 — colonne pas encore dans
+  // database.types.ts. Cast safe : si null/undefined → firstContact = true.
+  const firstContact = (prospect as unknown as { first_contact_at?: string | null })
+    .first_contact_at == null
+  const emailComposerContacts = contacts.map((c) => ({
+    id: c.id,
+    prenom: c.prenom,
+    nom: c.nom,
+    email: c.email,
+    email_status: (c as unknown as { email_status?: string | null }).email_status ?? null,
+    poste: c.poste,
+  }))
+  const emailTemplates: Record<EmailPersona, { subject: string; body: string }> = {
+    daf: { subject: TEMPLATES.daf.subject, body: TEMPLATES.daf.body },
+    rse: { subject: TEMPLATES.rse.subject, body: TEMPLATES.rse.body },
+    dg: { subject: TEMPLATES.dg.subject, body: TEMPLATES.dg.body },
+    drh: { subject: TEMPLATES.drh.subject, body: TEMPLATES.drh.body },
+  }
+
   // Effectif
   const effectif =
     prospect.effectif_min && prospect.effectif_max
@@ -277,6 +300,15 @@ export default async function ProspectDetailPage({ params }: PageProps) {
                 Archivé
               </span>
             )}
+
+            {/* CTA envoi email (GLN-020) */}
+            <SendEmailButton
+              prospectId={prospect.id}
+              prospectRaisonSociale={prospect.raison_sociale}
+              firstContact={firstContact}
+              contacts={emailComposerContacts}
+              templates={emailTemplates}
+            />
 
             {/* Menu actions secondaires (archiver, supprimer, etc.) */}
             <div className="ml-1">

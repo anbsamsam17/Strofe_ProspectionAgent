@@ -1,0 +1,343 @@
+// ============================================================
+// POST /api/email/send — envoi email prospection via Resend
+//
+// Tickets : GLN-020 (composer/envoi) + GLN-003 (RGPD art. 14) + GLN-120 (Calendly)
+//
+// Auth : session Supabase obligatoire. RLS implicite filtre par user.
+// L'utilisateur envoie pour lui-même → client Supabase SSR (pas service_role).
+//
+// Flux :
+//   1. Auth + validation Zod.
+//   2. Fetch prospect (RLS) + contact + profile (settings).
+//   3. Si premier contact → ajout footer RGPD art. 14 + opt-out token HMAC.
+//   4. Interpolation des variables {{prenom}}, etc.
+//   5. Resend.emails.send (from=RESEND_FROM_EMAIL, reply_to=user.email).
+//   6. INSERT prospect_exchanges (type=email, result=sent, notes=corps).
+//   7. Si premier contact → UPDATE prospects.first_contact_at.
+// ============================================================
+
+import { NextRequest, NextResponse } from 'next/server'
+import { z } from 'zod'
+import { Resend } from 'resend'
+import * as React from 'react'
+
+import { createClient } from '@/lib/supabase/server'
+import { TEMPLATES } from '@/lib/email/templates/prospection'
+import { interpolateTemplate, computeBegesExpireLe } from '@/lib/email/render'
+import { appendRgpdFooter } from '@/lib/email/rgpd'
+import { generateOptOutToken } from '@/lib/auth/opt-out-token'
+import type { ProfileSettings } from '@/lib/types'
+
+export const dynamic = 'force-dynamic'
+
+// ------------------------------------------------------------
+// Validation Zod
+// ------------------------------------------------------------
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+const BodySchema = z.object({
+  prospectId: z.string().regex(UUID_RE, 'UUID prospect invalide'),
+  contactId: z.string().regex(UUID_RE, 'UUID contact invalide'),
+  subject: z.string().min(1, 'Sujet vide').max(200, 'Sujet trop long'),
+  body: z.string().min(1, 'Corps vide').max(10_000, 'Corps trop long'),
+  templateKey: z.enum(['daf', 'rse', 'dg', 'drh']),
+})
+
+// ------------------------------------------------------------
+// Client Resend (lazy singleton)
+// ------------------------------------------------------------
+
+let _resendClient: Resend | null = null
+function getResendClient(): Resend {
+  if (!_resendClient) {
+    _resendClient = new Resend(process.env.RESEND_API_KEY)
+  }
+  return _resendClient
+}
+
+// ------------------------------------------------------------
+// POST
+// ------------------------------------------------------------
+
+export async function POST(request: NextRequest) {
+  // 1. Client + auth
+  const supabase = await createClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) {
+    return NextResponse.json(
+      { error: { code: 'UNAUTHENTICATED', message: 'Non authentifié' } },
+      { status: 401 },
+    )
+  }
+
+  // 2. Parse body
+  let raw: unknown
+  try {
+    raw = await request.json()
+  } catch {
+    return NextResponse.json(
+      { error: { code: 'INVALID_INPUT', message: 'JSON invalide' } },
+      { status: 400 },
+    )
+  }
+
+  const parsed = BodySchema.safeParse(raw)
+  if (!parsed.success) {
+    return NextResponse.json(
+      {
+        error: {
+          code: 'INVALID_INPUT',
+          message: parsed.error.issues[0]?.message ?? 'Paramètres invalides',
+        },
+      },
+      { status: 400 },
+    )
+  }
+
+  const { prospectId, contactId, subject, body, templateKey } = parsed.data
+
+  // 3. Fetch prospect (RLS implicite)
+  // NB: cast unknown -> ProspectRow car les types Supabase générés ne reflètent
+  // pas encore la migration 022 (first_contact_at) — `npm run db:types` après push.
+  type ProspectRow = {
+    id: string
+    user_id: string
+    raison_sociale: string
+    secteur_libelle: string | null
+    beges_derniere_publication: string | null
+    entite_publique: boolean | null
+    first_contact_at: string | null
+    siren: string | null
+  }
+
+  const { data: prospectRaw, error: prospectError } = await supabase
+    .from('prospects')
+    .select('*')
+    .eq('id', prospectId)
+    .maybeSingle()
+
+  if (prospectError) {
+    return NextResponse.json(
+      { error: { code: 'DB_ERROR', message: prospectError.message } },
+      { status: 500 },
+    )
+  }
+  if (!prospectRaw) {
+    return NextResponse.json(
+      { error: { code: 'NOT_FOUND', message: 'Prospect introuvable' } },
+      { status: 404 },
+    )
+  }
+  const prospect = prospectRaw as unknown as ProspectRow
+
+  // 4. Fetch contact + check ownership chain (contact appartient au prospect)
+  const { data: contact, error: contactError } = await supabase
+    .from('prospect_contacts')
+    .select('id, prospect_id, prenom, nom, email, email_status, poste')
+    .eq('id', contactId)
+    .maybeSingle()
+
+  if (contactError) {
+    return NextResponse.json(
+      { error: { code: 'DB_ERROR', message: contactError.message } },
+      { status: 500 },
+    )
+  }
+  if (!contact || contact.prospect_id !== prospectId) {
+    return NextResponse.json(
+      { error: { code: 'NOT_FOUND', message: 'Contact introuvable' } },
+      { status: 404 },
+    )
+  }
+  if (!contact.email || contact.email_status === 'invalid') {
+    return NextResponse.json(
+      { error: { code: 'INVALID_INPUT', message: 'Contact sans email valide' } },
+      { status: 400 },
+    )
+  }
+
+  // 5. Fetch profile (Calendly URL + reply-to)
+  // NB: select '*' + cast car la colonne `email` sur profiles est ajoutée par
+  // une migration future non reflétée dans database.types.ts (auto-régénéré).
+  type ProfileRow = {
+    settings: unknown
+    email: string | null
+    full_name: string | null
+  }
+  const { data: profileRaw } = await supabase
+    .from('profiles')
+    .select('*')
+    .eq('id', user.id)
+    .single()
+  const profile = (profileRaw ?? null) as unknown as ProfileRow | null
+
+  const settings = (profile?.settings ?? {}) as Partial<ProfileSettings>
+  const calendlyUrl = settings.calendly_url ?? ''
+  const senderName = profile?.full_name ?? null
+  const replyTo = profile?.email ?? user.email ?? undefined
+
+  // 6. Pré-vérification template (le set est figé via TEMPLATES)
+  if (!(templateKey in TEMPLATES)) {
+    // Le schema Zod garantit déjà cette invariance, mais double-check.
+    return NextResponse.json(
+      { error: { code: 'INVALID_INPUT', message: 'Template inconnu' } },
+      { status: 400 },
+    )
+  }
+  const template = TEMPLATES[templateKey]
+
+  // 7. Premier contact ? → footer RGPD art. 14 + flagging post-send
+  const isFirstContact = prospect.first_contact_at === null
+  const ENV_APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'https://decarbonleads.strofe.fr'
+
+  // Variables pour interpolation
+  const variables = {
+    prenom: contact.prenom,
+    nom: contact.nom,
+    raison_sociale: prospect.raison_sociale,
+    secteur_libelle: prospect.secteur_libelle ?? '',
+    beges_expire_le: computeBegesExpireLe({
+      beges_derniere_publication: prospect.beges_derniere_publication,
+      entite_publique: prospect.entite_publique,
+    }),
+    calendly_url: calendlyUrl,
+  }
+
+  // Interpolation sujet + corps (UI envoie déjà du contenu pouvant contenir placeholders)
+  let finalSubject = interpolateTemplate(subject, variables)
+  let finalBody = interpolateTemplate(body, variables)
+
+  // 8. Si premier contact, append RGPD footer (GLN-003)
+  let optOutUrl: string | null = null
+  if (isFirstContact) {
+    try {
+      const token = generateOptOutToken({
+        userId: user.id,
+        siren: prospect.siren ?? undefined,
+        email: contact.email,
+        ttlDays: 365,
+      })
+      optOutUrl = `${ENV_APP_URL}/api/opt-out/${token}`
+      finalBody = appendRgpdFooter(finalBody, optOutUrl)
+    } catch (err) {
+      // OPT_OUT_HMAC_SECRET non configuré — on bloque l'envoi du premier
+      // contact car sans opt-out 1 clic on n'est pas conforme.
+      const msg = err instanceof Error ? err.message : 'config opt-out invalide'
+      return NextResponse.json(
+        { error: { code: 'INTERNAL_ERROR', message: msg } },
+        { status: 500 },
+      )
+    }
+  }
+
+  // 9. Envoi Resend
+  const fromEmail = process.env.RESEND_FROM_EMAIL
+  if (!fromEmail || !process.env.RESEND_API_KEY) {
+    return NextResponse.json(
+      {
+        error: {
+          code: 'INTERNAL_ERROR',
+          message: 'Config email manquante (RESEND_*)',
+        },
+      },
+      { status: 500 },
+    )
+  }
+
+  const reactElement = React.createElement(template.Component, {
+    body: finalBody,
+    calendlyUrl: calendlyUrl || undefined,
+    rgpdFooter: undefined, // Le RGPD footer est intégré dans finalBody (texte simple)
+    senderName: senderName ?? undefined,
+  })
+
+  const { data: sendData, error: sendError } = await getResendClient().emails.send({
+    from: fromEmail,
+    to: contact.email,
+    replyTo,
+    subject: finalSubject,
+    react: reactElement,
+  })
+
+  if (sendError) {
+    return NextResponse.json(
+      {
+        error: {
+          code: 'EXTERNAL_API_ERROR',
+          message: sendError.message || 'Erreur envoi Resend',
+        },
+      },
+      { status: 502 },
+    )
+  }
+
+  // 10. INSERT prospect_exchanges
+  const { data: exchange, error: insertError } = await supabase
+    .from('prospect_exchanges')
+    .insert({
+      user_id: user.id,
+      prospect_id: prospectId,
+      type: 'email',
+      result: 'sent',
+      notes: `Sujet : ${finalSubject}\n\n${finalBody}`,
+      occurred_at: new Date().toISOString(),
+    })
+    .select('id')
+    .single()
+
+  if (insertError) {
+    // L'email est PARTI mais le log échoue — on remonte une erreur 500
+    // pour que l'utilisateur sache, mais on reflète qu'il a été envoyé.
+    return NextResponse.json(
+      {
+        error: {
+          code: 'DB_ERROR',
+          message: `Email envoyé mais traçabilité échouée : ${insertError.message}`,
+        },
+        sent: true,
+        resendId: sendData?.id,
+      },
+      { status: 500 },
+    )
+  }
+
+  // 11. UPDATE first_contact_at si premier contact (GLN-003)
+  if (isFirstContact) {
+    // Cast unknown — colonne ajoutée par migration 022 mais pas encore reflétée
+    // dans database.types.ts (auto-régénéré par scripts/regen-supabase-types.ps1).
+    const updatePayload = {
+      first_contact_at: new Date().toISOString(),
+    } as unknown as Record<string, unknown>
+    const { error: updateError } = await supabase
+      .from('prospects')
+      .update(updatePayload)
+      .eq('id', prospectId)
+    if (updateError) {
+      // Non bloquant — l'échange est tracé, l'email parti, on log côté serveur.
+      console.error(
+        JSON.stringify({
+          module: 'email-send',
+          level: 'warn',
+          msg: 'first_contact_at update failed',
+          prospect_id: prospectId,
+          error: updateError.message,
+        }),
+      )
+    }
+  }
+
+  return NextResponse.json(
+    {
+      data: {
+        id: exchange.id,
+        sentAt: new Date().toISOString(),
+        resendId: sendData?.id ?? null,
+        firstContact: isFirstContact,
+      },
+    },
+    { status: 201 },
+  )
+}
