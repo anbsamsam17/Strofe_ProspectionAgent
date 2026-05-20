@@ -406,10 +406,13 @@ export type Database = {
         Row: {
           adresse: string | null
           archived_at: string | null
+          beges_decret_2022_compliant: boolean | null
           beges_derniere_publication: string | null
           beges_publie: boolean
           beges_url: string | null
           beges_valide: boolean | null
+          bilan_ges_data: Json | null
+          chiffre_affaires: number | null
           code_postal: string | null
           contact_completeness: number | null
           contact_email: string | null
@@ -423,6 +426,7 @@ export type Database = {
           contact_telephone: string | null
           contact_tier: string | null
           created_at: string
+          croissance_ca_yoy_pct: number | null
           effectif_max: number | null
           effectif_min: number | null
           enriched_at: string | null
@@ -436,6 +440,7 @@ export type Database = {
           obligation_beges: boolean
           priorite: string
           raison_sociale: string
+          resultat_net: number | null
           score_details: Json
           score_priorite: number
           secteur_libelle: string | null
@@ -452,10 +457,13 @@ export type Database = {
         Insert: {
           adresse?: string | null
           archived_at?: string | null
+          beges_decret_2022_compliant?: boolean | null
           beges_derniere_publication?: string | null
           beges_publie?: boolean
           beges_url?: string | null
           beges_valide?: boolean | null
+          bilan_ges_data?: Json | null
+          chiffre_affaires?: number | null
           code_postal?: string | null
           contact_completeness?: number | null
           contact_email?: string | null
@@ -469,6 +477,7 @@ export type Database = {
           contact_telephone?: string | null
           contact_tier?: string | null
           created_at?: string
+          croissance_ca_yoy_pct?: number | null
           effectif_max?: number | null
           effectif_min?: number | null
           enriched_at?: string | null
@@ -482,6 +491,7 @@ export type Database = {
           obligation_beges?: boolean
           priorite?: string
           raison_sociale: string
+          resultat_net?: number | null
           score_details?: Json
           score_priorite?: number
           secteur_libelle?: string | null
@@ -498,10 +508,13 @@ export type Database = {
         Update: {
           adresse?: string | null
           archived_at?: string | null
+          beges_decret_2022_compliant?: boolean | null
           beges_derniere_publication?: string | null
           beges_publie?: boolean
           beges_url?: string | null
           beges_valide?: boolean | null
+          bilan_ges_data?: Json | null
+          chiffre_affaires?: number | null
           code_postal?: string | null
           contact_completeness?: number | null
           contact_email?: string | null
@@ -515,6 +528,7 @@ export type Database = {
           contact_telephone?: string | null
           contact_tier?: string | null
           created_at?: string
+          croissance_ca_yoy_pct?: number | null
           effectif_max?: number | null
           effectif_min?: number | null
           enriched_at?: string | null
@@ -528,6 +542,7 @@ export type Database = {
           obligation_beges?: boolean
           priorite?: string
           raison_sociale?: string
+          resultat_net?: number | null
           score_details?: Json
           score_priorite?: number
           secteur_libelle?: string | null
@@ -543,11 +558,97 @@ export type Database = {
         }
         Relationships: []
       }
+      sirene_cache: {
+        Row: {
+          activite_principale: string | null
+          adresse: string | null
+          code_postal: string | null
+          commune: string | null
+          date_creation: string | null
+          date_maj_insee: string | null
+          effectif_max: number | null
+          effectif_min: number | null
+          etat_administratif: string | null
+          imported_at: string | null
+          raison_sociale: string | null
+          siren: string
+          siret: string
+          source_file: string | null
+          tranche_effectifs: string | null
+        }
+        Insert: {
+          activite_principale?: string | null
+          adresse?: string | null
+          code_postal?: string | null
+          commune?: string | null
+          date_creation?: string | null
+          date_maj_insee?: string | null
+          effectif_max?: number | null
+          effectif_min?: number | null
+          etat_administratif?: string | null
+          imported_at?: string | null
+          raison_sociale?: string | null
+          siren: string
+          siret: string
+          source_file?: string | null
+          tranche_effectifs?: string | null
+        }
+        Update: {
+          activite_principale?: string | null
+          adresse?: string | null
+          code_postal?: string | null
+          commune?: string | null
+          date_creation?: string | null
+          date_maj_insee?: string | null
+          effectif_max?: number | null
+          effectif_min?: number | null
+          etat_administratif?: string | null
+          imported_at?: string | null
+          raison_sociale?: string | null
+          siren?: string
+          siret?: string
+          source_file?: string | null
+          tranche_effectifs?: string | null
+        }
+        Relationships: []
+      }
     }
     Views: {
-      [_ in never]: never
+      sirene_cache_size: {
+        Row: {
+          active_count: number | null
+          days_since_import: number | null
+          last_import_at: string | null
+          total_bytes: number | null
+          total_size: string | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
+      search_sirene_cache: {
+        Args: {
+          p_code_postal_max: string
+          p_code_postal_min: string
+          p_exclude_sirens: string[]
+          p_limit?: number
+          p_naf_codes: string[]
+          p_offset?: number
+          p_tranche_effectifs: string[]
+        }
+        Returns: {
+          activite_principale: string
+          adresse: string
+          code_postal: string
+          commune: string
+          effectif_max: number
+          effectif_min: number
+          raison_sociale: string
+          siren: string
+          siret: string
+          tranche_effectifs: string
+        }[]
+      }
       show_limit: { Args: never; Returns: number }
       show_trgm: { Args: { "": string }; Returns: string[] }
     }

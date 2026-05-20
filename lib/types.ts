@@ -177,6 +177,30 @@ export interface Prospect {
    * du BEGES : 3 ans (public) au lieu de 4 ans (prive). Migration 020 (GLN-005).
    */
   entite_publique?: boolean
+  /**
+   * Record ADEME Data Fair complet du bilan le plus récent (migration 023, GLN-066).
+   * Forme libre (JSONB) car la structure renvoyée par l'API évolue.
+   * Champs couramment exposés : emissions_scope_1/2/3, methodologie,
+   * perimetre_organisationnel, objectifs_reduction, plan_action,
+   * consultant_accompagnant, annee_de_reporting, date_de_publication.
+   *
+   * `undefined` (Row=null) = aucun bilan connu OU API indisponible au sourcing.
+   * Exploité par lib/agent/decret-2022.ts (conformité Décret 2022-982),
+   * scoring sectoriel, détection concurrence cabinets.
+   */
+  bilan_ges_data?: Record<string, unknown> | null
+  /**
+   * Conformité au Décret 2022-982 du 1er juillet 2022 art. 1 (migration 023, GLN-006).
+   * Depuis le 1er janvier 2023, tout BEGES publié doit inclure scope 3
+   * significatif ET plan d'action de transition chiffré.
+   *
+   *  - `true`  : BEGES publié post-2023 avec scope 3 + plan d'action.
+   *  - `false` : BEGES publié post-2023 mais incomplet (signal commercial fort
+   *              — renouvellement quasi-obligatoire).
+   *  - `undefined`/null : non applicable (pas de BEGES, ou pré-2023 hors champ,
+   *              ou data ADEME incomplète pour déterminer).
+   */
+  beges_decret_2022_compliant?: boolean | null
   obligation_beges: boolean
   score_priorite: number
   score_details: ScoreDetails

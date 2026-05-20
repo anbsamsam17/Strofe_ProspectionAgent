@@ -346,6 +346,11 @@ interface AdemeBegesRawRecord {
 /**
  * Type enrichi pour usage interne : contient les champs supplémentaires
  * renvoyés par l'API Data Fair (contact, URL bilan, validité).
+ *
+ * Le champ `raw_record` (GLN-066) contient l'INTÉGRALITÉ de la ligne ADEME
+ * Data Fair pour permettre l'exploitation downstream de tous les champs
+ * (emissions scope 1/2/3, methodologie, plan_action, consultant_accompagnant…)
+ * sans devoir relancer un fetch ADEME.
  */
 interface AdemeBegesEnrichi {
   siren: string
@@ -359,6 +364,14 @@ interface AdemeBegesEnrichi {
   fonction?: string
   /** Email du responsable */
   courriel?: string
+  /**
+   * Record JSON brut retourné par l'API Data Fair pour ce bilan
+   * (GLN-066). Conservé tel quel pour exploitation downstream
+   * (Décret 2022-982, intensité carbone, détection concurrence…).
+   * Inclut typiquement : emissions_scope_1/2/3, methodologie, perimetre,
+   * objectifs_reduction, plan_action, consultant_accompagnant.
+   */
+  raw_record?: Record<string, unknown>
 }
 
 
@@ -1426,7 +1439,7 @@ export async function verifierBegesAdeme(siren: string): Promise<AdemeBegesEnric
     return null
   }
 
-  let data: { results?: AdemeBegesRawRecord[]; total?: number }
+  let data: { results?: unknown[]; total?: number }
   try {
     data = await response.json()
   } catch {
@@ -1438,17 +1451,33 @@ export async function verifierBegesAdeme(siren: string): Promise<AdemeBegesEnric
     return null
   }
 
-  // Normalisation + filtrage strict sur siren_principal (coerce int → string).
+  // GLN-066 — On conserve les records bruts EN PARALLÈLE de la normalisation
+  // pour pouvoir récupérer le payload Data Fair complet (tous les champs
+  // exposés par l'API, y compris ceux non typés dans AdemeBegesRawRecord :
+  // emissions_scope_1/2/3, methodologie, plan_action, etc.).
+  // Stratégie : on normalise pour le filtrage SIREN strict, mais on garde
+  // le mapping idx→raw pour ressortir le record brut du bilan choisi.
+  const rawRecords: Array<Record<string, unknown>> = []
+  const normalized: Array<{ rec: AdemeBegesDataFairRecord; raw: Record<string, unknown> }> = []
+  for (const rawUnknown of results) {
+    if (typeof rawUnknown !== 'object' || rawUnknown === null) continue
+    const raw = rawUnknown as Record<string, unknown>
+    rawRecords.push(raw)
+    // Normalisation typée : passe par AdemeBegesRawRecord pour récupérer les
+    // champs identifiants/contact strictement validés.
+    const rec = normalizeAdemeRecord(raw as AdemeBegesRawRecord)
+    if (rec !== null) {
+      normalized.push({ rec, raw })
+    }
+  }
+
+  // Filtrage strict sur siren_principal (coerce int → string).
   // Plus de fallback "premier résultat" : si aucun match exact, on retourne null
   // (évite de stocker une URL BEGES qui pointe vers une autre entreprise — cf.
   // bug 2026-05-14 rapporté par l'utilisateur).
-  const normalized = results
-    .map((r) => normalizeAdemeRecord(r))
-    .filter((r): r is AdemeBegesDataFairRecord => r !== null)
-
   const matches = normalized
-    .filter((r) => r.siren_principal === siren)
-    .sort((a, b) => b.annee_de_reporting - a.annee_de_reporting)
+    .filter((m) => m.rec.siren_principal === siren)
+    .sort((a, b) => b.rec.annee_de_reporting - a.rec.annee_de_reporting)
 
   if (matches.length === 0) {
     // Aucun bilan ne correspond exactement au SIREN demandé. Log discret pour
@@ -1467,7 +1496,7 @@ export async function verifierBegesAdeme(siren: string): Promise<AdemeBegesEnric
     return null
   }
 
-  const record = matches[0]
+  const { rec: record, raw: rawRecord } = matches[0]
 
   return {
     siren: record.siren_principal,
@@ -1478,6 +1507,7 @@ export async function verifierBegesAdeme(siren: string): Promise<AdemeBegesEnric
     responsable_du_suivi: record.responsable_du_suivi || undefined,
     fonction: record.fonction || undefined,
     courriel: record.courriel || undefined,
+    raw_record: rawRecord,
   }
 }
 
@@ -1737,6 +1767,10 @@ export async function enrichirProspect(
       : undefined,
     beges_url: begesAdeme?.url_bilan ?? undefined,
     beges_valide: begesValide,
+    // GLN-066 — record ADEME Data Fair complet (JSONB DB). Exploité par
+    // lib/agent/decret-2022.ts (Décret 2022-982), scoring sectoriel, détection
+    // concurrence, etc.
+    bilan_ges_data: begesAdeme?.raw_record ?? undefined,
     // Enrichissement contact depuis les données ADEME + téléphone Recherche Entreprises
     contact_nom: begesAdeme?.responsable_du_suivi ?? undefined,
     contact_poste: begesAdeme?.fonction ?? undefined,
