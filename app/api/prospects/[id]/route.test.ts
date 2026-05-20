@@ -236,6 +236,113 @@ describe('PATCH /api/prospects/[id] — notes', () => {
 })
 
 // ------------------------------------------------------------
+// PATCH — deal_value + deal_probability (GLN-041)
+// ------------------------------------------------------------
+
+describe('PATCH /api/prospects/[id] — deal_value / deal_probability', () => {
+  it('accepte deal_value:number et deal_probability:int 0-100', async () => {
+    let capturedUpdate: Record<string, unknown> | undefined
+
+    const { createClient } = await import('@/lib/supabase/server')
+    ;(createClient as unknown as Mock).mockImplementationOnce(async () => ({
+      auth: { getUser: mockGetUser },
+      from: vi.fn(() => ({
+        update: vi.fn((payload: Record<string, unknown>) => {
+          capturedUpdate = payload
+          return {
+            eq: vi.fn(() => ({
+              eq: vi.fn(() => ({
+                select: vi.fn(() => ({
+                  maybeSingle: vi.fn().mockResolvedValue({
+                    data: {
+                      id: VALID_PROSPECT_ID,
+                      deal_value: 12500,
+                      deal_probability: 50,
+                    },
+                    error: null,
+                  }),
+                })),
+              })),
+            })),
+          }
+        }),
+      })),
+    }))
+
+    const res = await PATCH(
+      makeRequest({ deal_value: 12500, deal_probability: 50 }),
+      { params },
+    )
+    expect(res.status).toBe(200)
+    expect(capturedUpdate).toBeDefined()
+    expect((capturedUpdate as Record<string, unknown>).deal_value).toBe(12500)
+    expect((capturedUpdate as Record<string, unknown>).deal_probability).toBe(50)
+  })
+
+  it('accepte deal_value:null et deal_probability:null (effacement)', async () => {
+    let capturedUpdate: Record<string, unknown> | undefined
+
+    const { createClient } = await import('@/lib/supabase/server')
+    ;(createClient as unknown as Mock).mockImplementationOnce(async () => ({
+      auth: { getUser: mockGetUser },
+      from: vi.fn(() => ({
+        update: vi.fn((payload: Record<string, unknown>) => {
+          capturedUpdate = payload
+          return {
+            eq: vi.fn(() => ({
+              eq: vi.fn(() => ({
+                select: vi.fn(() => ({
+                  maybeSingle: vi.fn().mockResolvedValue({
+                    data: {
+                      id: VALID_PROSPECT_ID,
+                      deal_value: null,
+                      deal_probability: null,
+                    },
+                    error: null,
+                  }),
+                })),
+              })),
+            })),
+          }
+        }),
+      })),
+    }))
+
+    const res = await PATCH(
+      makeRequest({ deal_value: null, deal_probability: null }),
+      { params },
+    )
+    expect(res.status).toBe(200)
+    expect((capturedUpdate as Record<string, unknown>).deal_value).toBeNull()
+    expect((capturedUpdate as Record<string, unknown>).deal_probability).toBeNull()
+  })
+
+  it('rejette deal_value négatif avec 400', async () => {
+    const res = await PATCH(makeRequest({ deal_value: -100 }), { params })
+    expect(res.status).toBe(400)
+    const body = (await res.json()) as { code?: string }
+    expect(body.code).toBe('VALIDATION_ERROR')
+  })
+
+  it('rejette deal_value > 99 999 999.99 avec 400', async () => {
+    const res = await PATCH(makeRequest({ deal_value: 100_000_000 }), { params })
+    expect(res.status).toBe(400)
+  })
+
+  it('rejette deal_probability hors 0-100 avec 400', async () => {
+    const res1 = await PATCH(makeRequest({ deal_probability: 150 }), { params })
+    expect(res1.status).toBe(400)
+    const res2 = await PATCH(makeRequest({ deal_probability: -5 }), { params })
+    expect(res2.status).toBe(400)
+  })
+
+  it('rejette deal_probability non entier avec 400', async () => {
+    const res = await PATCH(makeRequest({ deal_probability: 50.5 }), { params })
+    expect(res.status).toBe(400)
+  })
+})
+
+// ------------------------------------------------------------
 // PATCH — auth + body vide
 // ------------------------------------------------------------
 

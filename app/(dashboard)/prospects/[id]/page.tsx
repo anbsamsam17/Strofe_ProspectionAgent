@@ -14,6 +14,7 @@ import { ProspectDetailEditor } from '@/components/prospects/prospect-detail-edi
 import { StatusDropdown } from '@/components/prospects/status-dropdown'
 import { PriorityDropdown } from '@/components/prospects/priority-dropdown'
 import { ContactsList, type ProspectContact } from '@/components/prospects/contacts-list'
+import { DealValueEditor } from '@/components/prospects/deal-value-editor'
 import { ExchangesPanel, type ProspectExchange } from '@/components/prospects/exchanges-panel'
 import { buildBegesUrl } from '@/lib/utils/beges-url'
 import { isBegesExpiringSoon } from '@/lib/agent/beges-expiration'
@@ -477,6 +478,16 @@ export default async function ProspectDetailPage({ params }: PageProps) {
               </Link>
             </p>
           </div>
+        </SectionCard>
+
+        {/* ── Deal (GLN-041) — valeur EUR + probabilite + forecast ── */}
+        <SectionCard title="Deal">
+          <DealValueEditor
+            prospectId={prospect.id}
+            statut={prospect.statut}
+            initialDealValue={prospect.deal_value ?? null}
+            initialDealProbability={prospect.deal_probability ?? null}
+          />
         </SectionCard>
 
         {/* ── Contacts identifiés (multi) ── */}

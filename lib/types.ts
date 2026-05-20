@@ -244,6 +244,19 @@ export interface Prospect {
   gemini_raisons?: string[]
   /** Horodatage ISO 8601 de la dernière génération Gemini pour ce prospect. */
   gemini_generated_at?: string
+  // ── Deal value + probability (migration 026 — GLN-041) ────────────────────
+  /**
+   * Valeur estimée du deal en EUR (NUMERIC(10,2) DB, plafond app 99 999 999.99).
+   * `null`/`undefined` = pas encore estimé. Saisie manuelle utilisateur via
+   * `DealValueEditor`.
+   */
+  deal_value?: number | null
+  /**
+   * Probabilité 0-100 de cloture du deal (SMALLINT DB). Pré-rempli côté UI
+   * selon le statut via `defaultProbabilityForStatus` ; éditable manuellement.
+   * `null`/`undefined` = utiliser le défaut associé au statut.
+   */
+  deal_probability?: number | null
   created_at: string
   updated_at: string
 }
