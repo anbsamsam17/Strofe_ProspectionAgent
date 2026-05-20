@@ -334,6 +334,25 @@
 .animate-glan-breathe {
   animation: glan-breathe 4s ease-in-out infinite;
 }
+
+/* ────────────────────────────────────────────────────────────────────
+ * Focus visible global — accessibilité (audit 2026-05-20)
+ *
+ * Le défaut UA est `outline: rgb(16, 16, 16) auto 0.8px` — invisible
+ * sur fond navy oklch(11% 0.022 250). On le remplace par un ring vert
+ * Glan + offset navy pour visibilité tab navigation.
+ *
+ * Cibles : tous les éléments natifs interactifs + ARIA roles, SAUF
+ * ceux qui définissent déjà leur propre style focus-visible (les
+ * boutons gradient verts du form auth, etc.). Le sélecteur :not()
+ * vérifie l'absence de l'attribut data-no-focus-ring si besoin.
+ * ──────────────────────────────────────────────────────────────────── */
+:where(button, a, [role='button'], [role='link'], input, select, textarea, summary, [tabindex]):focus-visible {
+  outline: 2px solid oklch(74% 0.18 152);
+  outline-offset: 2px;
+  border-radius: 0.375rem;
+}
+
 .animate-glan-pulse {
   animation: glan-pulse 2s ease-in-out infinite;
 }

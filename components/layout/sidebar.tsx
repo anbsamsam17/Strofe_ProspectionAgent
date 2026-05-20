@@ -200,7 +200,7 @@ export function Sidebar() {
         </div>
       </aside>
 
-      {/* ── Navigation mobile en bas — 4 entrées (Prospects, Pipeline, Glan, Paramètres) ── */}
+      {/* ── Navigation mobile en bas — 5 entrées (Prospects, Pipeline, Glan, Calendrier, Paramètres) ── */}
       <nav
         className="fixed bottom-0 left-0 right-0 z-40 flex items-stretch border-t border-white/[0.08] bg-black/60 backdrop-blur-xl lg:hidden"
         style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
