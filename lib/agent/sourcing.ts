@@ -1557,6 +1557,34 @@ export async function rechercherTelephone(siren: string): Promise<string | null>
 }
 
 // ------------------------------------------------------------
+// HELPERS — DOM-TOM (L229-25 alinea 1)
+// ------------------------------------------------------------
+
+/**
+ * Prefixes de codes postaux des departements et collectivites d'outre-mer.
+ * L'Article L.229-25 du Code de l'environnement impose le BEGES aux
+ * personnes morales de droit prive de plus de 250 salaries en outre-mer
+ * (vs 500 en metropole).
+ *
+ * Couvre :
+ * - 971 Guadeloupe, 972 Martinique, 973 Guyane, 974 La Reunion, 976 Mayotte
+ * - 975 Saint-Pierre-et-Miquelon, 977 Saint-Barthelemy, 978 Saint-Martin
+ * - 986 Wallis-et-Futuna, 987 Polynesie francaise, 988 Nouvelle-Caledonie
+ */
+const DOM_POSTAL_PREFIXES = /^(971|972|973|974|975|976|977|978|98[678])/
+
+function isDomTom(codePostal: string | null | undefined): boolean {
+  return !!codePostal && DOM_POSTAL_PREFIXES.test(codePostal)
+}
+
+// Tranches INSEE — seuils BEGES :
+// - tranche 32 = 250-499 salaries (seuil DOM-TOM)
+// - tranche 41 = 500-999 salaries (seuil metropole)
+// Source : https://www.sirene.fr/sirene/public/variable/trancheEffectifsUniteLegale
+const BEGES_TRANCHE_MIN_METROPOLE = 41
+const BEGES_TRANCHE_MIN_DOM_TOM = 32
+
+// ------------------------------------------------------------
 // ENRICHISSEMENT PROSPECT
 // ------------------------------------------------------------
 
@@ -1564,13 +1592,26 @@ export async function rechercherTelephone(siren: string): Promise<string | null>
  * Convertit un établissement Sirene en un objet Prospect partiel.
  * Appelle ADEME pour le statut BEGES.
  * Détermine l'obligation BEGES selon la tranche d'effectifs.
+ *
+ * Seuil obligation BEGES (Art. L229-25 Code de l'environnement) :
+ * - Métropole : ≥ 500 salariés (tranche INSEE ≥ 41)
+ * - DOM-TOM (CP 971-978, 986-988) : ≥ 250 salariés (tranche INSEE ≥ 32)
  */
 export async function enrichirProspect(
   etab: SireneEtablissement,
 ): Promise<Partial<Prospect>> {
-  // Tranche 41 correspond à 500-999 salariés — seuil obligation BEGES (≥ 500)
   const tranche = parseInt(etab.trancheEffectifsEtablissement ?? '0', 10)
-  const obligationBeges = tranche >= 41
+
+  // Code postal pour determination DOM-TOM (necessite pour seuil BEGES applicable)
+  const codePostal =
+    etab.codePostalEtablissement ??
+    etab.adresseEtablissement?.codePostalEtablissement ??
+    null
+
+  const trancheMin = isDomTom(codePostal)
+    ? BEGES_TRANCHE_MIN_DOM_TOM
+    : BEGES_TRANCHE_MIN_METROPOLE
+  const obligationBeges = tranche >= trancheMin
 
   // Résolution des effectifs min/max depuis la tranche INSEE
   const { effectifMin, effectifMax } = trancheToEffectif(tranche)
