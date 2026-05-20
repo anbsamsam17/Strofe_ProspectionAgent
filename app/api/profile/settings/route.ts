@@ -13,6 +13,17 @@ const ScoringWeightsSchema = z.object({
   contact: z.number().min(0).max(100),
 })
 
+// URL Calendly / Cal.com pour injection dans templates email (GLN-120).
+// Domaines autorisés en dur : calendly.com et cal.com (en HTTPS uniquement).
+const CalendlyUrlSchema = z
+  .string()
+  .url('URL Calendly invalide')
+  .regex(
+    /^https:\/\/(calendly\.com|cal\.com)\//,
+    'L\'URL doit commencer par https://calendly.com/ ou https://cal.com/',
+  )
+  .max(300)
+
 const SettingsSchema = z.object({
   offer_description: z.string().max(2000).optional(),
   target_sectors: z.array(z.string().max(50)).max(20).optional(),
@@ -21,6 +32,8 @@ const SettingsSchema = z.object({
   sourcing_target_per_run: z.number().int().min(1).max(30).optional(),
   notification_email: z.string().email().max(200).optional(),
   scoring_weights: ScoringWeightsSchema.optional(),
+  // Chaîne vide acceptée = supprimer la valeur (utilisateur désactive le lien).
+  calendly_url: z.union([CalendlyUrlSchema, z.literal('')]).optional(),
 })
 
 // ── PATCH /api/profile/settings ───────────────────────────────────────────────
@@ -92,6 +105,7 @@ export async function PATCH(request: Request) {
       notification_email: currentSettings.notification_email,
       target_postal_codes: currentSettings.target_postal_codes,
       scoring_weights: currentSettings.scoring_weights,
+      calendly_url: currentSettings.calendly_url,
       // Merge avec payload — chaque champ validé par Zod est appliqué si présent
       ...(payload.offer_description !== undefined && {
         offer_description: payload.offer_description,
@@ -115,6 +129,10 @@ export async function PATCH(request: Request) {
       // Pondération scoring — normalisée à 100 avant persistance (cf. migration 013)
       ...(payload.scoring_weights !== undefined && {
         scoring_weights: normalizeScoringWeights(payload.scoring_weights),
+      }),
+      // Calendly URL (GLN-120) — chaîne vide = clear le champ.
+      ...(payload.calendly_url !== undefined && {
+        calendly_url: payload.calendly_url === '' ? undefined : payload.calendly_url,
       }),
     }
 
