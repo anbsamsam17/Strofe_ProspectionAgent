@@ -12,6 +12,7 @@ import {
   type BulkContactFilter,
   type BulkDeleteFilters,
 } from '@/components/prospects/bulk-delete-button'
+import { ImportCsvModal } from '@/components/prospects/import-csv-modal'
 import { buildBegesUrl } from '@/lib/utils/beges-url'
 import { RunStatusBanner } from '@/components/dashboard/run-status-banner'
 import {
@@ -594,8 +595,9 @@ export default async function ProspectsPage({
           </p>
         </div>
 
-        {/* Actions header — bulk-delete (visible seulement si filtres actifs). */}
+        {/* Actions header — import warm + bulk-delete (visible seulement si filtres actifs). */}
         <div className="flex items-center gap-2">
+          <ImportCsvModal />
           <BulkDeleteButton filters={bulkFilters} count={totalCount} />
         </div>
       </div>
