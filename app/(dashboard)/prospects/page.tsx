@@ -757,7 +757,9 @@ export default async function ProspectsPage({
                       <td className="px-4 py-3.5">
                         <Link href={`/prospects/${prospect.id}`} className="block">
                           <p className="font-semibold text-white transition-colors group-hover:text-green-300">
-                            {prospect.raison_sociale}
+                            {prospect.raison_sociale || (
+                              <span className="italic text-gray-500">— sans nom —</span>
+                            )}
                           </p>
                           {prospect.siren && (
                             <p className="mt-0.5 font-mono text-[10px] text-gray-400">
@@ -783,11 +785,11 @@ export default async function ProspectsPage({
                       {/* 5. Géographie */}
                       <td className="hidden px-4 py-3.5 text-sm text-gray-400 sm:table-cell">
                         {prospect.ville ? (
-                          <span>
+                          <span className="whitespace-nowrap">
                             {prospect.ville}
                             {prospect.code_postal && (
-                              <span className="ml-1 font-mono text-[10px] text-gray-400">
-                                {prospect.code_postal}
+                              <span className="ml-1.5 font-mono text-[10px] text-gray-400">
+                                · {prospect.code_postal}
                               </span>
                             )}
                           </span>

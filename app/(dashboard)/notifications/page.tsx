@@ -140,6 +140,8 @@ function safeResultMeta(result: string | null): { label: string; className: stri
  */
 function formatCallbackLabel(dateStr: string, now: Date): string {
   const date = new Date(dateStr)
+  if (Number.isNaN(date.getTime())) return 'date invalide'
+
   // Comparaison sur les dates calendaires (sans heure) pour éviter le bruit
   // des fuseaux horaires côté serveur.
   const todayMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate())
@@ -147,6 +149,10 @@ function formatCallbackLabel(dateStr: string, now: Date): string {
   const diffDays = Math.round(
     (dateMidnight.getTime() - todayMidnight.getTime()) / (1000 * 60 * 60 * 24),
   )
+
+  // Garde-fou : une callback > 365 j en arrière = donnée legacy/corrompue.
+  // On évite d'afficher "En retard de 11189 j" et on dégrade gracieusement.
+  if (diffDays < -365) return 'date obsolète'
 
   if (diffDays < 0) return `En retard de ${Math.abs(diffDays)} j`
   if (diffDays === 0) return "Aujourd'hui"
@@ -501,9 +507,15 @@ async function fetchNotificationsData(userId: string) {
   const todayMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate())
   const tomorrowMidnight = new Date(todayMidnight.getTime() + 24 * 60 * 60 * 1000)
 
+  // Exclure les callbacks > 365 j en arrière : données legacy/corrompues
+  // (typiquement timestamps à epoch 0 ou dates saisies à tort en 1995-2010).
+  const ONE_YEAR_MS = 365 * 24 * 60 * 60 * 1000
+  const oldestValidCallback = new Date(todayMidnight.getTime() - ONE_YEAR_MS)
   const overdue = callbacks.filter((ex) => {
     if (!ex.callback_date) return false
-    return new Date(ex.callback_date) < todayMidnight
+    const d = new Date(ex.callback_date)
+    if (Number.isNaN(d.getTime())) return false
+    return d < todayMidnight && d >= oldestValidCallback
   })
   const today = callbacks.filter((ex) => {
     if (!ex.callback_date) return false
