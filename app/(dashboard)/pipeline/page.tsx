@@ -26,7 +26,7 @@ interface PipelinePageProps {
 // - `rdv` (legacy) reste en DB mais n'est plus exposé comme colonne distincte ;
 //   à terme on pourra requalifier ces prospects en `interested`.
 const PIPELINE_COLUMNS: { status: KanbanStatus; label: string; color: string }[] = [
-  { status: 'sourced', label: 'Pas de contact identifié', color: 'gray' },
+  { status: 'sourced', label: 'Nouveau', color: 'gray' },
   { status: 'qualified', label: 'Qualifié', color: 'blue' },
   { status: 'contacted', label: 'Contacté', color: 'yellow' },
   { status: 'interested', label: 'Intéressé', color: 'green' },

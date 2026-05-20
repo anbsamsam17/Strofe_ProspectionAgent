@@ -45,7 +45,7 @@ type StatusFilterValue = ProspectStatus | 'offer_sent'
 // `rdv` est legacy — fusionné visuellement avec « Intéressé ». On garde la valeur
 // dans le pipeline tant que des lignes existantes en base ne sont pas migrées.
 const ALL_STATUTS: { value: StatusFilterValue; label: string; dot: string }[] = [
-  { value: 'sourced', label: 'Pas de contact identifié', dot: 'bg-gray-400' },
+  { value: 'sourced', label: 'Nouveau', dot: 'bg-gray-400' },
   { value: 'qualified', label: 'Qualifié', dot: 'bg-blue-500' },
   { value: 'contacted', label: 'Contacté', dot: 'bg-yellow-500' },
   { value: 'interested', label: 'Intéressé', dot: 'bg-green-500' },

@@ -113,7 +113,7 @@ describe('ProspectsFilters — rendu nominal', () => {
     render(<ProspectsFilters {...defaultProps} />)
 
     // Assert : tous les libellés métier exigés par le brief
-    expect(screen.getByRole('button', { name: /Pas de contact identifié/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^Nouveau$/i })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /^Qualifié$/i })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /^Contacté$/i })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /^Intéressé$/i })).toBeInTheDocument()
@@ -141,8 +141,8 @@ describe('ProspectsFilters — filtre statut', () => {
     // Arrange
     render(<ProspectsFilters {...defaultProps} />)
 
-    // Act : clic sur le statut "Pas de contact identifié" (= sourced)
-    fireEvent.click(screen.getByRole('button', { name: /Pas de contact identifié/i }))
+    // Act : clic sur le statut "Nouveau" (= sourced)
+    fireEvent.click(screen.getByRole('button', { name: /^Nouveau$/i }))
 
     // Assert
     expect(mockPush).toHaveBeenCalledTimes(1)
@@ -156,7 +156,7 @@ describe('ProspectsFilters — filtre statut', () => {
     render(<ProspectsFilters {...defaultProps} />)
 
     // Act : sélectionne 2 statuts successivement
-    fireEvent.click(screen.getByRole('button', { name: /Pas de contact identifié/i }))
+    fireEvent.click(screen.getByRole('button', { name: /^Nouveau$/i }))
     fireEvent.click(screen.getByRole('button', { name: /^Qualifié$/i }))
 
     // Assert : 2 appels push, le dernier avec les 2 valeurs jointes par virgule
@@ -169,7 +169,7 @@ describe('ProspectsFilters — filtre statut', () => {
     render(<ProspectsFilters {...defaultProps} currentStatuts={['sourced']} />)
 
     // Act : reclick pour désélectionner
-    fireEvent.click(screen.getByRole('button', { name: /Pas de contact identifié/i }))
+    fireEvent.click(screen.getByRole('button', { name: /^Nouveau$/i }))
 
     // Assert : statut absent de l'URL (clé supprimée)
     expect(lastPushedParams().has('statut')).toBe(false)

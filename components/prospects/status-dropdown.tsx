@@ -19,7 +19,7 @@ interface StatusOption {
 const STATUS_OPTIONS: StatusOption[] = [
   {
     value: 'sourced',
-    label: 'Pas de contact identifié',
+    label: 'Nouveau',
     dot: 'bg-gray-400',
     badge: 'bg-white/[0.06] text-gray-200 ring-1 ring-white/[0.08]',
   },

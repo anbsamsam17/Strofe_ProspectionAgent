@@ -125,7 +125,7 @@ function makeProspect(overrides: Partial<Prospect> = {}): Prospect {
 // Colonnes alignées sur la spec utilisateur (cf. app/(dashboard)/pipeline/page.tsx).
 // Migration 017 : 9ᵉ colonne `do_not_contact` (opt-out manuel utilisateur).
 const COLUMNS: { status: KanbanStatus; label: string; color: string }[] = [
-  { status: 'sourced', label: 'Pas de contact identifié', color: 'gray' },
+  { status: 'sourced', label: 'Nouveau', color: 'gray' },
   { status: 'qualified', label: 'Qualifié', color: 'blue' },
   { status: 'contacted', label: 'Contacté', color: 'yellow' },
   { status: 'interested', label: 'Intéressé', color: 'green' },

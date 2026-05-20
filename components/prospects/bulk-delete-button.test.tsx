@@ -76,7 +76,7 @@ describe('BulkDeleteButton — dialog', () => {
     expect(dialog).toHaveAttribute('aria-modal', 'true')
     expect(dialog).toHaveTextContent(/IRRÉVERSIBLE/i)
     // Vérifie que chaque filtre apparaît dans la liste.
-    expect(dialog).toHaveTextContent(/Pas de contact identifié/i)
+    expect(dialog).toHaveTextContent(/Nouveau/i)
     expect(dialog).toHaveTextContent(/industrie/i)
     expect(dialog).toHaveTextContent(/Score ≥ 50/i)
   })

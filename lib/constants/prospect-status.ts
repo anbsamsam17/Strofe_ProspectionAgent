@@ -20,7 +20,7 @@ import type { ProspectStatus } from '@/lib/types'
  * conservé séparé côté kanban side panel pour rétrocompat.
  */
 export const STATUS_LABELS: Record<ProspectStatus, string> = {
-  sourced: 'Pas de contact identifié',
+  sourced: 'Nouveau',
   qualified: 'Qualifié',
   contacted: 'Contacté',
   interested: 'Intéressé',
