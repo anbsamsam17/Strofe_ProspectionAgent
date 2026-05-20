@@ -125,12 +125,14 @@ export function GlanHero() {
   const sectionRef = useRef<HTMLElement | null>(null)
 
   // Parallax scroll : le portrait monte légèrement quand on scrolle.
+  // Amplitude réduite (-30 au lieu de -60) pour éviter de remonter
+  // par-dessus le H1 sur mobile (stack vertical < lg).
   const { scrollYProgress } = useScroll({
     target: sectionRef,
     offset: ['start start', 'end start'],
   })
-  const portraitY = useTransform(scrollYProgress, [0, 1], [0, -60])
-  const portraitOpacity = useTransform(scrollYProgress, [0, 0.8], [1, 0.3])
+  const portraitY = useTransform(scrollYProgress, [0, 1], [0, -30])
+  const portraitOpacity = useTransform(scrollYProgress, [0, 0.8], [1, 0.5])
 
   // Découpage du titre en mots pour le stagger.
   const part1Words = HEADLINE_PART_1.split(' ')
@@ -169,7 +171,7 @@ export function GlanHero() {
         initial="hidden"
         animate="visible"
         variants={containerVariants}
-        className="relative mx-auto grid max-w-6xl items-center gap-12 lg:grid-cols-[1.2fr_1fr]"
+        className="relative mx-auto grid max-w-6xl items-center gap-16 sm:gap-12 lg:grid-cols-[1.2fr_1fr]"
       >
         {/* ───────── Colonne gauche : copy ───────── */}
         <div className="text-center lg:text-left">
@@ -186,8 +188,9 @@ export function GlanHero() {
 
           {/* H1 — solide blanc + gradient vert vif sur ligne 2.
               Animations inline (m.span par mot) avec delays calculés —
-              aucun variants imbriqué qui pourrait laisser opacity à 0. */}
-          <h1 className="mt-6 text-5xl font-extrabold leading-[1.05] tracking-tight text-white sm:text-6xl xl:text-7xl">
+              aucun variants imbriqué qui pourrait laisser opacity à 0.
+              Modulation taille : 5xl mobile → 5xl tablet → 6xl lg → 7xl xl. */}
+          <h1 className="mt-6 text-4xl font-extrabold leading-[1.05] tracking-tight text-white sm:text-5xl lg:text-6xl xl:text-7xl">
             <span className="block text-white">
               {part1Words.map((word, i) => (
                 <m.span
@@ -312,7 +315,7 @@ export function GlanHeroFallback() {
             <span className="h-2 w-2 rounded-full bg-green-400" />
             Agent de sourcing — Prospection BEGES
           </span>
-          <h1 className="mt-6 text-5xl font-extrabold leading-[1.05] tracking-tight text-white sm:text-6xl xl:text-7xl">
+          <h1 className="mt-6 text-4xl font-extrabold leading-[1.05] tracking-tight text-white sm:text-5xl lg:text-6xl xl:text-7xl">
             <span className="block text-white">Vos prospects bilan carbone,</span>
             <span
               className="mt-2 block bg-gradient-to-r from-green-400 via-emerald-300 to-cyan-300 bg-clip-text text-transparent"

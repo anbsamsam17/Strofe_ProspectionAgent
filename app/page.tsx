@@ -336,7 +336,7 @@ function StatsSection() {
               className={`relative rounded-2xl border border-white/[0.08] bg-white/[0.025] p-6 text-center backdrop-blur-md transition-all duration-300 hover:-translate-y-0.5 hover:border-white/15 ${stat.accentGlow} before:absolute before:inset-x-4 before:top-0 before:h-px ${stat.accentTop}`}
             >
               <div
-                className={`bg-gradient-to-br ${stat.valueGradient} bg-clip-text text-5xl font-bold tabular-nums tracking-tight text-transparent`}
+                className={`whitespace-nowrap bg-gradient-to-br ${stat.valueGradient} bg-clip-text text-5xl font-bold tabular-nums tracking-tight text-transparent`}
               >
                 {stat.value}
               </div>
@@ -897,6 +897,12 @@ function Footer() {
           >
             Contact
           </a>
+          <Link
+            href="/legal/prospection"
+            className="text-xs text-gray-400 transition-colors duration-150 hover:text-white"
+          >
+            Mentions légales
+          </Link>
         </nav>
 
         {/* Copyright */}
