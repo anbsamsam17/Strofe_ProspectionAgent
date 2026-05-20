@@ -9,6 +9,7 @@ import type {
   SireneEtablissement,
   SireneResponse,
 } from '@/lib/types'
+import { isDecret2022Compliant } from './decret-2022'
 
 // ------------------------------------------------------------
 // ERREURS TYPÉES
@@ -1771,6 +1772,9 @@ export async function enrichirProspect(
     // lib/agent/decret-2022.ts (Décret 2022-982), scoring sectoriel, détection
     // concurrence, etc.
     bilan_ges_data: begesAdeme?.raw_record ?? undefined,
+    // GLN-006 — Conformité Décret 2022-982 (scope 3 + plan d'action).
+    // `null` quand non applicable (pré-2023, pas de BEGES, ou data incomplète).
+    beges_decret_2022_compliant: isDecret2022Compliant(begesAdeme?.raw_record ?? null),
     // Enrichissement contact depuis les données ADEME + téléphone Recherche Entreprises
     contact_nom: begesAdeme?.responsable_du_suivi ?? undefined,
     contact_poste: begesAdeme?.fonction ?? undefined,

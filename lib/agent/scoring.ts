@@ -68,6 +68,14 @@ const BEGES_ANTICIPATION_SCORE = 50
 const BEGES_ANTICIPATION_MIN = 400
 /** Borne haute exclusive de la zone d'anticipation (effectif). */
 const BEGES_ANTICIPATION_MAX = 500
+/**
+ * Boost Décret 2022-982 (GLN-006) : un BEGES publié post-2023 mais non conforme
+ * (scope 3 absent ou plan d'action absent) = signal commercial fort
+ * (renouvellement quasi-obligatoire). Ajouté au sous-score BEGES quand
+ * l'obligation est levée et qu'un bilan est publié mais non conforme. Plafonné
+ * via `clampSubscore` pour rester dans [0, 100].
+ */
+const BEGES_DECRET_2022_BOOST = 30
 
 // ------------------------------------------------------------
 // CONSTANTES — PILIER 3 (CONTACT)
@@ -189,6 +197,10 @@ function _scoreTaille(prospect: Partial<Prospect>): number {
  *  - effectif ∈ [400, 499] sans obligation déclenchée → 50 (anticipation commerciale)
  *  - sinon                                            → 0
  *
+ * Boost Décret 2022-982 (GLN-006) :
+ *   obligation_beges = true && beges_publie = true && beges_decret_2022_compliant = false
+ *   → +30 (signal "hot lead — bilan obsolète post-Décret 2022"). Clampé [0, 100].
+ *
  * Note : on s'appuie sur `obligation_beges` et `beges_valide` calculés en
  * amont (cf. lib/agent/sourcing.ts). Le scoring ne ré-évalue pas les seuils
  * réglementaires (≥500 sal., Région ≥250) lui-même — il consomme.
@@ -197,6 +209,8 @@ function _scoreBeges(prospect: Partial<Prospect>): number {
   const obligationBeges = prospect.obligation_beges === true
   const begesPublie = prospect.beges_publie === true
   const begesValide = prospect.beges_valide
+  const decret2022NonCompliant =
+    prospect.beges_decret_2022_compliant === false
 
   // Cas 1 : obligé mais aucun bilan publié → infraction.
   if (obligationBeges && !begesPublie) return BEGES_HOT_SCORE
@@ -204,7 +218,15 @@ function _scoreBeges(prospect: Partial<Prospect>): number {
   // Cas 2 : bilan publié mais expiré (renouvellement quadriennal dépassé).
   if (begesPublie && begesValide === false) return BEGES_HOT_SCORE
 
-  // Cas 3 : anticipation commerciale — entreprise proche du seuil sans
+  // Cas 3 — GLN-006 : bilan publié, valide, MAIS non conforme Décret 2022-982.
+  // Score de base 70 (signal moins urgent qu'une infraction L229-25 pure ou
+  // qu'un bilan expiré, mais commercialement très exploitable car le décret
+  // impose le renouvellement avec scope 3 + plan d'action). +30 via boost.
+  if (obligationBeges && begesPublie && decret2022NonCompliant) {
+    return Math.min(SUBSCORE_MAX, BEGES_ANTICIPATION_SCORE + BEGES_DECRET_2022_BOOST + 20)
+  }
+
+  // Cas 4 : anticipation commerciale — entreprise proche du seuil sans
   // obligation déclenchée. On regarde effectif_max (borne haute) car le
   // déclenchement légal arrive en franchissant le seuil sur 12 mois consécutifs.
   if (!obligationBeges) {
