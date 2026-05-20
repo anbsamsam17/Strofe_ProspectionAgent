@@ -1,31 +1,29 @@
 // ============================================================
 // TEMPLATE EMAIL — Persona RSE / Direction Développement Durable (GLN-020)
 //
-// Ordre obligatoire (.claude/rules/llm-prompts.md) :
-//   1. Gains financiers concrets
-//   2. Image de marque (engagement, méthode)
-//   3. Contrainte légale en dernier appui
+// Refonte 2026-05-20 : ton sobre et factuel (cf. exemple Transports
+// Méridien). Angle RSE = trajectoire carbone, périmètre scope 1/2/3,
+// alignement attentes clients / fonds ISR.
 // ============================================================
 
 import * as React from 'react'
 import { ProspectionEmailLayout, type ProspectionEmailProps } from './_layout'
 
-export const SUBJECT = 'Bilan Carbone ABC v8 — accompagnement {{raison_sociale}}'
+export const SUBJECT = 'BEGES réglementaire — mise à jour {{raison_sociale}}'
 
-export const BODY = `Bonjour {{prenom}},
+export const BODY = `Bonjour {{prenom}} {{nom}},
 
-Je suis Samir, consultant Bilan Carbone certifié ABC. Je travaille avec des équipes RSE de {{secteur_libelle}} sur la mesure et la trajectoire de réduction des émissions.
+Je vous contacte au sujet du Bilan GES réglementaire (bilan des émissions de gaz à effet de serre) de {{raison_sociale}}, dont le dernier bilan publié sur le registre de l'ADEME porte sur l'année de reporting {{beges_annee_reporting}}.
 
-Trois bénéfices concrets sur votre prochain exercice :
-- Subventions ADEME (Diag Décarbon'Action) couvrant jusqu'à 70 % du coût de l'étude.
-- ROI rapide via les "quick wins" identifiés en scope 1 et 2 (achat énergie, flotte, déplacements).
-- Trajectoire SBTi alignée 1,5 °C exploitable pour les rapports CSRD et les financements verts.
+L'échéance de mise à jour étant dépassée, vous êtes sans doute déjà sur le sujet. Dans {{secteur_libelle}}, la mise à jour est exigeante : couverture du scope 3 demandée par le Décret 2022-982, périmètre organisationnel cohérent, plan d'action chiffré — la collecte et la consolidation des données mobilisent plusieurs interlocuteurs.
 
-Sur la méthode, je couvre les scopes 1, 2 et 3 selon la Méthode Bilan Carbone v8 de l'ABC, avec un plan de transition conforme au décret 2022-982 (publication obligatoire depuis 2023). C'est ce qui fait la différence sur les appels d'offres publics et les notations extra-financières (EcoVadis, CDP).
+Au-delà de l'obligation, la non-publication freine la construction d'une trajectoire carbone crédible et complique l'alignement avec les attentes croissantes du marché — clients grands comptes (CSRD), fonds ISR, partenaires fournisseurs.
 
-À titre d'information, le BEGES de {{raison_sociale}} devra être renouvelé avant {{beges_expire_le}} pour rester valide au sens de l'article L. 229-25 — mais la vraie urgence est plutôt commerciale.
+Nous sommes à disposition pour réaliser et publier votre BEGES afin de répondre rapidement aux obligations de l'article L. 229-25 du Code de l'environnement.
 
-Je vous propose 20 minutes d'échange pour cadrer le périmètre. Disponible la semaine prochaine.`
+Si un échange peut vous être utile, je reste disponible.
+
+Je vous remercie de votre attention.`
 
 export interface RseEmailProps extends Omit<ProspectionEmailProps, 'preview'> {}
 
@@ -33,7 +31,7 @@ export function RseEmail(props: RseEmailProps): React.ReactElement {
   return (
     <ProspectionEmailLayout
       {...props}
-      preview="Bilan Carbone ABC v8, scopes 1/2/3, trajectoire SBTi & CSRD."
+      preview="BEGES, scope 3 et trajectoire carbone."
     />
   )
 }

@@ -1,31 +1,29 @@
 // ============================================================
-// TEMPLATE EMAIL — Persona DRH / Ressources Humaines (GLN-020)
+// TEMPLATE EMAIL — Persona DRH / Direction des ressources humaines (GLN-020)
 //
-// Ordre obligatoire (.claude/rules/llm-prompts.md) :
-//   1. Gains financiers concrets (subventions, ROI engagement)
-//   2. Image de marque (marque employeur, attractivité)
-//   3. Contrainte légale en dernier appui
+// Refonte 2026-05-20 : ton sobre et factuel (cf. exemple Transports
+// Méridien). Angle DRH = marque employeur + engagement collaborateurs
+// (attractivité, jeunes diplômés, RSE comme axe de fidélisation).
 // ============================================================
 
 import * as React from 'react'
 import { ProspectionEmailLayout, type ProspectionEmailProps } from './_layout'
 
-export const SUBJECT = 'Marque employeur et engagement collab — {{raison_sociale}}'
+export const SUBJECT = 'BEGES réglementaire — mise à jour {{raison_sociale}}'
 
-export const BODY = `Bonjour {{prenom}},
+export const BODY = `Bonjour {{prenom}} {{nom}},
 
-Samir, consultant Bilan Carbone certifié ABC. J'aide les équipes RH de {{secteur_libelle}} à transformer leur démarche carbone en levier marque employeur — au-delà de l'aspect réglementaire pur.
+Je vous contacte au sujet du Bilan GES réglementaire (bilan des émissions de gaz à effet de serre) de {{raison_sociale}}, dont le dernier bilan publié sur le registre de l'ADEME porte sur l'année de reporting {{beges_annee_reporting}}.
 
-Trois bénéfices concrets pour {{raison_sociale}} :
-- Subventions ADEME (Diag Décarbon'Action) jusqu'à 70 % du coût d'étude — le projet ne pèse pas sur le budget RH.
-- ROI engagement mesurable : les entreprises qui embarquent leurs collaborateurs dans la démarche (ateliers Fresque du Climat, plan de mobilité, télétravail) constatent +12 à +18 points de eNPS dans les 12 mois post-bilan (source baromètre ADEME-Comité 21).
-- Différenciation à l'embauche : 78 % des jeunes diplômés bac+5 placent l'engagement environnemental en top 3 des critères de choix d'employeur (Universum 2024). Sans démarche structurée, vos concurrents les captent.
+L'échéance de mise à jour étant dépassée, vous êtes sans doute déjà sur le sujet en lien avec la direction RSE. Dans {{secteur_libelle}}, la démarche mobilise plusieurs équipes et a souvent un volet RH visible — sensibilisation, formation, engagement collaborateurs.
 
-Sur la dimension marque employeur, le plan de transition associé au BEGES devient un asset RH solide pour les communications carrières, les Glassdoor et les rapports d'engagement annuels.
+Au-delà de l'obligation, le bilan carbone est devenu un signal fort sur la marque employeur : attractivité des candidats — en particulier jeunes diplômés sensibles aux enjeux climatiques — et engagement des équipes en place.
 
-À titre informatif, le BEGES de {{raison_sociale}} arrivera à échéance avant {{beges_expire_le}} (art. L. 229-25) — mais l'opportunité est plutôt sur la rétention et l'attractivité.
+Nous sommes à disposition pour réaliser et publier votre BEGES afin de répondre rapidement aux obligations de l'article L. 229-25 du Code de l'environnement.
 
-Je vous propose 20 minutes d'échange pour cadrer ce que ça peut donner concrètement chez vous.`
+Si un échange peut vous être utile, je reste disponible.
+
+Je vous remercie de votre attention.`
 
 export interface DrhEmailProps extends Omit<ProspectionEmailProps, 'preview'> {}
 
@@ -33,7 +31,7 @@ export function DrhEmail(props: DrhEmailProps): React.ReactElement {
   return (
     <ProspectionEmailLayout
       {...props}
-      preview="Marque employeur, +12-18 pts eNPS, attractivité jeunes diplômés."
+      preview="BEGES, marque employeur et engagement collaborateurs."
     />
   )
 }

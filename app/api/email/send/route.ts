@@ -23,8 +23,12 @@ import * as React from 'react'
 
 import { createClient } from '@/lib/supabase/server'
 import { TEMPLATES } from '@/lib/email/templates/prospection'
-import { interpolateTemplate, computeBegesExpireLe } from '@/lib/email/render'
-import { appendRgpdFooter } from '@/lib/email/rgpd'
+import {
+  interpolateTemplate,
+  computeBegesExpireLe,
+  computeBegesAnneeReporting,
+} from '@/lib/email/render'
+import { buildRgpdFooter } from '@/lib/email/rgpd'
 import { generateOptOutToken } from '@/lib/auth/opt-out-token'
 import type { ProfileSettings } from '@/lib/types'
 
@@ -251,15 +255,20 @@ export async function POST(request: NextRequest) {
       beges_derniere_publication: prospect.beges_derniere_publication,
       entite_publique: prospect.entite_publique,
     }),
+    beges_annee_reporting: computeBegesAnneeReporting(
+      prospect.beges_derniere_publication,
+    ),
     calendly_url: calendlyUrl,
   }
 
   // Interpolation sujet + corps (UI envoie déjà du contenu pouvant contenir placeholders)
-  let finalSubject = interpolateTemplate(subject, variables)
-  let finalBody = interpolateTemplate(body, variables)
+  const finalSubject = interpolateTemplate(subject, variables)
+  const finalBody = interpolateTemplate(body, variables)
 
-  // 8. Si premier contact, append RGPD footer (GLN-003)
-  let optOutUrl: string | null = null
+  // 8. Si premier contact, construit le footer RGPD art. 14 (GLN-003)
+  // Le footer est passé en PROP séparée au layout — il est rendu dans un
+  // bloc dédié (divider + style discret), pas concaténé au body. Fix 2026-05-20.
+  let rgpdFooterText: string | undefined = undefined
   if (isFirstContact) {
     try {
       const token = generateOptOutToken({
@@ -268,8 +277,8 @@ export async function POST(request: NextRequest) {
         email: contact.email,
         ttlDays: 365,
       })
-      optOutUrl = `${ENV_APP_URL}/api/opt-out/${token}`
-      finalBody = appendRgpdFooter(finalBody, optOutUrl)
+      const optOutUrl = `${ENV_APP_URL}/api/opt-out/${token}`
+      rgpdFooterText = buildRgpdFooter(optOutUrl)
     } catch (err) {
       // OPT_OUT_HMAC_SECRET non configuré — on bloque l'envoi du premier
       // contact car sans opt-out 1 clic on n'est pas conforme.
@@ -298,7 +307,7 @@ export async function POST(request: NextRequest) {
   const reactElement = React.createElement(template.Component, {
     body: finalBody,
     calendlyUrl: calendlyUrl || undefined,
-    rgpdFooter: undefined, // Le RGPD footer est intégré dans finalBody (texte simple)
+    rgpdFooter: rgpdFooterText, // GLN-003 — bloc dédié dans le layout (divider + style gris)
     senderName: senderName ?? undefined,
   })
 

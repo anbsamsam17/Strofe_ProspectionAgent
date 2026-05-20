@@ -1,31 +1,29 @@
 // ============================================================
-// TEMPLATE EMAIL — Persona DG / Présidence (GLN-020)
+// TEMPLATE EMAIL — Persona DG / Direction générale (GLN-020)
 //
-// Ordre obligatoire (.claude/rules/llm-prompts.md) :
-//   1. Gains financiers concrets / accès marchés
-//   2. Image de marque / vision long terme
-//   3. Contrainte légale en dernier appui (art. L229-25 + loi Climat)
+// Refonte 2026-05-20 : ton sobre et factuel (cf. exemple Transports
+// Méridien). Angle DG = stratégie + accès aux marchés (publics et
+// privés) avec critères carbone.
 // ============================================================
 
 import * as React from 'react'
 import { ProspectionEmailLayout, type ProspectionEmailProps } from './_layout'
 
-export const SUBJECT = 'Accès aux marchés publics et trajectoire carbone — {{raison_sociale}}'
+export const SUBJECT = 'BEGES réglementaire — mise à jour {{raison_sociale}}'
 
-export const BODY = `Bonjour {{prenom}},
+export const BODY = `Bonjour {{prenom}} {{nom}},
 
-Samir, consultant Bilan Carbone certifié ABC. Je travaille avec des dirigeants de {{secteur_libelle}} pour transformer la contrainte BEGES en levier commercial.
+Je vous contacte au sujet du Bilan GES réglementaire (bilan des émissions de gaz à effet de serre) de {{raison_sociale}}, dont le dernier bilan publié sur le registre de l'ADEME porte sur l'année de reporting {{beges_annee_reporting}}.
 
-Trois enjeux pour {{raison_sociale}} sur les 18 prochains mois :
-- Accès aux marchés publics : depuis la loi Climat & Résilience (août 2021, art. 35), les acheteurs publics doivent intégrer des considérations environnementales dans leurs critères d'attribution. Sans BEGES à jour, vous êtes mécaniquement écarté des appels d'offres > 100 K€.
-- Subventions ADEME jusqu'à 70 % et accès aux prêts BPI bonifiés (Diag Décarbon'Action + Plan Climat Entreprise).
-- Différenciation concurrentielle : sur un marché qui se polarise, l'entreprise avec une trajectoire 2030 chiffrée gagne les RFP face à des concurrents non préparés.
+L'échéance de mise à jour étant dépassée, vous êtes sans doute déjà sur le sujet. Dans {{secteur_libelle}}, l'exercice est exigeant : collecte des données opérationnelles, périmètre des filiales, scope 3 fournisseurs — l'enjeu dépasse souvent la seule direction RSE.
 
-Au-delà de l'opportunité commerciale, c'est un signal de gouvernance fort vis-à-vis de vos partenaires bancaires, vos clients grands comptes et vos jeunes recrues — qui regardent ces critères en priorité.
+Au-delà de l'obligation, un BEGES à jour devient un prérequis dans plusieurs appels d'offres publics (Loi Climat 2021, art. 35) et chez les grands donneurs d'ordre privés. Son absence fragilise progressivement l'accès aux marchés et l'image de l'entreprise sur sa trajectoire carbone.
 
-L'article L. 229-25 prévoit aussi une amende jusqu'à 10 000 € par BEGES manquant (50 000 € en récidive), mais la vraie perte serait commerciale.
+Nous sommes à disposition pour réaliser et publier votre BEGES afin de répondre rapidement aux obligations de l'article L. 229-25 du Code de l'environnement.
 
-Disponible pour un échange court de 20 minutes la semaine prochaine. Quel créneau vous arrange ?`
+Si un échange peut vous être utile, je reste disponible.
+
+Je vous remercie de votre attention.`
 
 export interface DgEmailProps extends Omit<ProspectionEmailProps, 'preview'> {}
 
@@ -33,7 +31,7 @@ export function DgEmail(props: DgEmailProps): React.ReactElement {
   return (
     <ProspectionEmailLayout
       {...props}
-      preview="Accès marchés publics, subventions 70 %, trajectoire 2030 chiffrée."
+      preview="BEGES, accès aux marchés et trajectoire carbone."
     />
   )
 }

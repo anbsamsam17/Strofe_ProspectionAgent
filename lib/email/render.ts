@@ -11,6 +11,7 @@ export interface TemplateVariables {
   raison_sociale?: string | null
   secteur_libelle?: string | null
   beges_expire_le?: string | null
+  beges_annee_reporting?: string | null
   calendly_url?: string | null
   opt_out_link?: string | null
 }
@@ -77,4 +78,22 @@ export function computeBegesExpireLe(input: {
     month: 'long',
     year: 'numeric',
   }).format(base)
+}
+
+/**
+ * Extrait l'année de reporting du BEGES (année calendaire du bilan publié).
+ *
+ * Le registre ADEME publie un BEGES avec `beges_derniere_publication` qui
+ * correspond à la date de **dépôt** du bilan. Par convention, l'année de
+ * reporting est l'année qui précède le dépôt (publication courant N+1 pour
+ * un bilan portant sur N). Heuristique : on retire 1 an à la date de
+ * publication. Si la date n'est pas exploitable, retourne chaîne vide.
+ */
+export function computeBegesAnneeReporting(
+  beges_derniere_publication: string | null | undefined,
+): string {
+  if (!beges_derniere_publication) return ''
+  const parsed = new Date(beges_derniere_publication)
+  if (Number.isNaN(parsed.getTime())) return ''
+  return String(parsed.getFullYear() - 1)
 }

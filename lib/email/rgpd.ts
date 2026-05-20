@@ -30,6 +30,10 @@ Conformément à l'article 14 du RGPD :
  * Ajoute le footer RGPD art. 14 à un corps d'email texte.
  * Insertion idempotente — si le marqueur est déjà présent, on ne duplique pas.
  *
+ * @deprecated Préférer `buildRgpdFooter()` + passage en prop `rgpdFooter` au
+ * template pour profiter du style séparé (divider + couleur grise). Conservé
+ * pour rétrocompat des tests + cas exceptionnels d'email plaintext.
+ *
  * @param body Corps de l'email (texte brut)
  * @param optOutLink URL HMAC d'opt-out 1-clic
  * @returns Corps augmenté du footer RGPD art. 14
@@ -42,4 +46,16 @@ export function appendRgpdFooter(body: string, optOutLink: string): string {
   }
   const footer = ART14_FOOTER.replace('{{opt_out_link}}', optOutLink)
   return `${body.trimEnd()}\n\n${footer}`
+}
+
+/**
+ * Construit le footer RGPD art. 14 prêt à être passé en prop `rgpdFooter`
+ * au layout email. Le layout l'affiche dans un bloc dédié (divider + style
+ * gris discret) — visuellement distinct du corps.
+ *
+ * @param optOutLink URL HMAC d'opt-out 1-clic
+ * @returns Texte du footer art. 14 avec lien opt-out interpolé
+ */
+export function buildRgpdFooter(optOutLink: string): string {
+  return ART14_FOOTER.replace('{{opt_out_link}}', optOutLink)
 }
