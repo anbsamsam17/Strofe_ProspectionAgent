@@ -14,6 +14,7 @@ import {
 } from '@/components/prospects/bulk-delete-button'
 import { ImportCsvModal } from '@/components/prospects/import-csv-modal'
 import { buildBegesUrl } from '@/lib/utils/beges-url'
+import { isBegesExpiringSoon } from '@/lib/agent/beges-expiration'
 import { RunStatusBanner } from '@/components/dashboard/run-status-banner'
 import {
   STATUS_LABELS_COMPACT,
@@ -200,10 +201,20 @@ function BegesBadge({ prospect }: { prospect: Prospect }) {
     badgeLabel = 'Absent'
   }
 
+  // GLN-080 — Indicateur discret "expire dans <3 mois" : un point orange
+  // après le badge (visible mais ne casse pas la lecture du tableau).
+  const expiringSoon =
+    begesPublie === true &&
+    begesValide === true &&
+    isBegesExpiringSoon({
+      beges_derniere_publication: prospect.beges_derniere_publication ?? null,
+      entite_publique: prospect.entite_publique ?? null,
+    })
+
   const title = begesDate
     ? `Dernière publication : ${new Intl.DateTimeFormat('fr-FR', {
         dateStyle: 'short',
-      }).format(new Date(begesDate))}`
+      }).format(new Date(begesDate))}${expiringSoon ? ' · expire dans moins de 3 mois' : ''}`
     : undefined
 
   const badge = (
@@ -219,6 +230,13 @@ function BegesBadge({ prospect }: { prospect: Prospect }) {
             new Date(begesDate),
           )}
         </span>
+      )}
+      {expiringSoon && (
+        <span
+          className="ml-0.5 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-orange-400"
+          aria-label="BEGES expirant dans moins de 3 mois"
+          title="BEGES expirant dans moins de 3 mois"
+        />
       )}
     </span>
   )

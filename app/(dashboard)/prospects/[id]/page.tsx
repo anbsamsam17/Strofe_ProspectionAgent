@@ -16,6 +16,7 @@ import { PriorityDropdown } from '@/components/prospects/priority-dropdown'
 import { ContactsList, type ProspectContact } from '@/components/prospects/contacts-list'
 import { ExchangesPanel, type ProspectExchange } from '@/components/prospects/exchanges-panel'
 import { buildBegesUrl } from '@/lib/utils/beges-url'
+import { isBegesExpiringSoon } from '@/lib/agent/beges-expiration'
 import { NafHierarchyView } from '@/components/prospects/naf-hierarchy-view'
 import { SendEmailButton } from '@/components/email/send-email-button'
 import { TEMPLATES } from '@/lib/email/templates/prospection'
@@ -492,6 +493,37 @@ export default async function ProspectDetailPage({ params }: PageProps) {
                 {prospect.obligation_beges && (
                   <span className="inline-flex items-center rounded-full bg-orange-500/15 px-3 py-1 text-sm font-medium text-orange-200 ring-1 ring-orange-500/25">
                     Obligation BEGES
+                  </span>
+                )}
+                {/* GLN-080 — Badge "BEGES expirant" : la validité tombe à
+                    échéance dans <= 90 jours (3 ans public / 4 ans privé
+                    selon Art. L229-25). Signal commercial (renouvellement
+                    imminent). Scope volontairement réduit : pas de cron ni
+                    d'envoi email — juste un badge UI. */}
+                {isBegesExpiringSoon({
+                  beges_derniere_publication: prospect.beges_derniere_publication ?? null,
+                  entite_publique: prospect.entite_publique ?? null,
+                }) && (
+                  <span
+                    className="inline-flex items-center gap-1.5 rounded-full bg-orange-500/15 px-3 py-1 text-sm font-medium text-orange-200 ring-1 ring-orange-500/25"
+                    title="Le BEGES de ce prospect expire dans moins de 3 mois (calcul Art. L229-25 + validité publique/privée)."
+                  >
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      width="12"
+                      height="12"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2.5"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      aria-hidden="true"
+                    >
+                      <circle cx="12" cy="12" r="10" />
+                      <polyline points="12 6 12 12 16 14" />
+                    </svg>
+                    BEGES expirant
                   </span>
                 )}
                 {/* GLN-006 — Badge "Non conforme Décret 2022" :
