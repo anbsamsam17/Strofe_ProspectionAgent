@@ -242,7 +242,21 @@ export async function POST(request: NextRequest) {
   const template = TEMPLATES[templateKey]
 
   // 7. Premier contact ? → footer RGPD art. 14 + flagging post-send
-  const isFirstContact = prospect.first_contact_at === null
+  // Double check : `first_contact_at` peut être NULL sur prospects pré-migration
+  // 022 alors qu'un email a déjà été envoyé via `prospect_exchanges`. On consulte
+  // donc aussi l'historique pour éviter de réinjecter le footer art. 14 à chaque
+  // envoi sur ces prospects legacy. Audit Playwright 2026-05-20.
+  let isFirstContact = prospect.first_contact_at === null
+  if (isFirstContact) {
+    const { count: priorEmailCount } = await supabase
+      .from('prospect_exchanges')
+      .select('id', { count: 'exact', head: true })
+      .eq('prospect_id', prospectId)
+      .eq('type', 'email')
+    if ((priorEmailCount ?? 0) > 0) {
+      isFirstContact = false
+    }
+  }
   const ENV_APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'https://decarbonleads.strofe.fr'
 
   // Variables pour interpolation

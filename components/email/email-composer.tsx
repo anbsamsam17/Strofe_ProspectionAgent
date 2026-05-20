@@ -16,6 +16,7 @@ import { createPortal } from 'react-dom'
 import { useRouter } from 'next/navigation'
 
 import { detectPersona, PERSONA_LABELS, type EmailPersona } from '@/lib/email/detect-persona'
+import { ART14_FOOTER } from '@/lib/email/rgpd'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -66,6 +67,7 @@ export function EmailComposer({
   const [body, setBody] = useState<string>(templates[initialPersona].body)
   const [error, setError] = useState<string | null>(null)
   const [pending, setPending] = useState(false)
+  const [successInfo, setSuccessInfo] = useState<string | null>(null)
   const firstFieldRef = useRef<HTMLSelectElement | null>(null)
   const [mounted, setMounted] = useState(false)
 
@@ -84,6 +86,7 @@ export function EmailComposer({
     setSubject(templates[newPersona].subject)
     setBody(templates[newPersona].body)
     setError(null)
+    setSuccessInfo(null)
     const t = setTimeout(() => firstFieldRef.current?.focus(), 30)
     function onKeyDown(e: KeyboardEvent) {
       if (e.key === 'Escape') onClose()
@@ -157,8 +160,14 @@ export function EmailComposer({
             : data.error?.message ?? "Erreur lors de l'envoi"
         throw new Error(msg)
       }
-      onClose()
-      router.refresh()
+      // Feedback visuel : succès dans la modal, refresh + close après 1.6s.
+      const selectedContact = validContacts.find((c) => c.id === contactId)
+      const email = selectedContact?.email ?? 'le destinataire'
+      setSuccessInfo(`Email envoyé à ${email}.`)
+      setTimeout(() => {
+        onClose()
+        router.refresh()
+      }, 1600)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erreur inconnue')
     } finally {
@@ -178,7 +187,7 @@ export function EmailComposer({
         if (e.target === e.currentTarget) onClose()
       }}
     >
-      <div className="w-[calc(100vw-2rem)] max-w-2xl rounded-2xl border border-white/[0.08] bg-[oklch(14%_0.02_240)]/95 backdrop-blur-md p-6 shadow-2xl ring-1 ring-black/30">
+      <div className="flex max-h-[90vh] w-[calc(100vw-2rem)] max-w-2xl flex-col rounded-2xl border border-white/[0.08] bg-[oklch(14%_0.02_240)]/95 backdrop-blur-md p-6 shadow-2xl ring-1 ring-black/30">
         <div className="mb-5 flex items-start justify-between gap-3">
           <div>
             <h3 id="email-composer-title" className="text-lg font-semibold text-white">
@@ -212,13 +221,26 @@ export function EmailComposer({
           </button>
         </div>
 
+        {successInfo && (
+          <div
+            role="status"
+            className="mb-4 rounded-lg border border-green-500/30 bg-green-500/10 px-4 py-3 text-sm text-green-100"
+          >
+            <span aria-hidden="true">✓ </span>
+            {successInfo}
+          </div>
+        )}
+
         {validContacts.length === 0 ? (
           <div className="rounded-lg border border-orange-500/30 bg-orange-500/10 px-4 py-3 text-sm text-orange-100">
             Aucun contact avec un email valide pour ce prospect. Ajoute un
             contact avec email avant d&rsquo;envoyer.
           </div>
         ) : (
-          <form onSubmit={handleSubmit} className="space-y-5">
+          <form
+            onSubmit={handleSubmit}
+            className="flex min-h-0 flex-1 flex-col space-y-5 overflow-y-auto"
+          >
 
             {firstContact && (
               <div
@@ -331,6 +353,21 @@ export function EmailComposer({
               />
             </div>
 
+            {/* Aperçu footer RGPD art. 14 — uniquement si premier contact (GLN-003) */}
+            {firstContact && (
+              <details className="rounded-lg border border-white/[0.06] bg-white/[0.02] px-3 py-2">
+                <summary className="cursor-pointer font-mono text-[10px] uppercase tracking-[0.18em] text-cyan-400/80">
+                  Aperçu footer RGPD ajouté en bas du mail
+                </summary>
+                <pre className="mt-2 whitespace-pre-wrap text-[11px] leading-relaxed text-gray-400">
+                  {ART14_FOOTER.replace(
+                    '{{opt_out_link}}',
+                    '[lien d\'opt-out 1-clic, généré à l\'envoi]',
+                  )}
+                </pre>
+              </details>
+            )}
+
             {error && (
               <p
                 role="alert"
@@ -340,21 +377,21 @@ export function EmailComposer({
               </p>
             )}
 
-            <div className="flex items-center justify-end gap-3 border-t border-white/[0.06] pt-5">
+            <div className="sticky bottom-0 -mx-1 flex items-center justify-end gap-3 border-t border-white/[0.06] bg-[oklch(14%_0.02_240)]/95 px-1 pt-5 backdrop-blur-md">
               <button
                 type="button"
                 onClick={onClose}
-                disabled={pending}
+                disabled={pending || successInfo !== null}
                 className="rounded-lg border border-white/[0.08] bg-white/[0.04] backdrop-blur-md px-4 py-2.5 text-sm font-medium text-gray-200 transition-colors hover:bg-white/[0.06] focus:outline-none focus:ring-2 focus:ring-white/20 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 Annuler
               </button>
               <button
                 type="submit"
-                disabled={pending}
+                disabled={pending || successInfo !== null}
                 className="inline-flex items-center gap-1.5 rounded-lg bg-green-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500/40 disabled:cursor-not-allowed disabled:opacity-50"
               >
-                {pending ? 'Envoi…' : 'Envoyer'}
+                {pending ? 'Envoi…' : successInfo ? 'Envoyé ✓' : 'Envoyer'}
               </button>
             </div>
           </form>
