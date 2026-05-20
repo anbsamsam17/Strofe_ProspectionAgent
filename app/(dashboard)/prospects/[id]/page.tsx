@@ -209,6 +209,25 @@ export default async function ProspectDetailPage({ params }: PageProps) {
     email_status: (c as unknown as { email_status?: string | null }).email_status ?? null,
     poste: c.poste,
   }))
+
+  // Fallback legacy (GLN-020 fix 2026-05-20) :
+  // L'API /api/prospects/[id]/enrich écrit dans les colonnes legacy
+  // `prospects.contact_*` (pas dans `prospect_contacts`). Si l'utilisateur
+  // a enrichi via UI mais que la table normalisée est vide, on synthétise
+  // un pseudo-contact `legacy-<prospectId>` pour permettre l'envoi email.
+  // Côté API `/api/email/send`, ce préfixe est détecté et le contact
+  // est lu depuis `prospects.contact_*` au lieu de `prospect_contacts`.
+  const hasValidContact = emailComposerContacts.some((c) => c.email)
+  if (!hasValidContact && prospect.contact_email) {
+    emailComposerContacts.push({
+      id: `legacy-${prospect.id}`,
+      prenom: prospect.contact_prenom ?? null,
+      nom: prospect.contact_nom ?? null,
+      email: prospect.contact_email,
+      email_status: null,
+      poste: prospect.contact_poste ?? null,
+    })
+  }
   const emailTemplates: Record<EmailPersona, { subject: string; body: string }> = {
     daf: { subject: TEMPLATES.daf.subject, body: TEMPLATES.daf.body },
     rse: { subject: TEMPLATES.rse.subject, body: TEMPLATES.rse.body },

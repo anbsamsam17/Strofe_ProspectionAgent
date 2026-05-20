@@ -35,10 +35,13 @@ export const dynamic = 'force-dynamic'
 // ------------------------------------------------------------
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+// Préfixe `legacy-<UUID>` accepté pour les contacts stockés en colonnes
+// `prospects.contact_*` (enrichissement UI pré-migration prospect_contacts).
+const CONTACT_ID_RE = /^(?:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|legacy-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i
 
 const BodySchema = z.object({
   prospectId: z.string().regex(UUID_RE, 'UUID prospect invalide'),
-  contactId: z.string().regex(UUID_RE, 'UUID contact invalide'),
+  contactId: z.string().regex(CONTACT_ID_RE, 'Contact ID invalide'),
   subject: z.string().min(1, 'Sujet vide').max(200, 'Sujet trop long'),
   body: z.string().min(1, 'Corps vide').max(10_000, 'Corps trop long'),
   templateKey: z.enum(['daf', 'rse', 'dg', 'drh']),
@@ -111,6 +114,10 @@ export async function POST(request: NextRequest) {
     entite_publique: boolean | null
     first_contact_at: string | null
     siren: string | null
+    contact_prenom: string | null
+    contact_nom: string | null
+    contact_email: string | null
+    contact_poste: string | null
   }
 
   const { data: prospectRaw, error: prospectError } = await supabase
@@ -133,30 +140,71 @@ export async function POST(request: NextRequest) {
   }
   const prospect = prospectRaw as unknown as ProspectRow
 
-  // 4. Fetch contact + check ownership chain (contact appartient au prospect)
-  const { data: contact, error: contactError } = await supabase
-    .from('prospect_contacts')
-    .select('id, prospect_id, prenom, nom, email, email_status, poste')
-    .eq('id', contactId)
-    .maybeSingle()
+  // 4. Fetch contact + check ownership chain
+  // Deux sources possibles :
+  //   a) contactId UUID standard → table normalisée `prospect_contacts`
+  //   b) contactId préfixé `legacy-<prospectUUID>` → colonnes legacy
+  //      `prospects.contact_*` (cf. /api/prospects/[id]/enrich qui n'écrit
+  //      pas encore dans la table normalisée).
+  type ResolvedContact = {
+    prenom: string | null
+    nom: string | null
+    email: string
+    poste: string | null
+  }
+  let contact: ResolvedContact
 
-  if (contactError) {
-    return NextResponse.json(
-      { error: { code: 'DB_ERROR', message: contactError.message } },
-      { status: 500 },
-    )
-  }
-  if (!contact || contact.prospect_id !== prospectId) {
-    return NextResponse.json(
-      { error: { code: 'NOT_FOUND', message: 'Contact introuvable' } },
-      { status: 404 },
-    )
-  }
-  if (!contact.email || contact.email_status === 'invalid') {
-    return NextResponse.json(
-      { error: { code: 'INVALID_INPUT', message: 'Contact sans email valide' } },
-      { status: 400 },
-    )
+  if (contactId.startsWith('legacy-')) {
+    const expectedLegacyId = `legacy-${prospectId}`
+    if (contactId !== expectedLegacyId) {
+      return NextResponse.json(
+        { error: { code: 'NOT_FOUND', message: 'Contact legacy invalide pour ce prospect' } },
+        { status: 404 },
+      )
+    }
+    if (!prospect.contact_email) {
+      return NextResponse.json(
+        { error: { code: 'INVALID_INPUT', message: 'Contact legacy sans email' } },
+        { status: 400 },
+      )
+    }
+    contact = {
+      prenom: prospect.contact_prenom,
+      nom: prospect.contact_nom,
+      email: prospect.contact_email,
+      poste: prospect.contact_poste,
+    }
+  } else {
+    const { data: contactRow, error: contactError } = await supabase
+      .from('prospect_contacts')
+      .select('id, prospect_id, prenom, nom, email, email_status, poste')
+      .eq('id', contactId)
+      .maybeSingle()
+
+    if (contactError) {
+      return NextResponse.json(
+        { error: { code: 'DB_ERROR', message: contactError.message } },
+        { status: 500 },
+      )
+    }
+    if (!contactRow || contactRow.prospect_id !== prospectId) {
+      return NextResponse.json(
+        { error: { code: 'NOT_FOUND', message: 'Contact introuvable' } },
+        { status: 404 },
+      )
+    }
+    if (!contactRow.email || contactRow.email_status === 'invalid') {
+      return NextResponse.json(
+        { error: { code: 'INVALID_INPUT', message: 'Contact sans email valide' } },
+        { status: 400 },
+      )
+    }
+    contact = {
+      prenom: contactRow.prenom,
+      nom: contactRow.nom,
+      email: contactRow.email,
+      poste: contactRow.poste,
+    }
   }
 
   // 5. Fetch profile (Calendly URL + reply-to)
