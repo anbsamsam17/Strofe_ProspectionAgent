@@ -484,12 +484,8 @@ export function SignupForm() {
         </button>
       </div>
 
-      <p className="text-center text-sm text-gray-400">
-        Déjà un compte ?{' '}
-        <Link href="/login" className="font-medium text-cyan-400 transition-colors hover:text-cyan-300">
-          Se connecter
-        </Link>
-      </p>
+      {/* Lien vers connexion : rendu uniquement par la page parente
+          (app/(auth)/signup/page.tsx) pour éviter la duplication mobile. */}
     </form>
   )
 }

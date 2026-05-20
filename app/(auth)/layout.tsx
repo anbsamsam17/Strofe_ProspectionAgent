@@ -58,8 +58,8 @@ const PROOF_POINTS: Array<{
 }> = [
   {
     accent: "cyan",
-    title: "Sourcing nocturne automatique",
-    text: "Sirene INSEE + registre ADEME scanné chaque nuit pour vous livrer des prospects frais.",
+    title: "Sourcing à la demande",
+    text: "Vous lancez Glan, il glane Sirene INSEE + le registre ADEME et vous livre les prospects qualifiés.",
   },
   {
     accent: "brand",
@@ -137,24 +137,23 @@ function DecorativePanel() {
 
         {/* Zone centrale */}
         <div className="flex-1 flex flex-col justify-center">
-          {/* Indicateur live tech */}
+          {/* Indicateur statique — pas de mensonge "live" sur une page non auth */}
           <div className="mb-8 inline-flex items-center gap-2.5">
             <span className="relative flex h-2 w-2 shrink-0">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-cyan-400 opacity-60" />
-              <span className="relative inline-flex h-2 w-2 rounded-full bg-cyan-400" />
+              <span className="relative inline-flex h-2 w-2 rounded-full bg-cyan-400/80" />
             </span>
             <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-cyan-400/80">
-              Agent actif — sourcing en cours
+              Sourcing à la demande
             </span>
           </div>
 
           {/* Mascot + tagline */}
           <div className="mb-8 flex items-center gap-4">
-            <GlanPortrait state="working" size={160} />
+            <GlanPortrait state="dormant" size={160} />
             <div>
               <p className="text-sm font-mono italic text-gray-400/80 leading-relaxed max-w-[260px]">
-                &ldquo;Pendant que vous dormez, je scanne Sirene et ADEME pour vous
-                trouver de nouveaux prospects BEGES qualifiés.&rdquo;
+                &ldquo;Je glane Sirene et ADEME à la demande pour vous livrer
+                des prospects BEGES qualifiés et prêts à appeler.&rdquo;
               </p>
               <p className="mt-2 font-mono text-[11px] italic text-green-400/70">— Glan</p>
             </div>

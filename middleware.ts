@@ -2,8 +2,10 @@ import { type NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
 import type { CookieOptions } from '@supabase/ssr'
 
-// Routes accessibles sans authentification
-const PUBLIC_ROUTES = ['/', '/login', '/signup', '/auth/callback']
+// Routes accessibles sans authentification.
+// /legal/prospection : page d'information CNIL/RGPD — DOIT être publique
+// (obligation réglementaire CNIL pour les bases de prospection commerciale).
+const PUBLIC_ROUTES = ['/', '/login', '/signup', '/auth/callback', '/legal/prospection']
 
 export async function middleware(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request })

@@ -2,7 +2,6 @@
 
 import { useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
 
 // ---------------------------------------------------------------
@@ -319,19 +318,13 @@ export function LoginForm() {
           </div>
 
           <div>
-            <div className="mb-1.5 flex items-center justify-between">
+            <div className="mb-1.5">
               <label
                 htmlFor="password"
                 className="block font-mono text-[10px] uppercase tracking-[0.15em] text-cyan-300/80"
               >
                 Mot de passe
               </label>
-              <Link
-                href="/auth/forgot-password"
-                className="font-mono text-[10px] text-cyan-400 transition-colors hover:text-cyan-300"
-              >
-                Mot de passe oublié ?
-              </Link>
             </div>
             <div className="relative">
               <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-gray-400">
@@ -407,13 +400,8 @@ export function LoginForm() {
         </form>
       )}
 
-      {/* Lien vers inscription */}
-      <p className="text-center text-sm text-gray-400">
-        Pas encore de compte ?{' '}
-        <Link href="/signup" className="font-medium text-cyan-400 transition-colors hover:text-cyan-300">
-          Créer un compte
-        </Link>
-      </p>
+      {/* Lien vers inscription : rendu uniquement par la page parente
+          (app/(auth)/login/page.tsx) pour éviter la duplication mobile. */}
     </div>
   )
 }

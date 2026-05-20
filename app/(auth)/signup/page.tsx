@@ -4,7 +4,7 @@ import { SignupForm } from "@/components/auth/signup-form"
 
 export const metadata: Metadata = {
   title: "Créer un compte — Glan",
-  description: "Inscrivez-vous et recevez des prospects bilan carbone qualifiés chaque nuit par Glan.",
+  description: "Inscrivez-vous et lancez Glan : sourcing à la demande de prospects bilan carbone qualifiés depuis Sirene et le registre ADEME.",
 }
 
 // Cf. login/page.tsx — la page ne doit pas être prérendue.
@@ -19,7 +19,7 @@ export default function SignupPage() {
           Créer un compte
         </h1>
         <p className="text-sm text-gray-400">
-          Glan commence à sourcer vos prospects dès cette nuit.
+          Lancez Glan à la demande dès la fin de l&apos;inscription.
         </p>
       </div>
 
