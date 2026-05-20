@@ -229,7 +229,10 @@ export async function POST(request: NextRequest) {
   const settings = (profile?.settings ?? {}) as Partial<ProfileSettings>
   const calendlyUrl = settings.calendly_url ?? ''
   const senderName = profile?.full_name ?? null
-  const replyTo = profile?.email ?? user.email ?? undefined
+  // Reply-to centralisé sur la boite contact STROFE (decision produit 2026-05-20)
+  // pour mutualiser les reponses prospects vs l'inbox personnelle du user.
+  // Override possible via RESEND_REPLY_TO_EMAIL si besoin futur multi-tenant.
+  const replyTo = process.env.RESEND_REPLY_TO_EMAIL ?? 'contact@strofe.fr'
 
   // 6. Pré-vérification template (le set est figé via TEMPLATES)
   if (!(templateKey in TEMPLATES)) {
@@ -353,7 +356,12 @@ export async function POST(request: NextRequest) {
       prospect_id: prospectId,
       type: 'email',
       result: 'sent',
-      notes: `Sujet : ${finalSubject}\n\n${finalBody}`,
+      // Traçabilité CNIL : on persiste le footer art. 14 dans les notes
+      // pour pouvoir prouver l'information préalable du destinataire,
+      // même si visuellement le footer est rendu dans un bloc séparé.
+      notes: rgpdFooterText
+        ? `Sujet : ${finalSubject}\n\n${finalBody}\n\n${rgpdFooterText}`
+        : `Sujet : ${finalSubject}\n\n${finalBody}`,
       occurred_at: new Date().toISOString(),
     })
     .select('id')

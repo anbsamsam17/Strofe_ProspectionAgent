@@ -48,10 +48,10 @@ export default function ProspectionLegalPage() {
               <li>
                 Contact référent données personnelles :{' '}
                 <a
-                  href="mailto:samir.anbri@strofe.fr"
+                  href="mailto:contact@strofe.fr"
                   className="text-cyan-400 underline hover:text-cyan-300"
                 >
-                  samir.anbri@strofe.fr
+                  contact@strofe.fr
                 </a>
               </li>
             </ul>
@@ -228,10 +228,10 @@ export default function ProspectionLegalPage() {
             <p className="mt-4">
               Pour exercer ces droits, envoyez un email à{' '}
               <a
-                href="mailto:samir.anbri@strofe.fr"
+                href="mailto:contact@strofe.fr"
                 className="text-cyan-400 underline hover:text-cyan-300"
               >
-                samir.anbri@strofe.fr
+                contact@strofe.fr
               </a>{' '}
               en précisant votre demande. Nous répondrons dans un délai de 30
               jours maximum.

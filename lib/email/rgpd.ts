@@ -22,7 +22,7 @@ Conformément à l'article 14 du RGPD :
 - Finalité : prospection commerciale pour services de conseil bilan carbone (obligation BEGES Art. L. 229-25)
 - Sources : Sirene INSEE, registre ADEME BEGES, données publiques
 - Durée de conservation : 3 ans à compter du dernier échange
-- Droits : accès, rectification, effacement, opposition (samir.anbri@strofe.fr)
+- Droits : accès, rectification, effacement, opposition (contact@strofe.fr)
 - En savoir plus : https://decarbonleads.strofe.fr/legal/prospection
 - Ne plus recevoir : {{opt_out_link}}`
 

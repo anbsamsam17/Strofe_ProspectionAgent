@@ -72,6 +72,9 @@ interface SetupOptions {
   profile?: Record<string, unknown> | null
   exchangeError?: { message: string } | null
   updateError?: { message: string } | null
+  /** Nb d'emails déjà envoyés à ce prospect — utilise pour le fallback
+   *  isFirstContact via count prospect_exchanges. Défaut 0. */
+  priorEmailCount?: number
 }
 
 function setupHandlers(opts: SetupOptions = {}) {
@@ -158,6 +161,17 @@ function setupHandlers(opts: SetupOptions = {}) {
           }),
         }
       },
+      // select(..., { count: 'exact', head: true }).eq().eq() — utilise pour
+      // détecter si un email a déjà été envoyé (fallback isFirstContact pour
+      // les prospects pré-migration 022 sans first_contact_at).
+      select: (_cols: string, _opts?: { count?: string; head?: boolean }) => ({
+        eq: () => ({
+          eq: vi.fn().mockResolvedValue({
+            count: opts.priorEmailCount ?? 0,
+            error: null,
+          }),
+        }),
+      }),
     }),
   }
 
@@ -249,7 +263,7 @@ describe('POST /api/email/send', () => {
     const call = mockResendSend.mock.calls[0][0]
     expect(call.from).toBe('noreply@strofe.fr')
     expect(call.to).toBe('marie.dupont@acme.fr')
-    expect(call.replyTo).toBe('samir@strofe.fr')
+    expect(call.replyTo).toBe('contact@strofe.fr')
   })
 
   it('interpole {{prenom}} et {{raison_sociale}} dans le sujet', async () => {
