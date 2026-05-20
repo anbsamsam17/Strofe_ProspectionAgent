@@ -4,6 +4,7 @@ import { DEFAULT_SCORING_WEIGHTS, type Profile, type ProfileSettings } from '@/l
 import { SettingsForm } from '@/components/settings/settings-form'
 import { LogoutButton } from '@/components/settings/logout-button'
 import { SireneCacheStatus } from '@/components/settings/sirene-cache-status'
+import { BlacklistSection } from '@/components/settings/blacklist-section'
 
 // Force le rendu dynamique — les settings doivent toujours refléter la valeur
 // actuelle en base (pas de version cached servie après une mise à jour récente)
@@ -115,6 +116,9 @@ export default async function SettingsPage() {
 
       {/* ── Formulaire paramètres agent ──────────────────────── */}
       <SettingsForm initialSettings={settings} />
+
+      {/* ── Liste noire — domaines email (GLN-061) ─────────────── */}
+      <BlacklistSection />
 
       {/* ── Cache SIRENE (état + déclenchement import) ────────── */}
       <SireneCacheStatus />
