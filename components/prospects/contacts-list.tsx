@@ -1,8 +1,10 @@
 import type { Prospect } from '@/lib/types'
 import { AddContactDialog } from './add-contact-dialog'
+import { ContactEmailStatusBadge } from './contact-email-status-badge'
 import { ContactSourceBadge, type ContactSource } from './contact-source-badge'
 import { EmailProBadge } from './email-pro-badge'
 import { EnrichContactButton } from './enrich-contact-button'
+import { VerifyEmailButton } from './verify-email-button'
 
 // ── Types locaux ──────────────────────────────────────────────────────────────
 
@@ -30,6 +32,18 @@ export interface ProspectContact {
   email_is_pro?: boolean | null
   /** Migration 015 — timestamp de la dernière vérif SMTP/Hunter. */
   email_verified_at?: string | null
+  /**
+   * Migration 015 + 025 — statut Hunter Email Verifier persisté.
+   * Valeurs : 'valid' | 'invalid' | 'accept_all' | 'catchall' | 'webmail'
+   * | 'disposable' | 'unknown' | 'unverified' | 'pattern_unverified'.
+   * `null` = jamais vérifié.
+   */
+  email_status?: string | null
+  /**
+   * Migration 015 — score Hunter 0-100 (alias DB `email_confidence`).
+   * Exposé en façade comme `email_score` côté UI (cohérent avec l'API verify).
+   */
+  email_confidence?: number | null
   created_at: string
   updated_at: string
 }
@@ -94,9 +108,21 @@ function fallbackFromProspect(prospect: Prospect): ProspectContact | null {
     is_primary: true,
     email_is_pro: null,
     email_verified_at: null,
+    email_status: null,
+    email_confidence: null,
     created_at: prospect.created_at,
     updated_at: prospect.updated_at,
   }
+}
+
+/**
+ * Détecte les contacts "synthétiques" (placeholder legacy ou fallback non
+ * persisté) à partir de l'ID — ces contacts n'existent pas en table
+ * `prospect_contacts`, donc on ne peut pas lancer la vérif Hunter dessus.
+ */
+function isPersistedContactId(id: string): boolean {
+  // UUID v4 standard ; les fallbacks utilisent des préfixes (`fallback-`, `legacy-`).
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)
 }
 
 // ── Composant ─────────────────────────────────────────────────────────────────
@@ -239,29 +265,44 @@ function ContactCard({ contact }: { contact: ProspectContact }) {
           )}
 
           {contact.email && (
-            <a
-              href={`mailto:${contact.email}`}
-              className="inline-flex max-w-full items-center gap-1.5 break-all text-sm font-medium text-green-400 transition-colors hover:text-green-300"
-              aria-label={`Envoyer un email à ${contact.email}`}
-            >
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                width="14"
-                height="14"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                aria-hidden="true"
-                className="flex-shrink-0"
+            <span className="inline-flex max-w-full flex-wrap items-center gap-x-2 gap-y-1">
+              <a
+                href={`mailto:${contact.email}`}
+                className="inline-flex max-w-full items-center gap-1.5 break-all text-sm font-medium text-green-400 transition-colors hover:text-green-300"
+                aria-label={`Envoyer un email à ${contact.email}`}
               >
-                <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" />
-                <polyline points="22,6 12,13 2,6" />
-              </svg>
-              {contact.email}
-            </a>
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="14"
+                  height="14"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden="true"
+                  className="flex-shrink-0"
+                >
+                  <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" />
+                  <polyline points="22,6 12,13 2,6" />
+                </svg>
+                {contact.email}
+              </a>
+              {/* GLN-062 — Badge statut Hunter + bouton "Vérifier". On n'affiche
+                  le bouton que sur des contacts persistés (présents en
+                  prospect_contacts) — les fallbacks legacy n'ont pas d'ID stable. */}
+              <ContactEmailStatusBadge
+                status={contact.email_status}
+                score={contact.email_confidence}
+              />
+              {isPersistedContactId(contact.id) && (
+                <VerifyEmailButton
+                  contactId={contact.id}
+                  emailVerifiedAt={contact.email_verified_at}
+                />
+              )}
+            </span>
           )}
 
           {contact.linkedin && (
