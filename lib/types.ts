@@ -201,6 +201,14 @@ export interface Prospect {
    *              ou data ADEME incomplète pour déterminer).
    */
   beges_decret_2022_compliant?: boolean | null
+  /**
+   * Flag composite "hot lead" calculé côté DB (migration 024, GLN-081).
+   * Colonne GENERATED ALWAYS — la formule est :
+   *   obligation_beges AND (NOT beges_publie OR NOT beges_valide OR beges_decret_2022_compliant = false)
+   *   AND contact_email IS NOT NULL AND effectif_min >= 250
+   * Pendant TypeScript dans `lib/agent/hot-lead.ts` pour usage UI/agent.
+   */
+  is_hot_lead?: boolean | null
   obligation_beges: boolean
   score_priorite: number
   score_details: ScoreDetails

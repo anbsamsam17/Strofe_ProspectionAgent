@@ -34,6 +34,8 @@ interface ProspectsFiltersProps {
   currentContactTypes?: ContactFilterType[]
   currentBegesFilters?: BegesFilterValue[]
   currentSort?: SortValue
+  /** GLN-081 — Filtre rapide "Hot leads uniquement" (?hot=1). */
+  currentHotOnly?: boolean
 }
 
 // TODO(Agent A): `offer_sent` à ajouter à `ProspectStatus` (`lib/types.ts`).
@@ -89,6 +91,7 @@ export function ProspectsFilters({
   currentContactTypes = [],
   currentBegesFilters = [],
   currentSort = DEFAULT_SORT,
+  currentHotOnly = false,
 }: ProspectsFiltersProps) {
   const router = useRouter()
   const pathname = usePathname()
@@ -103,6 +106,7 @@ export function ProspectsFilters({
   const [contactTypes, setContactTypes] = useState<ContactFilterType[]>(currentContactTypes)
   const [begesFilters, setBegesFilters] = useState<BegesFilterValue[]>(currentBegesFilters)
   const [sort, setSort] = useState<SortValue>(currentSort)
+  const [hotOnly, setHotOnly] = useState<boolean>(currentHotOnly)
   const [moreOpen, setMoreOpen] = useState<boolean>(false)
 
   function applyFilters(
@@ -114,9 +118,17 @@ export function ProspectsFilters({
     newContactTypes: ContactFilterType[],
     newBegesFilters: BegesFilterValue[],
     newSort: SortValue,
+    newHotOnly: boolean = hotOnly,
   ) {
     const params = new URLSearchParams(searchParams.toString())
     params.set('page', '1')
+
+    // GLN-081 — Filtre rapide Hot leads uniquement (?hot=1).
+    if (newHotOnly) {
+      params.set('hot', '1')
+    } else {
+      params.delete('hot')
+    }
 
     if (newStatuts.length > 0) {
       params.set('statut', newStatuts.join(','))
@@ -236,6 +248,22 @@ export function ProspectsFilters({
     applyFilters(statuts, secteur, scoreMin, scoreMax, next, contactTypes, begesFilters, sort)
   }
 
+  function toggleHotOnly() {
+    const next = !hotOnly
+    setHotOnly(next)
+    applyFilters(
+      statuts,
+      secteur,
+      scoreMin,
+      scoreMax,
+      archived,
+      contactTypes,
+      begesFilters,
+      sort,
+      next,
+    )
+  }
+
   function selectSort(value: SortValue) {
     if (value === sort) return
     setSort(value)
@@ -251,6 +279,7 @@ export function ProspectsFilters({
     setContactTypes([])
     setBegesFilters([])
     setSort(DEFAULT_SORT)
+    setHotOnly(false)
     startTransition(() => {
       router.push(pathname)
     })
@@ -263,7 +292,8 @@ export function ProspectsFilters({
     hasScoreFilter ||
     archived ||
     contactTypes.length > 0 ||
-    begesFilters.length > 0
+    begesFilters.length > 0 ||
+    hotOnly
 
   // Pourcentages pour la track active du range (entre les 2 thumbs).
   const scoreLeftPct = (scoreMin / SCORE_MAX_BOUND) * 100
@@ -453,8 +483,32 @@ export function ProspectsFilters({
           </div>
         </fieldset>
 
-        {/* Toggles compacts (icônes) — Obligation / Manquant / Archivés */}
+        {/* Toggles compacts (icônes) — Hot / Obligation / Manquant / Archivés */}
         <div className="flex items-center gap-1.5" role="group" aria-label="Filtres rapides BEGES">
+          {/* GLN-081 — Filtre rapide Hot leads (obligation + BEGES défaillant
+              + email + effectif >= 250). Premier toggle pour visibilité. */}
+          <ToggleIconButton
+            active={hotOnly}
+            onClick={toggleHotOnly}
+            label="Hot leads uniquement"
+            tone="red"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z" />
+            </svg>
+          </ToggleIconButton>
+
           <ToggleIconButton
             active={begesFilters.includes('obligation')}
             onClick={() => toggleBegesValue('obligation')}
@@ -593,6 +647,7 @@ export function ProspectsFilters({
         <div className="flex items-center justify-between border-t border-white/[0.06] px-4 py-2.5">
           <p className="truncate text-[11px] text-gray-400">
             {[
+              hotOnly && 'Hot leads',
               statuts.length > 0 && `${statuts.length} statut${statuts.length > 1 ? 's' : ''}`,
               secteur && `secteur "${secteur}"`,
               hasScoreFilter && `score ${scoreMin}–${scoreMax}`,

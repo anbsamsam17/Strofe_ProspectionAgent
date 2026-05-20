@@ -435,6 +435,7 @@ export type Database = {
           gemini_raisons: Json | null
           gemini_score: number | null
           id: string
+          is_hot_lead: boolean | null
           last_enrichment_run_at: string | null
           notes: string | null
           obligation_beges: boolean

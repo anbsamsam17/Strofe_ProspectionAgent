@@ -282,6 +282,8 @@ interface SearchParams {
   contact_type?: string
   /** "missing" pour ne lister que les entreprises avec BEGES absent OU expiré. */
   beges?: string
+  /** "1" pour le filtre rapide "Hot leads uniquement" (GLN-081). */
+  hot?: string
 }
 
 // ── Sort (pills inline) ──────────────────────────────────────────────────────
@@ -401,6 +403,8 @@ export default async function ProspectsPage({
       ? Math.max(scoreMaxRaw, scoreMin)
       : 100
   const showArchived = params.archived === '1'
+  // GLN-081 — Filtre Hot leads uniquement (colonne GENERATED is_hot_lead).
+  const hotOnly = params.hot === '1'
   const contactTypes = parseContactTypes(params.contact_type)
   // Parsing CSV : ?beges=missing,obligation → ['missing', 'obligation']
   // Toggles combinables (AND) côté query Supabase.
@@ -458,6 +462,11 @@ export default async function ProspectsPage({
     // BEGES manquant = absent (beges_publie=false) OU expiré (beges_publie=true && beges_valide=false).
     query = query.or('beges_publie.eq.false,beges_valide.eq.false')
   }
+  // GLN-081 — Filtre rapide "Hot leads uniquement". S'appuie sur la colonne
+  // GENERATED is_hot_lead (migration 024) — formule composite côté DB.
+  if (hotOnly) {
+    query = query.eq('is_hot_lead', true)
+  }
 
   // Compteur "nouveaux dernier run" — récupère le started_at du dernier run agent
   // pour le user courant, puis compte les prospects créés depuis. RLS filtre
@@ -496,7 +505,8 @@ export default async function ProspectsPage({
     scoreMin > 0 ||
     showArchived ||
     contactTypes.length > 0 ||
-    begesFilters.length > 0
+    begesFilters.length > 0 ||
+    hotOnly
 
   // Filtres pour le BulkDeleteButton — strictement alignés avec la query GET
   // ci-dessus. Cast safe : statutFilter sort de parseContactTypes/searchParams
@@ -527,6 +537,7 @@ export default async function ProspectsPage({
       ...(scoreMin > 0 ? { score_min: String(scoreMin) } : {}),
       ...(showArchived ? { archived: '1' } : {}),
       ...(contactTypes.length > 0 ? { contact_type: contactTypes.join(',') } : {}),
+      ...(hotOnly ? { hot: '1' } : {}),
       ...newParams,
     }
     const qs = new URLSearchParams(merged).toString()
@@ -633,6 +644,7 @@ export default async function ProspectsPage({
             currentContactTypes={contactTypes}
             currentBegesFilters={begesFilters}
             currentSort={sortValue}
+            currentHotOnly={hotOnly}
           />
         </div>
       </div>
@@ -776,9 +788,33 @@ export default async function ProspectsPage({
                       {/* 3. Entreprise */}
                       <td className="px-4 py-3.5">
                         <Link href={`/prospects/${prospect.id}`} className="block">
-                          <p className="font-semibold text-white transition-colors group-hover:text-green-300">
+                          <p className="flex items-center gap-1.5 font-semibold text-white transition-colors group-hover:text-green-300">
                             {prospect.raison_sociale || (
                               <span className="italic text-gray-500">— sans nom —</span>
+                            )}
+                            {/* GLN-081 — Micro-badge Hot lead (icône flamme),
+                                visible directement dans la liste à côté du nom. */}
+                            {prospect.is_hot_lead && (
+                              <span
+                                title="Top opportunité (Hot lead)"
+                                aria-label="Top opportunité (Hot lead)"
+                                className="inline-flex h-4 w-4 flex-shrink-0 items-center justify-center rounded-full bg-red-500/20 text-red-300 ring-1 ring-red-500/30"
+                              >
+                                <svg
+                                  xmlns="http://www.w3.org/2000/svg"
+                                  width="9"
+                                  height="9"
+                                  viewBox="0 0 24 24"
+                                  fill="currentColor"
+                                  stroke="currentColor"
+                                  strokeWidth="2"
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  aria-hidden="true"
+                                >
+                                  <path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z" />
+                                </svg>
+                              </span>
                             )}
                           </p>
                           {prospect.siren && (
