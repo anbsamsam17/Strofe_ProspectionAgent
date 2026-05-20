@@ -1082,6 +1082,12 @@ interface RechercheEntreprisesResult {
   activite_principale: string
   tranche_effectif_salarie: string
   etat_administratif: string
+  /**
+   * Categorie juridique INSEE (4 chiffres) — utile pour la detection des
+   * personnes morales de droit public (validite BEGES 3 ans vs 4 ans prive).
+   * Cf. GLN-005 / Decret 2022-982.
+   */
+  nature_juridique?: string
 }
 
 /**
@@ -1234,6 +1240,9 @@ export async function sourcerEntreprisesFallback(
           libelleCommuneEtablissement: r.siege.libelle_commune,
           activitePrincipaleEtablissement: r.siege.activite_principale || r.activite_principale,
           trancheEffectifsEtablissement: r.siege.tranche_effectif_salarie || r.tranche_effectif_salarie,
+          // Recherche Entreprises expose `nature_juridique` (code INSEE 4 chiffres)
+          // au niveau de l'entreprise — necessaire pour la regle GLN-005.
+          categorieJuridiqueUniteLegale: r.nature_juridique,
           etatAdministratifEtablissement: 'A',
           adresseEtablissement: {
             libelleVoieEtablissement: r.siege.adresse,
@@ -1585,6 +1594,35 @@ const BEGES_TRANCHE_MIN_METROPOLE = 41
 const BEGES_TRANCHE_MIN_DOM_TOM = 32
 
 // ------------------------------------------------------------
+// HELPERS — ENTITE PUBLIQUE (Decret 2022-982)
+// ------------------------------------------------------------
+
+/**
+ * Detecte si une categorie juridique INSEE correspond a une personne morale
+ * de droit public.
+ *
+ * Categories cibles (premier chiffre = 7) :
+ * - 71xx : administrations d'Etat (services centraux, services deconcentres...)
+ * - 72xx : collectivites territoriales (communes, departements, regions...)
+ * - 73xx : etablissements publics administratifs (universites, hopitaux...)
+ * - 74xx : autres personnes morales de droit public (groupements, OPH...)
+ *
+ * Reference : https://www.insee.fr/fr/information/2028129
+ */
+function isEntitePublique(categorieJuridique: string | null | undefined): boolean {
+  if (!categorieJuridique) return false
+  return /^7[1234]/.test(categorieJuridique)
+}
+
+/**
+ * Duree de validite du BEGES en annees.
+ * - 3 ans : personne morale de droit public (Decret 2022-982)
+ * - 4 ans : personne morale de droit prive (Art. L229-25 et al.)
+ */
+const BEGES_VALIDITE_PRIVE_ANS = 4
+const BEGES_VALIDITE_PUBLIC_ANS = 3
+
+// ------------------------------------------------------------
 // ENRICHISSEMENT PROSPECT
 // ------------------------------------------------------------
 
@@ -1596,6 +1634,10 @@ const BEGES_TRANCHE_MIN_DOM_TOM = 32
  * Seuil obligation BEGES (Art. L229-25 Code de l'environnement) :
  * - Métropole : ≥ 500 salariés (tranche INSEE ≥ 41)
  * - DOM-TOM (CP 971-978, 986-988) : ≥ 250 salariés (tranche INSEE ≥ 32)
+ *
+ * Validité BEGES (Décret 2022-982) :
+ * - Privé (cat. juridique INSEE != 71xx-74xx) : 4 ans
+ * - Public (cat. juridique INSEE 71xx-74xx)   : 3 ans
  */
 export async function enrichirProspect(
   etab: SireneEtablissement,
@@ -1612,6 +1654,10 @@ export async function enrichirProspect(
     ? BEGES_TRANCHE_MIN_DOM_TOM
     : BEGES_TRANCHE_MIN_METROPOLE
   const obligationBeges = tranche >= trancheMin
+
+  // Detection entite publique via categorie juridique INSEE (prefixes 71xx-74xx).
+  // Determine la duree de validite du BEGES (3 ans vs 4 ans). Cf. Decret 2022-982.
+  const entitePublique = isEntitePublique(etab.categorieJuridiqueUniteLegale)
 
   // Résolution des effectifs min/max depuis la tranche INSEE
   const { effectifMin, effectifMax } = trancheToEffectif(tranche)
@@ -1649,12 +1695,16 @@ export async function enrichirProspect(
     )
   }
 
-  // Calcul de la validité BEGES : un BEGES est valide si son année de reporting
-  // est dans les 4 dernières années (obligation de renouvellement quadriennal).
-  // Ex: en 2026, un BEGES de 2022 est encore valide, un de 2021 ne l'est plus.
+  // Calcul de la validité BEGES (Decret 2022-982) :
+  // - Prive : un BEGES est valide si annee_reporting >= currentYear - 4 (4 ans).
+  // - Public : annee_reporting >= currentYear - 3 (3 ans).
+  // Ex: en 2026, prive → 2022+, public → 2023+.
   const currentYear = new Date().getFullYear()
+  const validitePeriode = entitePublique
+    ? BEGES_VALIDITE_PUBLIC_ANS
+    : BEGES_VALIDITE_PRIVE_ANS
   const begesValide = begesAdeme !== null
-    ? begesAdeme.annee_reporting >= currentYear - 4
+    ? begesAdeme.annee_reporting >= currentYear - validitePeriode
     : undefined
 
   // Enrichissement téléphone : tentative via Recherche Entreprises (open data).
@@ -1693,6 +1743,7 @@ export async function enrichirProspect(
     contact_email: begesAdeme?.courriel ?? undefined,
     contact_telephone: contactTelephone ?? undefined,
     obligation_beges: obligationBeges,
+    entite_publique: entitePublique,
     source: 'sirene_api',
     signaux: [],
   }

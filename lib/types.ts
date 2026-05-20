@@ -159,8 +159,18 @@ export interface Prospect {
    * tombe sur un fallback recherche `bilans-ges.ademe.fr/bilans?q=<siren>`.
    */
   beges_url?: string
-  /** true si le BEGES a moins de 4 ans (obligation renouvellement quadriennal) */
+  /**
+   * true si le BEGES est encore dans sa periode de validite.
+   * Periode = 4 ans pour le prive, 3 ans pour le public (Art. L229-25 + Decret 2022-982).
+   * Cf. `entite_publique` ci-dessous.
+   */
   beges_valide?: boolean
+  /**
+   * TRUE si l'entreprise est une personne morale de droit public
+   * (categorie juridique INSEE 71xx-74xx). Determine la duree de validite
+   * du BEGES : 3 ans (public) au lieu de 4 ans (prive). Migration 020 (GLN-005).
+   */
+  entite_publique?: boolean
   obligation_beges: boolean
   score_priorite: number
   score_details: ScoreDetails
@@ -323,6 +333,13 @@ export interface SireneEtablissement {
   nomenclatureActivitePrincipaleEtablissement?: string
   trancheEffectifsEtablissement?: string
   anneeEffectifsEtablissement?: string
+  /**
+   * Categorie juridique INSEE (4 chiffres). Sert a detecter les personnes
+   * morales de droit public (prefixes 71xx-74xx) qui ont une validite BEGES
+   * de 3 ans au lieu de 4 ans pour le prive (GLN-005).
+   * Reference : https://www.insee.fr/fr/information/2028129
+   */
+  categorieJuridiqueUniteLegale?: string
   adresseEtablissement?: {
     numeroVoieEtablissement?: string
     typeVoieEtablissement?: string

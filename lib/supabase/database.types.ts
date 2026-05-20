@@ -426,6 +426,7 @@ export type Database = {
           effectif_max: number | null
           effectif_min: number | null
           enriched_at: string | null
+          entite_publique: boolean | null
           gemini_generated_at: string | null
           gemini_raisons: Json | null
           gemini_score: number | null
@@ -471,6 +472,7 @@ export type Database = {
           effectif_max?: number | null
           effectif_min?: number | null
           enriched_at?: string | null
+          entite_publique?: boolean | null
           gemini_generated_at?: string | null
           gemini_raisons?: Json | null
           gemini_score?: number | null
@@ -516,6 +518,7 @@ export type Database = {
           effectif_max?: number | null
           effectif_min?: number | null
           enriched_at?: string | null
+          entite_publique?: boolean | null
           gemini_generated_at?: string | null
           gemini_raisons?: Json | null
           gemini_score?: number | null
