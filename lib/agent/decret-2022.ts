@@ -295,3 +295,41 @@ export function isDecret2022Compliant(
   const planAction = hasPlanAction(data)
   return scope3 && planAction
 }
+
+/**
+ * Détail des manquements Décret 2022-982 — utilisé par l'UI pour afficher
+ * un libellé explicatif sous le badge "Non conforme Décret 2022".
+ *
+ * Retourne `null` si le bilan est conforme, hors champ (pré-2023), ou si on
+ * n'a pas assez d'info pour juger. Sinon retourne le détail des manquements.
+ */
+export function getDecret2022Reason(
+  bilanGesData: Record<string, unknown> | null | undefined,
+): { missingScope3: boolean; missingPlanAction: boolean } | null {
+  const compliant = isDecret2022Compliant(bilanGesData)
+  // Bilan conforme ou hors champ → pas de raison à afficher.
+  if (compliant !== false) return null
+  // Compliant = false → on sait qu'au moins un des deux manque.
+  const data = bilanGesData as Record<string, unknown>
+  return {
+    missingScope3: !hasScope3(data),
+    missingPlanAction: !hasPlanAction(data),
+  }
+}
+
+/**
+ * Libellé court (FR) du manquement Décret 2022-982 pour affichage UI.
+ * Exemples : "scope 3 manquant", "plan d'action manquant",
+ * "scope 3 + plan d'action manquants".
+ */
+export function formatDecret2022ReasonLabel(
+  reason: { missingScope3: boolean; missingPlanAction: boolean } | null,
+): string | null {
+  if (!reason) return null
+  if (reason.missingScope3 && reason.missingPlanAction) {
+    return "scope 3 + plan d'action manquants"
+  }
+  if (reason.missingScope3) return 'scope 3 manquant'
+  if (reason.missingPlanAction) return "plan d'action manquant"
+  return null
+}

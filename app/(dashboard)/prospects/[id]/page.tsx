@@ -18,6 +18,10 @@ import { DealValueEditor } from '@/components/prospects/deal-value-editor'
 import { ExchangesPanel, type ProspectExchange } from '@/components/prospects/exchanges-panel'
 import { buildBegesUrl } from '@/lib/utils/beges-url'
 import { isBegesExpiringSoon } from '@/lib/agent/beges-expiration'
+import {
+  getDecret2022Reason,
+  formatDecret2022ReasonLabel,
+} from '@/lib/agent/decret-2022'
 import { NafHierarchyView } from '@/components/prospects/naf-hierarchy-view'
 import { SendEmailButton } from '@/components/email/send-email-button'
 import { TEMPLATES } from '@/lib/email/templates/prospection'
@@ -566,31 +570,46 @@ export default async function ProspectDetailPage({ params }: PageProps) {
                 {/* GLN-006 — Badge "Non conforme Décret 2022" :
                     BEGES publié post-2023 sans scope 3 ou sans plan d'action
                     (Décret 2022-982 art. 1). Signal commercial fort —
-                    renouvellement quasi-obligatoire. */}
-                {prospect.beges_decret_2022_compliant === false && (
-                  <span
-                    className="inline-flex items-center gap-1.5 rounded-full bg-orange-500/15 px-3 py-1 text-sm font-medium text-orange-200 ring-1 ring-orange-500/25"
-                    title="BEGES publié sans scope 3 ou sans plan d'action de transition — renouvellement nécessaire selon Décret 2022-982 art. 1"
-                  >
-                    <svg
-                      xmlns="http://www.w3.org/2000/svg"
-                      width="12"
-                      height="12"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2.5"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      aria-hidden="true"
+                    renouvellement quasi-obligatoire. Le détail "scope 3
+                    manquant" / "plan d'action manquant" est affiché en
+                    sous-texte pour préciser le pitch commercial. */}
+                {prospect.beges_decret_2022_compliant === false && (() => {
+                  const decretReason = getDecret2022Reason(
+                    prospect.bilan_ges_data as Record<string, unknown> | null,
+                  )
+                  const reasonLabel = formatDecret2022ReasonLabel(decretReason)
+                  return (
+                    <span
+                      className="inline-flex items-center gap-1.5 rounded-full bg-orange-500/15 px-3 py-1 text-sm font-medium text-orange-200 ring-1 ring-orange-500/25"
+                      title="BEGES publié sans scope 3 ou sans plan d'action de transition — renouvellement nécessaire selon Décret 2022-982 art. 1"
                     >
-                      <circle cx="12" cy="12" r="10" />
-                      <line x1="12" y1="8" x2="12" y2="12" />
-                      <line x1="12" y1="16" x2="12.01" y2="16" />
-                    </svg>
-                    Non conforme Décret 2022
-                  </span>
-                )}
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        width="12"
+                        height="12"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2.5"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        aria-hidden="true"
+                      >
+                        <circle cx="12" cy="12" r="10" />
+                        <line x1="12" y1="8" x2="12" y2="12" />
+                        <line x1="12" y1="16" x2="12.01" y2="16" />
+                      </svg>
+                      <span>
+                        Non conforme Décret 2022
+                        {reasonLabel && (
+                          <span className="ml-1 text-xs text-orange-300/80">
+                            ({reasonLabel})
+                          </span>
+                        )}
+                      </span>
+                    </span>
+                  )
+                })()}
               </div>
 
               {prospect.beges_derniere_publication && (
