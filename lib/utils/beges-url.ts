@@ -62,48 +62,48 @@ function isValidSiren(siren: string | undefined | null): siren is string {
 /**
  * Construit l'URL vers le BEGES d'un prospect.
  *
- * Priorité (fix 2026-05-22 — migration ADEME CKAN → Data Fair) :
- *   1. `bilan_ges_data.id` (UUID Data Fair actuel) si présent → fiche directe.
- *   2. `prospect.beges_url` UNIQUEMENT s'il pointe vers `/bilans/<UUID>` —
- *      les anciens UUIDs CKAN (pre-2026) sont obsolètes côté nouveau site
- *      ADEME (404 logiciel), on les rejette même si stockés en DB.
- *   3. Fallback : recherche par SIREN sur bilans-ges.ademe.fr (toujours OK).
- *   4. `null` si aucune URL exploitable (pas de SIREN valide).
+ * Stratégie (fix 2026-05-22 — post-migration ADEME) :
+ *   1. **Recherche par SIREN** sur `bilans-ges.ademe.fr/bilans?q=<SIREN>` —
+ *      c'est l'URL générée par le moteur de recherche du site lui-même
+ *      (taper un SIREN dans la barre → URL `?q=<SIREN>`). Garanti reconnu
+ *      par le SPA actuel quel que soit l'âge du bilan.
+ *   2. **`bilan_ges_data.id`** (UUID Data Fair) en fallback si pas de SIREN —
+ *      moins fiable côté frontend ADEME post-migration mais mieux que rien.
+ *   3. **`prospect.beges_url`** stocké (UUID CKAN legacy) en dernier recours.
+ *   4. `null` si rien d'exploitable.
  *
- * NB : Les anciens UUIDs CKAN stockés en `beges_url` ressemblent à
- * `9386bece-b1cd-11ed-8fce-005056b7acd1` (avec préfixe TTL CKAN) tandis
- * que les nouveaux UUIDs Data Fair sont des v4 standard. On préfère
- * TOUJOURS `bilan_ges_data.id` quand disponible — c'est le seul UUID
- * garanti reconnu par le site bilans-ges.ademe.fr actuel.
+ * NB : Les URLs `/bilans/<UUID>` directes (Data Fair ou CKAN legacy) ne sont
+ * pas systématiquement résolues par le SPA bilans-ges.ademe.fr post-migration
+ * janvier 2026 — même un UUID Data Fair valide peut renvoyer une vue vide.
+ * La recherche `?q=<SIREN>` reste la voie sûre.
  */
 export function buildBegesUrl(
   prospect: Pick<Prospect, 'beges_url' | 'siren' | 'bilan_ges_data'>,
 ): string | null {
-  // 1. UUID Data Fair extrait du JSONB (priorité maximale post-migration 2026).
-  const dataFairUuid = extractDataFairUuid(prospect.bilan_ges_data)
-  if (dataFairUuid) {
-    return `${BEGES_FICHE_BASE}/${dataFairUuid}`
-  }
-
-  // 2. beges_url stocké — uniquement si fiche `/bilans/<UUID>` valide.
-  if (isUsableBegesUrl(prospect.beges_url)) {
-    return prospect.beges_url as string
-  }
-
-  // 3. Fallback recherche SIREN — TOUJOURS opérationnel sur bilans-ges.ademe.fr.
+  // 1. Recherche SIREN — voie sûre, garantie de retomber sur le bon bilan.
   if (isValidSiren(prospect.siren)) {
     const url = new URL(BEGES_SEARCH_BASE)
     url.searchParams.set('q', prospect.siren)
     return url.toString()
   }
 
+  // 2. Fallback UUID Data Fair si pas de SIREN exploitable.
+  const dataFairUuid = extractDataFairUuid(prospect.bilan_ges_data)
+  if (dataFairUuid) {
+    return `${BEGES_FICHE_BASE}/${dataFairUuid}`
+  }
+
+  // 3. Dernier recours : beges_url stocké tel quel (peut être obsolète).
+  if (isUsableBegesUrl(prospect.beges_url)) {
+    return prospect.beges_url as string
+  }
+
   return null
 }
 
 /**
- * Extrait l'UUID Data Fair (champ `id`) du payload bilan_ges_data
- * — celui que reconnait le site ADEME actuel. Renvoie `null` si
- * absent ou mal formé.
+ * Extrait l'UUID Data Fair (champ `id`) du payload bilan_ges_data.
+ * Renvoie `null` si absent ou mal formé.
  */
 function extractDataFairUuid(bilanGesData: unknown): string | null {
   if (!bilanGesData || typeof bilanGesData !== 'object') return null
