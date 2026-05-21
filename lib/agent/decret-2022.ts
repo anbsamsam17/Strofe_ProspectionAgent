@@ -12,18 +12,19 @@
 //   Un BEGES publié POST-2023 sans ces deux éléments n'est PAS conforme :
 //   c'est un signal commercial fort (renouvellement quasi-obligatoire).
 //
-// Champs ADEME Data Fair exploités :
-//   La structure du payload `/datasets/bilan-ges/lines` n'est pas
-//   formellement documentée et les noms de champs varient légèrement
-//   d'un cru à l'autre. On accepte donc plusieurs synonymes (best-effort)
-//   pour rester robuste à l'évolution du dataset :
-//     - Scope 3 : `emissions_scope_3` (number > 0) OU présence d'un
-//       enregistrement scope 3 dans une éventuelle liste de postes
-//       (`emissions_par_poste`, `postes_emissions`, ou variantes).
-//     - Plan d'action : `plan_action_transition`, `plan_action`,
-//       `plan_de_transition`, `plan_transition`, `objectifs_reduction`,
-//       `objectifs_de_reduction`. La présence (string non-vide ou objet
-//       non-null) suffit — on ne juge pas la qualité, on juge l'existence.
+// Champs ADEME Data Fair (validés via inspection prod 2026-05-21) :
+//   - Scope 3 : ventilé en postes `emissions_publication_p31..p35` (poste 3),
+//     `p41..p45` (poste 4), `p51..p54` (poste 5). Un BEGES méthode v5 cat
+//     ces postes en scope 3 (cf. ABC Méthode Bilan Carbone v9). On considère
+//     "scope 3 présent" si la somme des valeurs numériques de ces postes > 0.
+//     Synonymes legacy gardés pour robustesse (`emissions_scope_3`, etc.)
+//     au cas où Data Fair évoluerait ou que l'orchestrateur sauvegarde
+//     les bilans v4 sous une autre forme.
+//   - Plan d'action : `actions_et_moyens` (texte long) OU
+//     `reduction_attendue_des_emissions_directes` (NUMERIC > 0) OU
+//     `reduction_attendue_des_emissions_indirectes_significatives` (NUMERIC > 0)
+//     OU `analyse_des_resultats_obtenus` (texte explicite). Synonymes legacy
+//     gardés au cas où.
 //
 //   Si AUCUN des champs candidats n'est présent dans le payload (cas où
 //   l'API ne les expose pas du tout pour ce bilan), on retourne `null`
@@ -40,7 +41,7 @@
 const DECRET_2022_EFFECTIVE_DATE = new Date('2023-01-01T00:00:00Z')
 
 /**
- * Liste des clefs candidates pour le scope 3 numérique direct.
+ * Liste des clefs candidates pour le scope 3 numérique direct (legacy / synonymes).
  * Une valeur > 0 = scope 3 mesuré explicitement.
  */
 const SCOPE_3_NUMERIC_KEYS = [
@@ -51,8 +52,33 @@ const SCOPE_3_NUMERIC_KEYS = [
 ] as const
 
 /**
+ * Postes BEGES v5 catégorisés en scope 3 (cf. ABC Méthode Bilan Carbone v9
+ * + Data Fair ADEME). Postes 3 = déplacements, postes 4 = achats / amont,
+ * postes 5 = aval (utilisation produits, fin de vie). Une somme > 0 sur
+ * un de ces postes = scope 3 effectivement mesuré.
+ *
+ * Liste validée 2026-05-21 sur échantillon ALSTOM CRESPIN SAS (bilan 2024).
+ */
+const SCOPE_3_POSTE_KEYS = [
+  'emissions_publication_p31',
+  'emissions_publication_p32',
+  'emissions_publication_p33',
+  'emissions_publication_p34',
+  'emissions_publication_p35',
+  'emissions_publication_p41',
+  'emissions_publication_p42',
+  'emissions_publication_p43',
+  'emissions_publication_p44',
+  'emissions_publication_p45',
+  'emissions_publication_p51',
+  'emissions_publication_p52',
+  'emissions_publication_p53',
+  'emissions_publication_p54',
+] as const
+
+/**
  * Liste des clefs candidates pour une liste de postes d'émission
- * (le scope 3 peut alors être inféré par la présence d'un poste catégorie 3).
+ * (cas legacy / synonymes pour rester robuste).
  */
 const EMISSIONS_PAR_POSTE_KEYS = [
   'emissions_par_poste',
@@ -61,10 +87,15 @@ const EMISSIONS_PAR_POSTE_KEYS = [
 ] as const
 
 /**
- * Liste des clefs candidates pour le plan d'action / plan de transition.
+ * Clefs candidates pour le plan d'action / plan de transition.
  * Présence d'une valeur non-vide = plan d'action détecté.
+ *
+ * `actions_et_moyens` est le champ Data Fair officiel (string descriptive
+ * des mesures). Les autres sont des synonymes legacy / variantes.
  */
 const PLAN_ACTION_KEYS = [
+  'actions_et_moyens',
+  'analyse_des_resultats_obtenus',
   'plan_action_transition',
   'plan_action',
   'plan_de_transition',
@@ -73,6 +104,15 @@ const PLAN_ACTION_KEYS = [
   'objectifs_de_reduction',
   'mesures_reduction',
   'plan_actions',
+] as const
+
+/**
+ * Clefs candidates pour les objectifs de réduction quantifiés.
+ * Une valeur numérique > 0 = engagement chiffré = plan d'action effectif.
+ */
+const PLAN_ACTION_NUMERIC_KEYS = [
+  'reduction_attendue_des_emissions_directes',
+  'reduction_attendue_des_emissions_indirectes_significatives',
 ] as const
 
 // ------------------------------------------------------------
@@ -139,20 +179,28 @@ function parseAdemeDate(raw: unknown): Date | null {
  *   - OU une liste de postes contient au moins un poste catégorie 3
  *     (champ `categorie` / `scope` / `niveau` = 3, ou nom contenant "scope 3").
  */
+function readPositiveNumber(v: unknown): number | null {
+  if (typeof v === 'number' && Number.isFinite(v) && v > 0) return v
+  if (typeof v === 'string') {
+    const parsed = Number.parseFloat(v.replace(',', '.'))
+    if (Number.isFinite(parsed) && parsed > 0) return parsed
+  }
+  return null
+}
+
 function hasScope3(data: Record<string, unknown>): boolean {
-  // Cas direct : valeur numérique > 0.
-  for (const key of SCOPE_3_NUMERIC_KEYS) {
-    const v = data[key]
-    if (typeof v === 'number' && v > 0) return true
-    // Tolérance : valeur string convertible en nombre (l'API renvoie parfois
-    // les emissions en string formaté).
-    if (typeof v === 'string') {
-      const parsed = Number.parseFloat(v.replace(',', '.'))
-      if (Number.isFinite(parsed) && parsed > 0) return true
-    }
+  // Cas Data Fair officiel : postes BEGES v5 ventilés en p3x/p4x/p5x.
+  // Suffit qu'un poste soit > 0 pour considérer scope 3 présent.
+  for (const key of SCOPE_3_POSTE_KEYS) {
+    if (readPositiveNumber(data[key]) !== null) return true
   }
 
-  // Cas indirect : liste de postes d'émissions, on cherche un poste cat. 3.
+  // Cas legacy direct : valeur scope_3 agrégée > 0.
+  for (const key of SCOPE_3_NUMERIC_KEYS) {
+    if (readPositiveNumber(data[key]) !== null) return true
+  }
+
+  // Cas indirect legacy : liste de postes d'émissions, on cherche un poste cat. 3.
   for (const key of EMISSIONS_PAR_POSTE_KEYS) {
     const list = data[key]
     if (!Array.isArray(list)) continue
@@ -172,11 +220,26 @@ function hasScope3(data: Record<string, unknown>): boolean {
 
 /**
  * `true` si le bilan contient un plan d'action / plan de transition.
- * Heuristique : présence non-vide d'un des champs candidats (string ou objet).
+ * Critères (un seul suffit) :
+ *   - Champ texte `actions_et_moyens` non vide (Data Fair officiel).
+ *   - Champ texte `analyse_des_resultats_obtenus` non vide.
+ *   - Champ numérique `reduction_attendue_des_emissions_directes` > 0.
+ *   - Champ numérique `reduction_attendue_des_emissions_indirectes_significatives` > 0.
+ *   - Champ legacy synonyme présent et non vide.
  */
 function hasPlanAction(data: Record<string, unknown>): boolean {
-  const v = pickFirstDefined(data, PLAN_ACTION_KEYS)
-  return isNonEmptyString(v) || isNonEmptyObject(v) || isNonEmptyArray(v)
+  // Cas texte : champ rempli côté Data Fair officiel ou legacy.
+  const textValue = pickFirstDefined(data, PLAN_ACTION_KEYS)
+  if (isNonEmptyString(textValue) || isNonEmptyObject(textValue) || isNonEmptyArray(textValue)) {
+    return true
+  }
+
+  // Cas numérique : engagement chiffré de réduction.
+  for (const key of PLAN_ACTION_NUMERIC_KEYS) {
+    if (readPositiveNumber(data[key]) !== null) return true
+  }
+
+  return false
 }
 
 // ------------------------------------------------------------
@@ -219,8 +282,12 @@ export function isDecret2022Compliant(
   // Vérifier qu'on a AU MOINS un signal exploitable. Si l'API ne renvoie
   // ni scope 3 ni plan d'action ni postes émissions, on n'a pas l'info
   // → null (best-effort, on ne stigmatise pas).
-  const hasAnyScope3Field = hasAnyKey(data, SCOPE_3_NUMERIC_KEYS) || hasAnyKey(data, EMISSIONS_PAR_POSTE_KEYS)
-  const hasAnyPlanField = hasAnyKey(data, PLAN_ACTION_KEYS)
+  const hasAnyScope3Field =
+    hasAnyKey(data, SCOPE_3_POSTE_KEYS) ||
+    hasAnyKey(data, SCOPE_3_NUMERIC_KEYS) ||
+    hasAnyKey(data, EMISSIONS_PAR_POSTE_KEYS)
+  const hasAnyPlanField =
+    hasAnyKey(data, PLAN_ACTION_KEYS) || hasAnyKey(data, PLAN_ACTION_NUMERIC_KEYS)
   if (!hasAnyScope3Field && !hasAnyPlanField) return null
 
   // Évaluation finale : les deux exigences du décret doivent être satisfaites.
