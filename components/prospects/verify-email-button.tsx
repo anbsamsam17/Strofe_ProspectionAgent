@@ -36,6 +36,8 @@ interface VerifyEmailButtonProps {
 
 interface ToastState {
   message: string
+  /** kind 'quota' = quota Hunter dépassé → message persistant + style spécifique. */
+  kind: 'error' | 'quota'
 }
 
 // ------------------------------------------------------------
@@ -45,7 +47,9 @@ interface ToastState {
 /** Au-delà de 30 jours, on considère la vérif obsolète et on encourage à re-vérifier. */
 const STALE_THRESHOLD_MS = 30 * 24 * 60 * 60 * 1000
 
-const ERROR_TOAST_MS = 5_000
+const ERROR_TOAST_MS = 8_000
+/** Quota dépassé reste plus longtemps — l'info doit être assimilée. */
+const QUOTA_TOAST_MS = 15_000
 
 // ------------------------------------------------------------
 // HELPERS
@@ -92,14 +96,26 @@ export function VerifyEmailButton({
       const body: unknown = await response.json().catch(() => ({}))
 
       if (!response.ok) {
+        const errObj =
+          typeof body === 'object' && body !== null && 'error' in body
+            ? (body as { error?: { code?: string; message?: string } }).error
+            : undefined
+        const code = errObj?.code
         const message =
-          typeof body === 'object' &&
-          body !== null &&
-          'error' in body &&
-          typeof (body as { error?: { message?: string } }).error?.message === 'string'
-            ? (body as { error: { message: string } }).error.message
+          typeof errObj?.message === 'string'
+            ? errObj.message
             : 'Erreur lors de la vérification'
-        setError({ message })
+
+        // Quota Hunter dépassé → message dédié, plus visible et plus persistant.
+        if (response.status === 429 || code === 'RATE_LIMITED') {
+          const quotaMessage =
+            'Quota Hunter dépassé (25 vérifications/mois sur le plan gratuit). Reset le 1er du mois.'
+          setError({ message: quotaMessage, kind: 'quota' })
+          window.setTimeout(() => setError(null), QUOTA_TOAST_MS)
+          return
+        }
+
+        setError({ message, kind: 'error' })
         window.setTimeout(() => setError(null), ERROR_TOAST_MS)
         return
       }
@@ -110,7 +126,7 @@ export function VerifyEmailButton({
       router.refresh()
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)
-      setError({ message: 'Erreur réseau : ' + message })
+      setError({ message: 'Erreur réseau : ' + message, kind: 'error' })
       window.setTimeout(() => setError(null), ERROR_TOAST_MS)
     } finally {
       setIsLoading(false)
@@ -168,9 +184,15 @@ export function VerifyEmailButton({
         <p
           role="status"
           aria-live="polite"
-          className="rounded-md bg-red-500/15 px-2 py-0.5 text-[10px] text-red-200 ring-1 ring-red-500/25"
+          className={
+            'inline-flex max-w-xs items-start gap-1.5 rounded-md px-2.5 py-1 text-xs leading-snug ring-1 ' +
+            (error.kind === 'quota'
+              ? 'bg-amber-500/15 text-amber-100 ring-amber-500/35'
+              : 'bg-red-500/15 text-red-200 ring-red-500/25')
+          }
         >
-          {error.message}
+          <span aria-hidden="true">{error.kind === 'quota' ? '⚠' : '✕'}</span>
+          <span>{error.message}</span>
         </p>
       )}
     </div>
