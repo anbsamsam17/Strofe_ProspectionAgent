@@ -284,6 +284,8 @@ interface SearchParams {
   beges?: string
   /** "1" pour le filtre rapide "Hot leads uniquement" (GLN-081). */
   hot?: string
+  /** "1" pour le filtre rapide "BEGES non conforme Décret 2022" (GLN-006). */
+  decret_non_compliant?: string
 }
 
 // ── Sort (pills inline) ──────────────────────────────────────────────────────
@@ -405,6 +407,9 @@ export default async function ProspectsPage({
   const showArchived = params.archived === '1'
   // GLN-081 — Filtre Hot leads uniquement (colonne GENERATED is_hot_lead).
   const hotOnly = params.hot === '1'
+  // GLN-006 — Filtre BEGES non conforme Décret 2022-982 (publié post-2023
+  // sans scope 3 OU sans plan d'action). Cible commerciale renouvellement.
+  const decretNonCompliantOnly = params.decret_non_compliant === '1'
   const contactTypes = parseContactTypes(params.contact_type)
   // Parsing CSV : ?beges=missing,obligation → ['missing', 'obligation']
   // Toggles combinables (AND) côté query Supabase.
@@ -467,6 +472,13 @@ export default async function ProspectsPage({
   if (hotOnly) {
     query = query.eq('is_hot_lead', true)
   }
+  // GLN-006 — Filtre rapide "BEGES non conforme Décret 2022". S'appuie sur
+  // la colonne tristate beges_decret_2022_compliant (migration 023 + helper
+  // lib/agent/decret-2022.ts). Cible : BEGES publié post-2023 mais sans
+  // scope 3 ou sans plan d'action — renouvellement quasi-obligatoire.
+  if (decretNonCompliantOnly) {
+    query = query.eq('beges_decret_2022_compliant', false)
+  }
 
   // Compteur "nouveaux dernier run" — récupère le started_at du dernier run agent
   // pour le user courant, puis compte les prospects créés depuis. RLS filtre
@@ -506,7 +518,8 @@ export default async function ProspectsPage({
     showArchived ||
     contactTypes.length > 0 ||
     begesFilters.length > 0 ||
-    hotOnly
+    hotOnly ||
+    decretNonCompliantOnly
 
   // Filtres pour le BulkDeleteButton — strictement alignés avec la query GET
   // ci-dessus. Cast safe : statutFilter sort de parseContactTypes/searchParams
@@ -538,6 +551,7 @@ export default async function ProspectsPage({
       ...(showArchived ? { archived: '1' } : {}),
       ...(contactTypes.length > 0 ? { contact_type: contactTypes.join(',') } : {}),
       ...(hotOnly ? { hot: '1' } : {}),
+      ...(decretNonCompliantOnly ? { decret_non_compliant: '1' } : {}),
       ...newParams,
     }
     const qs = new URLSearchParams(merged).toString()
@@ -645,6 +659,7 @@ export default async function ProspectsPage({
             currentBegesFilters={begesFilters}
             currentSort={sortValue}
             currentHotOnly={hotOnly}
+            currentDecretNonCompliantOnly={decretNonCompliantOnly}
           />
         </div>
       </div>

@@ -36,6 +36,8 @@ interface ProspectsFiltersProps {
   currentSort?: SortValue
   /** GLN-081 — Filtre rapide "Hot leads uniquement" (?hot=1). */
   currentHotOnly?: boolean
+  /** GLN-006 — Filtre rapide "BEGES non conforme Décret 2022" (?decret_non_compliant=1). */
+  currentDecretNonCompliantOnly?: boolean
 }
 
 // TODO(Agent A): `offer_sent` à ajouter à `ProspectStatus` (`lib/types.ts`).
@@ -92,6 +94,7 @@ export function ProspectsFilters({
   currentBegesFilters = [],
   currentSort = DEFAULT_SORT,
   currentHotOnly = false,
+  currentDecretNonCompliantOnly = false,
 }: ProspectsFiltersProps) {
   const router = useRouter()
   const pathname = usePathname()
@@ -107,6 +110,9 @@ export function ProspectsFilters({
   const [begesFilters, setBegesFilters] = useState<BegesFilterValue[]>(currentBegesFilters)
   const [sort, setSort] = useState<SortValue>(currentSort)
   const [hotOnly, setHotOnly] = useState<boolean>(currentHotOnly)
+  const [decretNonCompliantOnly, setDecretNonCompliantOnly] = useState<boolean>(
+    currentDecretNonCompliantOnly,
+  )
   const [moreOpen, setMoreOpen] = useState<boolean>(false)
 
   function applyFilters(
@@ -119,6 +125,7 @@ export function ProspectsFilters({
     newBegesFilters: BegesFilterValue[],
     newSort: SortValue,
     newHotOnly: boolean = hotOnly,
+    newDecretNonCompliantOnly: boolean = decretNonCompliantOnly,
   ) {
     const params = new URLSearchParams(searchParams.toString())
     params.set('page', '1')
@@ -128,6 +135,13 @@ export function ProspectsFilters({
       params.set('hot', '1')
     } else {
       params.delete('hot')
+    }
+
+    // GLN-006 — Filtre rapide BEGES non conforme Décret 2022-982 (?decret_non_compliant=1).
+    if (newDecretNonCompliantOnly) {
+      params.set('decret_non_compliant', '1')
+    } else {
+      params.delete('decret_non_compliant')
     }
 
     if (newStatuts.length > 0) {
@@ -264,6 +278,23 @@ export function ProspectsFilters({
     )
   }
 
+  function toggleDecretNonCompliantOnly() {
+    const next = !decretNonCompliantOnly
+    setDecretNonCompliantOnly(next)
+    applyFilters(
+      statuts,
+      secteur,
+      scoreMin,
+      scoreMax,
+      archived,
+      contactTypes,
+      begesFilters,
+      sort,
+      hotOnly,
+      next,
+    )
+  }
+
   function selectSort(value: SortValue) {
     if (value === sort) return
     setSort(value)
@@ -280,6 +311,7 @@ export function ProspectsFilters({
     setBegesFilters([])
     setSort(DEFAULT_SORT)
     setHotOnly(false)
+    setDecretNonCompliantOnly(false)
     startTransition(() => {
       router.push(pathname)
     })
@@ -293,7 +325,8 @@ export function ProspectsFilters({
     archived ||
     contactTypes.length > 0 ||
     begesFilters.length > 0 ||
-    hotOnly
+    hotOnly ||
+    decretNonCompliantOnly
 
   // Pourcentages pour la track active du range (entre les 2 thumbs).
   const scoreLeftPct = (scoreMin / SCORE_MAX_BOUND) * 100
@@ -509,6 +542,33 @@ export function ProspectsFilters({
             </svg>
           </ToggleIconButton>
 
+          {/* GLN-006 — Filtre rapide BEGES non conforme Décret 2022-982.
+              Cible commerciale : BEGES publié post-2023 sans scope 3 ou
+              sans plan d'action → renouvellement quasi-obligatoire. */}
+          <ToggleIconButton
+            active={decretNonCompliantOnly}
+            onClick={toggleDecretNonCompliantOnly}
+            label="BEGES non conforme Décret 2022"
+            tone="amber"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <circle cx="12" cy="12" r="10" />
+              <line x1="12" y1="8" x2="12" y2="12" />
+              <line x1="12" y1="16" x2="12.01" y2="16" />
+            </svg>
+          </ToggleIconButton>
+
           <ToggleIconButton
             active={begesFilters.includes('obligation')}
             onClick={() => toggleBegesValue('obligation')}
@@ -648,6 +708,7 @@ export function ProspectsFilters({
           <p className="truncate text-[11px] text-gray-400">
             {[
               hotOnly && 'Hot leads',
+              decretNonCompliantOnly && 'Décret 2022 non conforme',
               statuts.length > 0 && `${statuts.length} statut${statuts.length > 1 ? 's' : ''}`,
               secteur && `secteur "${secteur}"`,
               hasScoreFilter && `score ${scoreMin}–${scoreMax}`,
