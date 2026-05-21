@@ -1,31 +1,28 @@
 // ============================================================
-// POST /api/contacts/[id]/verify — vérifier email via Hunter
+// POST /api/contacts/[id]/verify — vérifier email via DNS MX + heuristiques
 // ------------------------------------------------------------
 // Ticket : GLN-062 (data quality — verification email + score confiance)
 //
 // Endpoint user-déclenché depuis la liste de contacts d'un prospect (bouton
-// "Vérifier"). Appelle Hunter Email Verifier pour le contact, persiste
-// `email_status` + `email_confidence` (= score 0-100) + `email_verified_at`.
+// "Vérifier"). Vérification 100% locale (DNS MX + listes disposable/webmail)
+// — pas de quota externe. Remplace Hunter Email Verifier 2026-05-22 (plan
+// gratuit Hunter cap 25/mois trop limitant).
+//
+// Persistance : `email_status` (valid/accept_all/webmail/disposable/invalid/
+// unknown) + `email_confidence` (score 0-100) + `email_verified_at`.
 //
 // Body : `{}` (rien — l'ID contact est dans l'URL).
 //
 // Sécurité :
 //   - getUser() obligatoire (session SSR).
-//   - Ownership vérifié explicitement : on lit le contact via `user_id = auth.uid()`
-//     (RLS de prospect_contacts garantit déjà l'isolation, mais on lit pour
-//     contrôler l'existence et obtenir l'email avant d'appeler Hunter).
-//   - Pas de service_role (session user suffit, RLS protège).
-//
-// Quota :
-//   - Provider 'hunter' (existant en migration 015). Vérifié et consommé via
-//     `withQuota` — refund si Hunter throw.
+//   - Ownership vérifié explicitement (RLS de prospect_contacts garantit
+//     déjà l'isolation, on relit pour obtenir l'email).
+//   - Pas de service_role.
 //
 // Erreurs :
 //   - 401 UNAUTHENTICATED  : pas de session
 //   - 400 INVALID_INPUT    : id non UUID / contact sans email
 //   - 404 NOT_FOUND        : contact introuvable / pas owné
-//   - 429 RATE_LIMITED     : quota Hunter mensuel épuisé
-//   - 502 EXTERNAL_API_ERROR : Hunter down / payload malformé
 //   - 500 INTERNAL_ERROR   : erreur DB inattendue
 // ============================================================
 
@@ -33,12 +30,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 
 import { createClient } from '@/lib/supabase/server'
-import {
-  HunterAuthError,
-  HunterQuotaExhaustedError,
-  verifyEmail,
-} from '@/lib/agent/hunter-verifier'
-import { consumeQuota, refundQuota } from '@/lib/agent/quotas'
+import { verifyEmailViaDns } from '@/lib/agent/email-verifier-dns'
 
 export const dynamic = 'force-dynamic'
 
@@ -140,7 +132,7 @@ export async function POST(
   }
 
   // Defense-in-depth : la RLS doit déjà filtrer, mais on vérifie l'ownership
-  // pour ne jamais consommer du quota Hunter sur un contact d'un autre user.
+  // pour ne jamais lancer la vérification sur un contact d'un autre user.
   if (contact.user_id !== user.id) {
     return NextResponse.json(
       { error: { code: 'NOT_FOUND', message: 'Contact introuvable' } },
@@ -160,66 +152,10 @@ export async function POST(
     )
   }
 
-  // 5. Quota Hunter — provider 'hunter' (déjà tracké en migration 015).
-  const quotaCheck = await consumeQuota(supabase, user.id, 'hunter', 1)
-  if (!quotaCheck.ok) {
-    return NextResponse.json(
-      {
-        error: {
-          code: 'RATE_LIMITED',
-          message:
-            "Quota Hunter mensuel épuisé. Il se réinitialise le 1er du mois.",
-        },
-      },
-      { status: 429 },
-    )
-  }
-
-  // 6. Appel Hunter — refund quota en cas d'erreur (l'appel n'a pas consommé
-  //    réellement côté Hunter si on a une 401/500 réseau).
-  let verification: { status: string; score: number }
-  try {
-    verification = await verifyEmail(contact.email)
-  } catch (err) {
-    // Refund best-effort — l'appel n'a pas abouti, on rend le crédit.
-    await refundQuota(supabase, user.id, 'hunter', 1)
-
-    if (err instanceof HunterQuotaExhaustedError) {
-      return NextResponse.json(
-        {
-          error: {
-            code: 'RATE_LIMITED',
-            message:
-              'Quota Hunter épuisé côté provider. Réessayez plus tard.',
-          },
-        },
-        { status: 429 },
-      )
-    }
-    if (err instanceof HunterAuthError) {
-      return NextResponse.json(
-        {
-          error: {
-            code: 'EXTERNAL_API_ERROR',
-            message:
-              'Configuration Hunter manquante côté serveur (HUNTER_API_KEY).',
-          },
-        },
-        { status: 502 },
-      )
-    }
-
-    const message = err instanceof Error ? err.message : String(err)
-    return NextResponse.json(
-      {
-        error: {
-          code: 'EXTERNAL_API_ERROR',
-          message: 'Hunter indisponible : ' + message,
-        },
-      },
-      { status: 502 },
-    )
-  }
+  // 5. Vérification DNS MX + heuristiques (sans quota externe).
+  // Remplace Hunter 2026-05-22 — plan gratuit Hunter cap 25/mois trop limitant.
+  // verifyEmailViaDns ne throw pas en mode dégradé (renvoie 'unknown').
+  const verification = await verifyEmailViaDns(contact.email)
 
   // 7. Persister status + score + verified_at. RLS filtre via session.
   const verifiedAt = new Date().toISOString()

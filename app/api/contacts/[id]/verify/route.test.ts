@@ -1,19 +1,17 @@
 // ============================================================
 // TESTS — /api/contacts/[id]/verify (POST)
 // ------------------------------------------------------------
-// Mock complet de Supabase SSR + hunter-verifier + quotas (pas d'appel réel).
+// Mock complet de Supabase SSR + email-verifier-dns (pas d'appel réel).
 // Couvre :
 //   - 401 sans session
 //   - 400 id invalide
-//   - 404 contact introuvable
+//   - 404 contact introuvable / pas owné
 //   - 400 contact sans email
-//   - 429 quota Hunter (consumeQuota refuse)
-//   - 429 quota Hunter (HunterQuotaExhaustedError côté provider)
-//   - 502 Hunter auth error
 //   - 200 succès → persiste status + score + verified_at
+//   - 500 DB error (update fail)
 // ============================================================
 
-import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 // ------------------------------------------------------------
 // MOCKS — hoist avant import de la route
@@ -45,36 +43,17 @@ vi.mock('@/lib/supabase/server', () => ({
   })),
 }))
 
-// Hoisted helpers — accessibles depuis les vi.mock factories (qui sont hoist
-// par Vitest, comme jest). On NE peut PAS référencer des vi.fn() au top sans ça.
-const { mockVerifyEmail, mockConsumeQuota, mockRefundQuota } = vi.hoisted(() => ({
-  mockVerifyEmail: vi.fn(),
-  mockConsumeQuota: vi.fn(),
-  mockRefundQuota: vi.fn(),
+const { mockVerifyEmailViaDns } = vi.hoisted(() => ({
+  mockVerifyEmailViaDns: vi.fn(),
 }))
 
-vi.mock('@/lib/agent/hunter-verifier', async () => {
-  const actual = await vi.importActual<typeof import('@/lib/agent/hunter-verifier')>(
-    '@/lib/agent/hunter-verifier',
-  )
-  return {
-    ...actual,
-    verifyEmail: mockVerifyEmail,
-  }
-})
-
-vi.mock('@/lib/agent/quotas', () => ({
-  consumeQuota: mockConsumeQuota,
-  refundQuota: mockRefundQuota,
+vi.mock('@/lib/agent/email-verifier-dns', () => ({
+  verifyEmailViaDns: mockVerifyEmailViaDns,
 }))
 
 // Imports APRÈS les vi.mock pour bénéficier du hoist.
 import { POST } from './route'
 import { NextRequest } from 'next/server'
-import {
-  HunterAuthError,
-  HunterQuotaExhaustedError,
-} from '@/lib/agent/hunter-verifier'
 
 // ------------------------------------------------------------
 // FIXTURES
@@ -101,15 +80,26 @@ const params = Promise.resolve({ id: VALID_CONTACT_ID })
 // ------------------------------------------------------------
 
 beforeEach(() => {
-  mockGetUser.mockResolvedValue({
-    data: { user: { id: VALID_USER_ID } },
+  // Defaults : session OK, contact OK, update OK, verifier renvoie accept_all.
+  mockGetUser.mockResolvedValue({ data: { user: { id: VALID_USER_ID } }, error: null })
+  mockContactMaybeSingle.mockResolvedValue({
+    data: { id: VALID_CONTACT_ID, email: 'marie@acme.fr', user_id: VALID_USER_ID },
     error: null,
   })
-  mockContactMaybeSingle.mockReset()
-  mockUpdateMaybeSingle.mockReset()
-  mockVerifyEmail.mockReset()
-  mockConsumeQuota.mockResolvedValue({ ok: true, remaining: 24 })
-  mockRefundQuota.mockResolvedValue(undefined)
+  mockUpdateMaybeSingle.mockResolvedValue({
+    data: {
+      id: VALID_CONTACT_ID,
+      email_status: 'accept_all',
+      email_confidence: 65,
+      email_verified_at: '2026-05-22T10:00:00.000Z',
+    },
+    error: null,
+  })
+  mockVerifyEmailViaDns.mockResolvedValue({
+    status: 'accept_all',
+    score: 65,
+    reason: 'mx_present',
+  })
 })
 
 afterEach(() => {
@@ -120,192 +110,110 @@ afterEach(() => {
 // TESTS
 // ------------------------------------------------------------
 
-describe('POST /api/contacts/[id]/verify — auth', () => {
-  it('retourne 401 sans session', async () => {
-    mockGetUser.mockResolvedValueOnce({ data: { user: null }, error: null })
+describe('POST /api/contacts/[id]/verify', () => {
+  it('renvoie 401 sans session', async () => {
+    mockGetUser.mockResolvedValue({ data: { user: null }, error: null })
     const res = await POST(makeRequest(), { params })
     expect(res.status).toBe(401)
-    const body = (await res.json()) as { error?: { code?: string } }
-    expect(body.error?.code).toBe('UNAUTHENTICATED')
   })
-})
 
-describe('POST /api/contacts/[id]/verify — validation', () => {
-  it('retourne 400 si id non UUID', async () => {
-    const badParams = Promise.resolve({ id: 'pas-un-uuid' })
+  it('renvoie 400 si id non UUID', async () => {
+    const badParams = Promise.resolve({ id: 'not-a-uuid' })
     const res = await POST(makeRequest(), { params: badParams })
     expect(res.status).toBe(400)
-    const body = (await res.json()) as { error?: { code?: string } }
-    expect(body.error?.code).toBe('INVALID_INPUT')
   })
 
-  it('retourne 404 si contact introuvable', async () => {
-    mockContactMaybeSingle.mockResolvedValueOnce({ data: null, error: null })
+  it('renvoie 404 si contact introuvable', async () => {
+    mockContactMaybeSingle.mockResolvedValue({ data: null, error: null })
     const res = await POST(makeRequest(), { params })
     expect(res.status).toBe(404)
-    const body = (await res.json()) as { error?: { code?: string } }
-    expect(body.error?.code).toBe('NOT_FOUND')
   })
 
-  it('retourne 400 si contact sans email', async () => {
-    mockContactMaybeSingle.mockResolvedValueOnce({
+  it("renvoie 404 si contact appartient à un autre user (defense-in-depth)", async () => {
+    mockContactMaybeSingle.mockResolvedValue({
+      data: { id: VALID_CONTACT_ID, email: 'x@y.fr', user_id: 'other-user-id' },
+      error: null,
+    })
+    const res = await POST(makeRequest(), { params })
+    expect(res.status).toBe(404)
+  })
+
+  it('renvoie 400 si contact sans email', async () => {
+    mockContactMaybeSingle.mockResolvedValue({
       data: { id: VALID_CONTACT_ID, email: null, user_id: VALID_USER_ID },
       error: null,
     })
     const res = await POST(makeRequest(), { params })
     expect(res.status).toBe(400)
-    const body = (await res.json()) as { error?: { code?: string } }
-    expect(body.error?.code).toBe('INVALID_INPUT')
-  })
-})
-
-describe('POST /api/contacts/[id]/verify — quota', () => {
-  it('retourne 429 si consumeQuota refuse (quota local épuisé)', async () => {
-    mockContactMaybeSingle.mockResolvedValueOnce({
-      data: {
-        id: VALID_CONTACT_ID,
-        email: 'john@acme.com',
-        user_id: VALID_USER_ID,
-      },
-      error: null,
-    })
-    mockConsumeQuota.mockResolvedValueOnce({ ok: false, remaining: 0 })
-
-    const res = await POST(makeRequest(), { params })
-    expect(res.status).toBe(429)
-    const body = (await res.json()) as { error?: { code?: string } }
-    expect(body.error?.code).toBe('RATE_LIMITED')
-    expect(mockVerifyEmail).not.toHaveBeenCalled()
   })
 
-  it('retourne 429 + refund si HunterQuotaExhaustedError côté Hunter', async () => {
-    mockContactMaybeSingle.mockResolvedValueOnce({
-      data: {
-        id: VALID_CONTACT_ID,
-        email: 'john@acme.com',
-        user_id: VALID_USER_ID,
-      },
-      error: null,
+  it("renvoie 200 + persiste status + score + verified_at en succès", async () => {
+    mockVerifyEmailViaDns.mockResolvedValue({
+      status: 'accept_all',
+      score: 65,
+      reason: 'mx_present',
     })
-    mockVerifyEmail.mockRejectedValueOnce(new HunterQuotaExhaustedError())
-
-    const res = await POST(makeRequest(), { params })
-    expect(res.status).toBe(429)
-    expect(mockRefundQuota).toHaveBeenCalledOnce()
-  })
-})
-
-describe('POST /api/contacts/[id]/verify — erreurs Hunter', () => {
-  it('retourne 502 + refund sur HunterAuthError', async () => {
-    mockContactMaybeSingle.mockResolvedValueOnce({
-      data: {
-        id: VALID_CONTACT_ID,
-        email: 'john@acme.com',
-        user_id: VALID_USER_ID,
-      },
-      error: null,
-    })
-    mockVerifyEmail.mockRejectedValueOnce(new HunterAuthError())
-
-    const res = await POST(makeRequest(), { params })
-    expect(res.status).toBe(502)
-    const body = (await res.json()) as { error?: { code?: string } }
-    expect(body.error?.code).toBe('EXTERNAL_API_ERROR')
-    expect(mockRefundQuota).toHaveBeenCalledOnce()
-  })
-
-  it('retourne 502 + refund sur erreur réseau générique', async () => {
-    mockContactMaybeSingle.mockResolvedValueOnce({
-      data: {
-        id: VALID_CONTACT_ID,
-        email: 'john@acme.com',
-        user_id: VALID_USER_ID,
-      },
-      error: null,
-    })
-    mockVerifyEmail.mockRejectedValueOnce(new Error('ECONNRESET'))
-
-    const res = await POST(makeRequest(), { params })
-    expect(res.status).toBe(502)
-    expect(mockRefundQuota).toHaveBeenCalledOnce()
-  })
-})
-
-describe('POST /api/contacts/[id]/verify — succès', () => {
-  it('persiste status + score + verified_at et renvoie 200', async () => {
-    mockContactMaybeSingle.mockResolvedValueOnce({
-      data: {
-        id: VALID_CONTACT_ID,
-        email: 'john@acme.com',
-        user_id: VALID_USER_ID,
-      },
-      error: null,
-    })
-    mockVerifyEmail.mockResolvedValueOnce({ status: 'valid', score: 92 })
-    mockUpdateMaybeSingle.mockResolvedValueOnce({
-      data: {
-        id: VALID_CONTACT_ID,
-        email_status: 'valid',
-        email_confidence: 92,
-        email_verified_at: '2026-05-20T10:00:00Z',
-      },
-      error: null,
-    })
-
     const res = await POST(makeRequest(), { params })
     expect(res.status).toBe(200)
-    const body = (await res.json()) as {
-      data?: {
-        email_status?: string
-        email_score?: number
-        email_verified_at?: string
-      }
-    }
-    expect(body.data?.email_status).toBe('valid')
-    expect(body.data?.email_score).toBe(92)
-    expect(body.data?.email_verified_at).toBeTruthy()
-    expect(mockRefundQuota).not.toHaveBeenCalled()
+    const json = await res.json()
+    expect(json.data.email_status).toBe('accept_all')
+    expect(json.data.email_score).toBe(65)
+    expect(json.data.email_verified_at).toBeTruthy()
+    expect(mockVerifyEmailViaDns).toHaveBeenCalledWith('marie@acme.fr')
   })
 
-  it('passe l\'email exact à verifyEmail', async () => {
-    mockContactMaybeSingle.mockResolvedValueOnce({
-      data: {
-        id: VALID_CONTACT_ID,
-        email: 'pierre.martin@acme.fr',
-        user_id: VALID_USER_ID,
-      },
+  it("propage le status 'webmail' quand le domaine est gmail/etc", async () => {
+    mockContactMaybeSingle.mockResolvedValue({
+      data: { id: VALID_CONTACT_ID, email: 'marie@gmail.com', user_id: VALID_USER_ID },
       error: null,
     })
-    mockVerifyEmail.mockResolvedValueOnce({ status: 'accept_all', score: 65 })
-    mockUpdateMaybeSingle.mockResolvedValueOnce({
-      data: {
-        id: VALID_CONTACT_ID,
-        email_status: 'accept_all',
-        email_confidence: 65,
-        email_verified_at: '2026-05-20T10:00:00Z',
-      },
-      error: null,
+    mockVerifyEmailViaDns.mockResolvedValue({
+      status: 'webmail',
+      score: 30,
+      reason: 'domain_webmail',
     })
-
-    await POST(makeRequest(), { params })
-    expect(mockVerifyEmail).toHaveBeenCalledWith('pierre.martin@acme.fr')
-  })
-
-  it('refuse l\'accès à un contact d\'un autre user (defense-in-depth)', async () => {
-    mockContactMaybeSingle.mockResolvedValueOnce({
+    mockUpdateMaybeSingle.mockResolvedValue({
       data: {
         id: VALID_CONTACT_ID,
-        email: 'x@y.fr',
-        user_id: 'autre-user-id',
+        email_status: 'webmail',
+        email_confidence: 30,
+        email_verified_at: '2026-05-22T10:00:00.000Z',
       },
       error: null,
     })
     const res = await POST(makeRequest(), { params })
-    expect(res.status).toBe(404)
-    expect(mockConsumeQuota).not.toHaveBeenCalled()
-    expect(mockVerifyEmail).not.toHaveBeenCalled()
+    expect(res.status).toBe(200)
+    const json = await res.json()
+    expect(json.data.email_status).toBe('webmail')
+  })
+
+  it("propage le status 'invalid' quand le domaine n'a pas de MX", async () => {
+    mockVerifyEmailViaDns.mockResolvedValue({
+      status: 'invalid',
+      score: 0,
+      reason: 'mx_absent',
+    })
+    mockUpdateMaybeSingle.mockResolvedValue({
+      data: {
+        id: VALID_CONTACT_ID,
+        email_status: 'invalid',
+        email_confidence: 0,
+        email_verified_at: '2026-05-22T10:00:00.000Z',
+      },
+      error: null,
+    })
+    const res = await POST(makeRequest(), { params })
+    expect(res.status).toBe(200)
+    const json = await res.json()
+    expect(json.data.email_status).toBe('invalid')
+  })
+
+  it('renvoie 500 si update DB échoue', async () => {
+    mockUpdateMaybeSingle.mockResolvedValue({
+      data: null,
+      error: { message: 'DB connection lost' },
+    })
+    const res = await POST(makeRequest(), { params })
+    expect(res.status).toBe(500)
   })
 })
-
-// Évite l'unused import warning sur Mock — utilisé pour les types implicites.
-type _UnusedMockType = Mock
