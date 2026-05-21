@@ -218,6 +218,30 @@ export type Database = {
         }
         Relationships: []
       }
+      domain_blacklist: {
+        Row: {
+          created_at: string
+          domain: string
+          id: string
+          reason: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          domain: string
+          id?: string
+          reason?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          domain?: string
+          id?: string
+          reason?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       opt_out: {
         Row: {
           created_at: string
@@ -412,7 +436,6 @@ export type Database = {
           beges_url: string | null
           beges_valide: boolean | null
           bilan_ges_data: Json | null
-          chiffre_affaires: number | null
           code_postal: string | null
           contact_completeness: number | null
           contact_email: string | null
@@ -426,11 +449,13 @@ export type Database = {
           contact_telephone: string | null
           contact_tier: string | null
           created_at: string
-          croissance_ca_yoy_pct: number | null
+          deal_probability: number | null
+          deal_value: number | null
           effectif_max: number | null
           effectif_min: number | null
           enriched_at: string | null
           entite_publique: boolean | null
+          first_contact_at: string | null
           gemini_generated_at: string | null
           gemini_raisons: Json | null
           gemini_score: number | null
@@ -441,7 +466,6 @@ export type Database = {
           obligation_beges: boolean
           priorite: string
           raison_sociale: string
-          resultat_net: number | null
           score_details: Json
           score_priorite: number
           secteur_libelle: string | null
@@ -464,7 +488,6 @@ export type Database = {
           beges_url?: string | null
           beges_valide?: boolean | null
           bilan_ges_data?: Json | null
-          chiffre_affaires?: number | null
           code_postal?: string | null
           contact_completeness?: number | null
           contact_email?: string | null
@@ -478,21 +501,23 @@ export type Database = {
           contact_telephone?: string | null
           contact_tier?: string | null
           created_at?: string
-          croissance_ca_yoy_pct?: number | null
+          deal_probability?: number | null
+          deal_value?: number | null
           effectif_max?: number | null
           effectif_min?: number | null
           enriched_at?: string | null
           entite_publique?: boolean | null
+          first_contact_at?: string | null
           gemini_generated_at?: string | null
           gemini_raisons?: Json | null
           gemini_score?: number | null
           id?: string
+          is_hot_lead?: boolean | null
           last_enrichment_run_at?: string | null
           notes?: string | null
           obligation_beges?: boolean
           priorite?: string
           raison_sociale: string
-          resultat_net?: number | null
           score_details?: Json
           score_priorite?: number
           secteur_libelle?: string | null
@@ -515,7 +540,6 @@ export type Database = {
           beges_url?: string | null
           beges_valide?: boolean | null
           bilan_ges_data?: Json | null
-          chiffre_affaires?: number | null
           code_postal?: string | null
           contact_completeness?: number | null
           contact_email?: string | null
@@ -529,21 +553,23 @@ export type Database = {
           contact_telephone?: string | null
           contact_tier?: string | null
           created_at?: string
-          croissance_ca_yoy_pct?: number | null
+          deal_probability?: number | null
+          deal_value?: number | null
           effectif_max?: number | null
           effectif_min?: number | null
           enriched_at?: string | null
           entite_publique?: boolean | null
+          first_contact_at?: string | null
           gemini_generated_at?: string | null
           gemini_raisons?: Json | null
           gemini_score?: number | null
           id?: string
+          is_hot_lead?: boolean | null
           last_enrichment_run_at?: string | null
           notes?: string | null
           obligation_beges?: boolean
           priorite?: string
           raison_sociale?: string
-          resultat_net?: number | null
           score_details?: Json
           score_priorite?: number
           secteur_libelle?: string | null
