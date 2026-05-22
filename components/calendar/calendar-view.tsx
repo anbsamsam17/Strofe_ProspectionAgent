@@ -21,7 +21,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import FullCalendar from '@fullcalendar/react'
 import dayGridPlugin from '@fullcalendar/daygrid'
 import timeGridPlugin from '@fullcalendar/timegrid'
@@ -83,6 +83,7 @@ interface CalendarViewProps {
 
 export function CalendarView({ events }: CalendarViewProps) {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const { toast } = useToast()
   const [mounted, setMounted] = useState(false)
   const [editTarget, setEditTarget] = useState<ExchangeEvent | null>(null)
@@ -98,6 +99,22 @@ export function CalendarView({ events }: CalendarViewProps) {
   useEffect(() => {
     setMounted(true)
   }, [])
+
+  // Item #12 : si on arrive avec ?focus=<exchange.id>, on ouvre directement
+  // la modale d'edition sur le rappel cible (lien depuis la fiche prospect).
+  // On ne le fait qu'une fois apres mount pour eviter une re-ouverture si
+  // l'URL ne change pas mais que les events sont refetch.
+  const focusedHandled = useRef(false)
+  useEffect(() => {
+    if (!mounted || focusedHandled.current) return
+    const focusId = searchParams.get('focus')
+    if (!focusId) return
+    const target = events.find((e) => e.id === focusId)
+    if (target) {
+      setEditTarget(target)
+      focusedHandled.current = true
+    }
+  }, [mounted, events, searchParams])
 
   // Mapping ExchangeEvent → EventInput FullCalendar.
   const calendarEvents = useMemo<EventInput[]>(
