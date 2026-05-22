@@ -26,6 +26,10 @@ const PROSPECT_STATUTS: [ProspectStatus, ...ProspectStatus[]] = [
   'converted',
   'rejected',
   'on_hold',
+  // GLN — Sprint 3 retour client #6 : statut opt-out explicite (migration 017).
+  // Sans cette valeur, le PATCH renvoie 400 VALIDATION_ERROR alors que la colonne
+  // accepte la valeur côté DB.
+  'do_not_contact',
 ]
 
 // ------------------------------------------------------------
