@@ -286,6 +286,11 @@ interface SearchParams {
   hot?: string
   /** "1" pour le filtre rapide "BEGES non conforme Décret 2022" (GLN-006). */
   decret_non_compliant?: string
+  /**
+   * Sprint 3 retour client #1 — `collapsed` pour replier la zone de filtres
+   * et gagner de la place (≈250px vs ≈50px). Persiste l'etat via l'URL.
+   */
+  filters?: string
 }
 
 // ── Sort (pills inline) ──────────────────────────────────────────────────────
@@ -410,6 +415,9 @@ export default async function ProspectsPage({
   // GLN-006 — Filtre BEGES non conforme Décret 2022-982 (publié post-2023
   // sans scope 3 OU sans plan d'action). Cible commerciale renouvellement.
   const decretNonCompliantOnly = params.decret_non_compliant === '1'
+  // Sprint 3 retour client #1 — Etat replie/deplie de la zone de filtres,
+  // persiste via ?filters=collapsed pour conserver le choix multi-onglets.
+  const filtersCollapsed = params.filters === 'collapsed'
   const contactTypes = parseContactTypes(params.contact_type)
   // Parsing CSV : ?beges=missing,obligation → ['missing', 'obligation']
   // Toggles combinables (AND) côté query Supabase.
@@ -654,12 +662,14 @@ export default async function ProspectsPage({
             currentStatuts={statutFilter}
             currentSecteur={secteurFilter}
             currentScoreMin={scoreMin}
+            currentScoreMax={scoreMax}
             currentArchived={showArchived}
             currentContactTypes={contactTypes}
             currentBegesFilters={begesFilters}
             currentSort={sortValue}
             currentHotOnly={hotOnly}
             currentDecretNonCompliantOnly={decretNonCompliantOnly}
+            currentCollapsed={filtersCollapsed}
           />
         </div>
       </div>
