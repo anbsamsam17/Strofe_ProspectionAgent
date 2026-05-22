@@ -21,6 +21,24 @@ vi.mock('./new-exchange-dialog', () => ({
   ),
 }))
 
+// Mock EditExchangeDialog (Sprint 3 #11) — utilise useRouter, on stub.
+vi.mock('./edit-exchange-dialog', () => ({
+  EditExchangeDialog: ({
+    prospectId,
+    exchange,
+  }: {
+    prospectId: string
+    exchange: { id: string }
+  }) => (
+    <button
+      type="button"
+      data-testid={`edit-exchange-mock-${prospectId}-${exchange.id}`}
+    >
+      Éditer
+    </button>
+  ),
+}))
+
 import { ExchangesPanel, type ProspectExchange } from './exchanges-panel'
 
 const PROSPECT_ID = '44444444-4444-4444-4444-444444444444'
