@@ -44,6 +44,11 @@ interface ProspectsFiltersProps {
    * `?filters=collapsed` pour conserver le choix entre onglets et au partage URL.
    */
   currentCollapsed?: boolean
+  /**
+   * Sprint 3 retour client #2 — Recherche libre cote serveur (raison sociale,
+   * SIREN, email contact, nom dirigeant). Submit Enter ou blur → push ?q=...
+   */
+  currentSearchQuery?: string
 }
 
 // TODO(Agent A): `offer_sent` à ajouter à `ProspectStatus` (`lib/types.ts`).
@@ -102,12 +107,30 @@ export function ProspectsFilters({
   currentHotOnly = false,
   currentDecretNonCompliantOnly = false,
   currentCollapsed = false,
+  currentSearchQuery = '',
 }: ProspectsFiltersProps) {
   const router = useRouter()
   const pathname = usePathname()
   const searchParams = useSearchParams()
   const [isPending, startTransition] = useTransition()
   const [collapsed, setCollapsed] = useState<boolean>(currentCollapsed)
+  const [searchQuery, setSearchQuery] = useState<string>(currentSearchQuery)
+
+  function commitSearchQuery(value: string) {
+    const trimmed = value.trim().slice(0, 200)
+    // Skip si pas de changement effectif (evite re-render inutile au blur).
+    if (trimmed === currentSearchQuery) return
+    const params = new URLSearchParams(searchParams.toString())
+    params.set('page', '1')
+    if (trimmed) {
+      params.set('q', trimmed)
+    } else {
+      params.delete('q')
+    }
+    startTransition(() => {
+      router.push(`${pathname}?${params.toString()}`)
+    })
+  }
 
   function toggleCollapsed() {
     const next = !collapsed
@@ -335,8 +358,14 @@ export function ProspectsFilters({
     setSort(DEFAULT_SORT)
     setHotOnly(false)
     setDecretNonCompliantOnly(false)
+    setSearchQuery('')
     startTransition(() => {
-      router.push(pathname)
+      // On preserve l'etat `?filters=collapsed` si actif — un user qui a replie
+      // ne veut pas voir le panneau s'ouvrir au reset.
+      const preservedParams = new URLSearchParams()
+      if (collapsed) preservedParams.set('filters', 'collapsed')
+      const qs = preservedParams.toString()
+      router.push(qs ? `${pathname}?${qs}` : pathname)
     })
   }
 
@@ -349,7 +378,8 @@ export function ProspectsFilters({
     contactTypes.length > 0 ||
     begesFilters.length > 0 ||
     hotOnly ||
-    decretNonCompliantOnly
+    decretNonCompliantOnly ||
+    Boolean(currentSearchQuery)
 
   // Sprint 3 retour client #1 — Comptage des filtres actifs pour le badge
   // affiche dans le bouton "Filtres (N)" en mode replie. Statut/contact/beges
@@ -362,7 +392,8 @@ export function ProspectsFilters({
     (contactTypes.length > 0 ? 1 : 0) +
     (begesFilters.length > 0 ? 1 : 0) +
     (hotOnly ? 1 : 0) +
-    (decretNonCompliantOnly ? 1 : 0)
+    (decretNonCompliantOnly ? 1 : 0) +
+    (currentSearchQuery ? 1 : 0)
 
   // Pourcentages pour la track active du range (entre les 2 thumbs).
   const scoreLeftPct = (scoreMin / SCORE_MAX_BOUND) * 100
@@ -384,7 +415,7 @@ export function ProspectsFilters({
   if (collapsed) {
     return (
       <div
-        className={`flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-white/[0.08] bg-white/[0.03] px-3 py-2 backdrop-blur-md shadow-sm transition-opacity sm:px-4 ${isPending ? 'opacity-60' : ''}`}
+        className={`flex flex-wrap items-center gap-2 rounded-2xl border border-white/[0.08] bg-white/[0.03] px-3 py-2 backdrop-blur-md shadow-sm transition-opacity sm:px-4 ${isPending ? 'opacity-60' : ''}`}
         aria-label="Filtres des prospects (replies)"
       >
         <button
@@ -392,7 +423,7 @@ export function ProspectsFilters({
           onClick={toggleCollapsed}
           aria-expanded={false}
           aria-controls="prospects-filters-panel"
-          className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs font-medium text-gray-200 transition-colors hover:border-green-500/30 hover:bg-green-500/10 hover:text-green-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-green-500/40"
+          className="inline-flex flex-shrink-0 items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs font-medium text-gray-200 transition-colors hover:border-green-500/30 hover:bg-green-500/10 hover:text-green-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-green-500/40"
         >
           <svg
             xmlns="http://www.w3.org/2000/svg"
@@ -436,10 +467,52 @@ export function ProspectsFilters({
           </svg>
         </button>
 
+        {/* Sprint 3 retour client #2 — Recherche libre disponible meme en mode
+            replie : c'est l'usage le plus frequent, le user ne veut pas
+            re-deplier juste pour rechercher. */}
+        <div className="relative min-w-[200px] flex-1">
+          <label htmlFor="filter-search-collapsed" className="sr-only">
+            Rechercher un prospect
+          </label>
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
+            aria-hidden="true"
+          >
+            <circle cx="11" cy="11" r="8" />
+            <line x1="21" y1="21" x2="16.65" y2="16.65" />
+          </svg>
+          <input
+            id="filter-search-collapsed"
+            type="search"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            onBlur={(e) => commitSearchQuery(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault()
+                commitSearchQuery(searchQuery)
+              }
+            }}
+            placeholder="Rechercher (raison sociale, SIREN, email, dirigeant)"
+            maxLength={200}
+            className="w-full rounded-full border border-white/[0.08] bg-white/[0.04] backdrop-blur-md py-1.5 pl-9 pr-3 text-xs text-white placeholder-gray-400 transition focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-500/20"
+          />
+        </div>
+
         {hasFilters && (
-          <div className="flex flex-1 items-center gap-2 overflow-hidden">
+          <div className="flex w-full items-center gap-2 overflow-hidden sm:w-auto sm:flex-1">
             <p className="flex-1 truncate text-[11px] text-gray-400">
               {[
+                currentSearchQuery && `recherche "${currentSearchQuery}"`,
                 hotOnly && 'Hot leads',
                 decretNonCompliantOnly && 'Décret 2022 non conforme',
                 statuts.length > 0 && `${statuts.length} statut${statuts.length > 1 ? 's' : ''}`,
@@ -491,16 +564,82 @@ export function ProspectsFilters({
       className={`rounded-2xl border border-white/[0.08] bg-white/[0.03] backdrop-blur-md shadow-sm transition-opacity ${isPending ? 'opacity-60' : ''}`}
       aria-label="Filtres des prospects"
     >
-      {/* Sprint 3 retour client #1 — Bouton repli aligne en haut-droite du
+      {/* Sprint 3 retour client #2 — Barre de recherche libre (raison sociale,
+          SIREN, email, dirigeant). Submit Enter ou blur → push ?q=...
+          Sprint 3 retour client #1 — Bouton repli aligne en haut-droite du
           panneau deplie pour discoverabilite (chevron vers le haut). */}
-      <div className="flex items-center justify-end border-b border-white/[0.06] px-3 py-1.5 sm:px-4">
+      <div className="flex items-center gap-2 border-b border-white/[0.06] px-3 py-2 sm:px-4">
+        <div className="relative flex-1">
+          <label htmlFor="filter-search" className="sr-only">
+            Rechercher un prospect
+          </label>
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
+            aria-hidden="true"
+          >
+            <circle cx="11" cy="11" r="8" />
+            <line x1="21" y1="21" x2="16.65" y2="16.65" />
+          </svg>
+          <input
+            id="filter-search"
+            type="search"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            onBlur={(e) => commitSearchQuery(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault()
+                commitSearchQuery(searchQuery)
+              }
+            }}
+            placeholder="Rechercher (raison sociale, SIREN, email, dirigeant)"
+            maxLength={200}
+            className="w-full rounded-full border border-white/[0.08] bg-white/[0.04] backdrop-blur-md py-2 pl-9 pr-9 text-xs text-white placeholder-gray-400 transition focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-500/20"
+          />
+          {searchQuery && (
+            <button
+              type="button"
+              onClick={() => {
+                setSearchQuery('')
+                commitSearchQuery('')
+              }}
+              aria-label="Effacer la recherche"
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 rounded-full p-1 text-gray-400 transition-colors hover:bg-white/[0.06] hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-green-500/40"
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="11"
+                height="11"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+              >
+                <line x1="18" y1="6" x2="6" y2="18" />
+                <line x1="6" y1="6" x2="18" y2="18" />
+              </svg>
+            </button>
+          )}
+        </div>
         <button
           type="button"
           onClick={toggleCollapsed}
           aria-expanded={true}
           aria-controls="prospects-filters-panel"
           aria-label="Replier la zone de filtres"
-          className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-medium text-gray-400 transition-colors hover:bg-white/[0.06] hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-green-500/40"
+          className="inline-flex flex-shrink-0 items-center gap-1 rounded-md px-2 py-1 text-[11px] font-medium text-gray-400 transition-colors hover:bg-white/[0.06] hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-green-500/40"
         >
           Replier
           <svg

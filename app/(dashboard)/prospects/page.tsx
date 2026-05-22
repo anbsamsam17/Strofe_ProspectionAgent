@@ -291,6 +291,11 @@ interface SearchParams {
    * et gagner de la place (≈250px vs ≈50px). Persiste l'etat via l'URL.
    */
   filters?: string
+  /**
+   * Sprint 3 retour client #2 — Recherche libre (raison sociale, SIREN,
+   * email, dirigeant). Server-side, pas de debounce (rerun a la soumission).
+   */
+  q?: string
 }
 
 // ── Sort (pills inline) ──────────────────────────────────────────────────────
@@ -418,6 +423,9 @@ export default async function ProspectsPage({
   // Sprint 3 retour client #1 — Etat replie/deplie de la zone de filtres,
   // persiste via ?filters=collapsed pour conserver le choix multi-onglets.
   const filtersCollapsed = params.filters === 'collapsed'
+  // Sprint 3 retour client #2 — Recherche libre (raison sociale, SIREN,
+  // email, dirigeant). On clamp a 200 char pour limiter le coup query Postgres.
+  const searchQuery = (params.q ?? '').trim().slice(0, 200)
   const contactTypes = parseContactTypes(params.contact_type)
   // Parsing CSV : ?beges=missing,obligation → ['missing', 'obligation']
   // Toggles combinables (AND) côté query Supabase.
@@ -450,6 +458,23 @@ export default async function ProspectsPage({
   }
   if (secteurFilter) {
     query = query.ilike('secteur_libelle', `%${secteurFilter}%`)
+  }
+  // Sprint 3 retour client #2 — Recherche libre sur 4 champs (OR).
+  // PostgREST .or() : on echappe `%`/`,`/`(`/`)` pour eviter d'injecter de la
+  // syntaxe parser. Pattern ilike = %X% ; longueur deja capeee a 200 char.
+  if (searchQuery) {
+    const escaped = searchQuery
+      .replace(/[\\%_,()*]/g, (m) => `\\${m}`)
+      .replace(/"/g, '\\"')
+    const pattern = `%${escaped}%`
+    query = query.or(
+      [
+        `raison_sociale.ilike."${pattern}"`,
+        `siren.ilike."${pattern}"`,
+        `contact_email.ilike."${pattern}"`,
+        `contact_nom.ilike."${pattern}"`,
+      ].join(','),
+    )
   }
   // Range score [min, max] — on omet `.gte` si min=0 et `.lte` si max=100
   // pour ne pas surfiltrer une plage qui couvre tout.
@@ -527,7 +552,8 @@ export default async function ProspectsPage({
     contactTypes.length > 0 ||
     begesFilters.length > 0 ||
     hotOnly ||
-    decretNonCompliantOnly
+    decretNonCompliantOnly ||
+    Boolean(searchQuery)
 
   // Filtres pour le BulkDeleteButton — strictement alignés avec la query GET
   // ci-dessus. Cast safe : statutFilter sort de parseContactTypes/searchParams
@@ -560,6 +586,8 @@ export default async function ProspectsPage({
       ...(contactTypes.length > 0 ? { contact_type: contactTypes.join(',') } : {}),
       ...(hotOnly ? { hot: '1' } : {}),
       ...(decretNonCompliantOnly ? { decret_non_compliant: '1' } : {}),
+      // Sprint 3 retour client #2 — Preserver la recherche au changement de page.
+      ...(searchQuery ? { q: searchQuery } : {}),
       ...newParams,
     }
     const qs = new URLSearchParams(merged).toString()
@@ -670,6 +698,7 @@ export default async function ProspectsPage({
             currentHotOnly={hotOnly}
             currentDecretNonCompliantOnly={decretNonCompliantOnly}
             currentCollapsed={filtersCollapsed}
+            currentSearchQuery={searchQuery}
           />
         </div>
       </div>
