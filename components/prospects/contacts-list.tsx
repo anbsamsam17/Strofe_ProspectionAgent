@@ -2,6 +2,8 @@ import type { Prospect } from '@/lib/types'
 import { AddContactDialog } from './add-contact-dialog'
 import { ContactEmailStatusBadge } from './contact-email-status-badge'
 import { ContactSourceBadge, type ContactSource } from './contact-source-badge'
+import { CopyEmailButton } from './copy-email-button'
+import { EditContactDialog } from './edit-contact-dialog'
 import { EmailProBadge } from './email-pro-badge'
 import { EnrichContactButton } from './enrich-contact-button'
 import { VerifyEmailButton } from './verify-email-button'
@@ -125,14 +127,59 @@ function isPersistedContactId(id: string): boolean {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)
 }
 
+/**
+ * Sprint 3 retour client #3 — UX multi-contacts (historique préservé).
+ *
+ * Avant : si `prospect_contacts` contenait au moins une ligne, le fallback
+ * legacy `prospects.contact_*` n'était PLUS affiché → l'utilisateur perçoit
+ * qu'on a "écrasé" son contact initial alors qu'il est toujours en DB.
+ *
+ * Après : on garde TOUJOURS le legacy si distinct des contacts persistés.
+ * On considère qu'un legacy est "dupliqué" si l'un de ses champs identifiants
+ * (email, téléphone normalisé, ou couple prenom+nom normalisé) matche déjà
+ * un contact persisté — auquel cas on l'omet pour éviter le doublon visuel.
+ */
+function normalize(s: string | null | undefined): string {
+  return (s ?? '').trim().toLowerCase()
+}
+
+function normalizePhone(s: string | null | undefined): string {
+  return (s ?? '').replace(/[^\d+]/g, '')
+}
+
+function legacyIsDistinct(
+  legacy: ProspectContact,
+  persisted: ProspectContact[],
+): boolean {
+  const lEmail = normalize(legacy.email)
+  const lPhone = normalizePhone(legacy.telephone)
+  const lFull = `${normalize(legacy.prenom)} ${normalize(legacy.nom)}`.trim()
+
+  for (const p of persisted) {
+    if (lEmail && normalize(p.email) === lEmail) return false
+    if (lPhone && lPhone.length >= 6 && normalizePhone(p.telephone) === lPhone) return false
+    if (lFull) {
+      const pFull = `${normalize(p.prenom)} ${normalize(p.nom)}`.trim()
+      if (pFull && pFull === lFull) return false
+    }
+  }
+  return true
+}
+
 // ── Composant ─────────────────────────────────────────────────────────────────
 
 export function ContactsList({ prospect, contacts }: ContactsListProps) {
-  // Si la nouvelle table est vide, on tente le fallback legacy.
-  const displayed =
-    contacts.length > 0
+  // Stratégie : on affiche TOUS les contacts persistés ET le legacy fallback
+  // s'il existe et qu'il n'est pas un doublon évident — ainsi le contact
+  // initial trouvé par l'enrichissement reste visible quand l'utilisateur
+  // ajoute un nouveau contact via "Ajouter un contact" (cf. #3).
+  const legacy = fallbackFromProspect(prospect)
+  const showLegacy = legacy !== null && legacyIsDistinct(legacy, contacts)
+  const displayed: ProspectContact[] = showLegacy && legacy
+    ? [...contacts, legacy]
+    : contacts.length > 0
       ? contacts
-      : ([fallbackFromProspect(prospect)].filter(Boolean) as ProspectContact[])
+      : (legacy ? [legacy] : [])
 
   return (
     <div className="overflow-hidden rounded-2xl border border-white/[0.08] bg-white/[0.03] backdrop-blur-md shadow-sm">
@@ -141,7 +188,7 @@ export function ContactsList({ prospect, contacts }: ContactsListProps) {
           Contacts identifiés{displayed.length > 0 ? ` (${displayed.length})` : ''}
         </h2>
         <div className="flex flex-wrap items-start gap-3">
-          {/* On passe la liste affichée (= contacts effectifs OU fallback legacy)
+          {/* On passe la liste affichée (= contacts effectifs + fallback legacy)
               pour que le bouton détecte les placeholders masqués et active
               forceReplace=true côté API. */}
           <EnrichContactButton prospectId={prospect.id} contacts={displayed} />
@@ -151,11 +198,18 @@ export function ContactsList({ prospect, contacts }: ContactsListProps) {
       <div className="px-6 py-5">
         {displayed.length > 0 ? (
           <ul className="space-y-3" aria-label="Liste des contacts identifiés">
-            {displayed.map((contact) => (
-              <li key={contact.id}>
-                <ContactCard contact={contact} />
-              </li>
-            ))}
+            {displayed.map((contact) => {
+              const isLegacy = !isPersistedContactId(contact.id)
+              return (
+                <li key={contact.id}>
+                  <ContactCard
+                    contact={contact}
+                    prospectId={prospect.id}
+                    isLegacy={isLegacy}
+                  />
+                </li>
+              )
+            })}
           </ul>
         ) : (
           <p className="text-sm text-gray-400">
@@ -169,7 +223,15 @@ export function ContactsList({ prospect, contacts }: ContactsListProps) {
 
 // ── ContactCard ───────────────────────────────────────────────────────────────
 
-function ContactCard({ contact }: { contact: ProspectContact }) {
+function ContactCard({
+  contact,
+  prospectId,
+  isLegacy,
+}: {
+  contact: ProspectContact
+  prospectId: string
+  isLegacy: boolean
+}) {
   const fullName = [contact.prenom, contact.nom].filter(Boolean).join(' ').trim()
   const hasIdentity = fullName.length > 0 || Boolean(contact.poste)
 
@@ -232,6 +294,36 @@ function ContactCard({ contact }: { contact: ProspectContact }) {
                 rien (fallback legacy non bruyant). */}
             {contact.email && (
               <EmailProBadge isPro={emailIsPro} verified={emailVerified} />
+            )}
+            {/* Sprint 3 #3 — note explicite sur le pseudo-contact legacy pour
+                clarifier qu'il provient de l'enrichissement initial (avant la
+                migration multi-contacts) et n'a pas été "effacé" quand
+                l'utilisateur ajoute un nouveau contact. */}
+            {isLegacy && (
+              <span
+                className="inline-flex items-center rounded-full bg-white/[0.04] px-2 py-0.5 text-[10px] font-medium text-gray-400 ring-1 ring-white/[0.08]"
+                title="Contact identifié lors de l'enrichissement initial — conservé pour historique."
+              >
+                Enrichissement initial
+              </span>
+            )}
+            {/* Sprint 3 #5 — bouton éditer (PATCH /api/.../contacts/[contactId]).
+                Uniquement pour les contacts persistés (pas pour le fallback legacy
+                qui n'a pas d'ID stable côté DB). */}
+            {!isLegacy && (
+              <EditContactDialog
+                prospectId={prospectId}
+                contact={{
+                  id: contact.id,
+                  nom: contact.nom,
+                  prenom: contact.prenom,
+                  poste: contact.poste,
+                  telephone: contact.telephone,
+                  email: contact.email,
+                  linkedin: contact.linkedin,
+                  is_primary: contact.is_primary,
+                }}
+              />
             )}
           </div>
         )}
@@ -302,6 +394,8 @@ function ContactCard({ contact }: { contact: ProspectContact }) {
                   emailVerifiedAt={contact.email_verified_at}
                 />
               )}
+              {/* Sprint 3 #4 — copier l'email dans le presse-papier. */}
+              <CopyEmailButton email={contact.email} />
             </span>
           )}
 
