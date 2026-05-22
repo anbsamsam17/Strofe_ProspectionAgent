@@ -40,6 +40,10 @@ import type { ProspectStatus } from '@/lib/types'
 export const DEFAULT_PROBABILITY_BY_STATUS: Record<ProspectStatus, number> = {
   sourced: 10,
   qualified: 25,
+  // Migration 028 — "À contacter" : décision humaine d'amorce, légèrement
+  // au-dessus de 'qualified' (engagement explicite de l'utilisateur) mais
+  // sans contact passé, donc en-dessous de 'contacted'.
+  to_contact: 30,
   contacted: 25,
   interested: 50,
   rdv: 75,

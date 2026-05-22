@@ -9,6 +9,17 @@
 export type ProspectStatus =
   | 'sourced'
   | 'qualified'
+  /**
+   * NEW (migration 028) : decision humaine "a contacter" — amorce de la
+   * Today list. Distinct de 'qualified' (qualification automatique par
+   * l'agent) : l'utilisateur place explicitement le prospect dans sa file
+   * d'appel imminente. Ordre logique pipeline :
+   *   sourced -> qualified -> to_contact -> contacted -> interested -> ...
+   * Auto-promotion (Sprint 3 V3 #9) : a l'insertion d'un echange
+   * type IN ('appel','email','linkedin'), si statut courant IN
+   * ('sourced','qualified','to_contact') -> bascule 'contacted'.
+   */
+  | 'to_contact'
   | 'contacted'
   | 'interested'
   /** Legacy — conservé pour rétrocompat, n'est plus affiché dans le nouveau Kanban. */

@@ -28,6 +28,9 @@ interface PipelinePageProps {
 const PIPELINE_COLUMNS: { status: KanbanStatus; label: string; color: string }[] = [
   { status: 'sourced', label: 'Nouveau', color: 'gray' },
   { status: 'qualified', label: 'Qualifié', color: 'blue' },
+  // Migration 028 : 'À contacter' — décision humaine d'amorce, entre
+  // 'qualified' (qualif auto agent) et 'contacted' (1er contact effectué).
+  { status: 'to_contact', label: 'À contacter', color: 'cyan' },
   { status: 'contacted', label: 'Contacté', color: 'yellow' },
   { status: 'interested', label: 'Intéressé', color: 'green' },
   { status: 'offer_sent', label: 'Offre envoyée', color: 'indigo' },
@@ -48,6 +51,7 @@ const PIPELINE_COLUMNS: { status: KanbanStatus; label: string; color: string }[]
 const KANBAN_STATUSES: ProspectStatus[] = [
   'sourced',
   'qualified',
+  'to_contact',
   'contacted',
   'interested',
   'rdv',
@@ -65,6 +69,8 @@ const KANBAN_STATUSES: ProspectStatus[] = [
 const ALL_STATUSES: readonly ProspectStatus[] = [
   'sourced',
   'qualified',
+  // Migration 028 : décision humaine d'amorce.
+  'to_contact',
   'contacted',
   'interested',
   'rdv',

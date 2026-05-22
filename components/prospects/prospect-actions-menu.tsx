@@ -14,6 +14,8 @@ interface ProspectActionsMenuProps {
 const STATUS_OPTIONS: { value: ProspectStatus; label: string; dot: string }[] = [
   { value: 'sourced', label: 'Sourcé', dot: 'bg-gray-400' },
   { value: 'qualified', label: 'Qualifié', dot: 'bg-blue-500' },
+  // Migration 028 — entre 'qualified' et 'contacted'. Cyan = décision humaine.
+  { value: 'to_contact', label: 'À contacter', dot: 'bg-cyan-400' },
   { value: 'contacted', label: 'Contacté', dot: 'bg-yellow-500' },
   { value: 'interested', label: 'Intéressé', dot: 'bg-green-500' },
   { value: 'rdv', label: 'RDV', dot: 'bg-purple-500' },

@@ -153,6 +153,17 @@ const COLUMN_STYLES: Record<
     cardHover: 'hover:border-emerald-400/40 hover:shadow-md',
     accent: 'bg-emerald-500',
   },
+  // Migration 028 : cyan pour 'to_contact' — décision humaine d'amorce,
+  // distincte du bleu 'qualified' (qualif auto) et du jaune 'contacted'.
+  cyan: {
+    header: 'bg-cyan-500/10 ring-1 ring-cyan-500/20',
+    headerText: 'text-cyan-200',
+    dot: 'bg-cyan-400',
+    badge: 'bg-cyan-500/15 text-cyan-200 ring-1 ring-cyan-500/25',
+    card: 'border-cyan-500/15',
+    cardHover: 'hover:border-cyan-400/40 hover:shadow-md',
+    accent: 'bg-cyan-500',
+  },
   // Migration 017 : slate translucide pour 'do_not_contact'. Volontairement
   // sobre (≠ rouge 'rejected') — signale un statut "passif" (à ne pas relancer).
   slate: {

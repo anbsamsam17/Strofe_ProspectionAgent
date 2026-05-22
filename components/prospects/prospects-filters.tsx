@@ -62,6 +62,8 @@ type StatusFilterValue = ProspectStatus | 'offer_sent'
 const ALL_STATUTS: { value: StatusFilterValue; label: string; dot: string }[] = [
   { value: 'sourced', label: 'Nouveau', dot: 'bg-gray-400' },
   { value: 'qualified', label: 'Qualifié', dot: 'bg-blue-500' },
+  // Migration 028 — décision humaine d'amorce, entre 'qualified' et 'contacted'.
+  { value: 'to_contact', label: 'À contacter', dot: 'bg-cyan-400' },
   { value: 'contacted', label: 'Contacté', dot: 'bg-yellow-500' },
   { value: 'interested', label: 'Intéressé', dot: 'bg-green-500' },
   { value: 'offer_sent', label: 'Offre envoyée', dot: 'bg-indigo-500' },

@@ -19,6 +19,7 @@ function emptyCounts(): Record<ProspectStatus, number> {
   return {
     sourced: 0,
     qualified: 0,
+    to_contact: 0,
     interested: 0,
     contacted: 0,
     rdv: 0,

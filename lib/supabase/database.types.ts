@@ -704,6 +704,7 @@ export type Database = {
         | "on_hold"
         | "offer_sent"
         | "do_not_contact"
+        | "to_contact"
     }
     CompositeTypes: {
       [_ in never]: never

@@ -19,6 +19,10 @@ export const dynamic = 'force-dynamic'
 const PROSPECT_STATUTS: [ProspectStatus, ...ProspectStatus[]] = [
   'sourced',
   'qualified',
+  // GLN — Sprint 3 V3 retour client #10 : statut "à contacter" (migration 028).
+  // Décision humaine d'amorce, entre 'qualified' et 'contacted'. Sans cette valeur
+  // le PATCH renvoie 400 alors que la colonne accepte la valeur côté DB.
+  'to_contact',
   'contacted',
   'interested',
   'rdv',
