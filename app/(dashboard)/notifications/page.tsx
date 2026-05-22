@@ -4,6 +4,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 
 import { createClient } from '@/lib/supabase/server'
 import { DismissButton } from '@/components/notifications/dismiss-button'
+import { EditExchangeDialog } from '@/components/prospects/edit-exchange-dialog'
 
 export const dynamic = 'force-dynamic'
 
@@ -330,12 +331,22 @@ function ExchangeCard({
           <p className="text-xs leading-relaxed text-gray-400">{notes}</p>
         )}
 
-        {/* Action */}
-        {showDismiss && (
-          <div className="pt-1">
-            <DismissButton exchangeId={exchange.id} />
-          </div>
-        )}
+        {/* Actions : Modifier (toujours) + Traité (uniquement si rappel actif) */}
+        <div className="flex flex-wrap items-center gap-2 pt-1">
+          <EditExchangeDialog
+            prospectId={exchange.prospect_id}
+            variant="text"
+            exchange={{
+              id: exchange.id,
+              occurred_at: exchange.occurred_at,
+              type: exchange.type as ExchangeType,
+              result: exchange.result,
+              notes: exchange.notes,
+              callback_date: exchange.callback_date,
+            }}
+          />
+          {showDismiss && <DismissButton exchangeId={exchange.id} />}
+        </div>
       </div>
     </li>
   )

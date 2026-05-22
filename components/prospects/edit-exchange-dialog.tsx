@@ -102,11 +102,23 @@ function toForm(exchange: EditableExchange): ExchangeFormState {
 interface EditExchangeDialogProps {
   prospectId: string
   exchange: EditableExchange
+  /**
+   * Variant du trigger button :
+   * - 'icon' (défaut) : icône crayon seule, label sr-only. Utilisé dans la
+   *    timeline de la fiche prospect où l'espace est compté.
+   * - 'text' : "Modifier" label visible + icône. Utilisé dans /notifications
+   *    où le bouton coexiste avec "Traité" et doit être facilement repérable.
+   */
+  variant?: 'icon' | 'text'
 }
 
 // ── Composant ─────────────────────────────────────────────────────────────────
 
-export function EditExchangeDialog({ prospectId, exchange }: EditExchangeDialogProps) {
+export function EditExchangeDialog({
+  prospectId,
+  exchange,
+  variant = 'icon',
+}: EditExchangeDialogProps) {
   const router = useRouter()
   const [open, setOpen] = useState(false)
   const [form, setForm] = useState<ExchangeFormState>(() => toForm(exchange))
@@ -207,9 +219,13 @@ export function EditExchangeDialog({ prospectId, exchange }: EditExchangeDialogP
         ref={triggerRef}
         type="button"
         onClick={() => setOpen(true)}
-        aria-label="Éditer cet échange"
-        title="Éditer cet échange"
-        className="inline-flex items-center gap-1 rounded-md bg-white/[0.04] px-1.5 py-0.5 text-xs font-medium text-gray-300 ring-1 ring-white/[0.08] transition-colors hover:bg-white/[0.08] hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/40"
+        aria-label="Modifier cet échange"
+        title="Modifier cet échange"
+        className={
+          variant === 'text'
+            ? 'inline-flex items-center gap-1.5 rounded-md border border-white/[0.08] bg-white/[0.04] px-2.5 py-1 text-xs font-medium text-gray-200 transition-colors hover:border-white/20 hover:bg-white/[0.08] hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/40'
+            : 'inline-flex items-center gap-1 rounded-md bg-white/[0.04] px-1.5 py-0.5 text-xs font-medium text-gray-300 ring-1 ring-white/[0.08] transition-colors hover:bg-white/[0.08] hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/40'
+        }
       >
         <svg
           xmlns="http://www.w3.org/2000/svg"
@@ -226,7 +242,11 @@ export function EditExchangeDialog({ prospectId, exchange }: EditExchangeDialogP
           <path d="M12 20h9" />
           <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z" />
         </svg>
-        <span className="sr-only">Éditer</span>
+        {variant === 'text' ? (
+          <span>Modifier</span>
+        ) : (
+          <span className="sr-only">Modifier</span>
+        )}
       </button>
 
       {open && mounted && createPortal(
