@@ -64,6 +64,10 @@ export function buildFunnel(
   // Défensif : `?? 0` sur chaque accès — `undefined + n` produit NaN qui crash le SVG.
   const sourcedRaw = countsByStatus.sourced ?? 0
   const qualifiedRaw = countsByStatus.qualified ?? 0
+  // Migration 028 — "À contacter" : aval de 'qualified', amont de 'contacted'.
+  // Inclus dans le cumul pour que les prospects en to_contact apparaissent
+  // dans les étages sourced + qualified du funnel.
+  const toContactRaw = countsByStatus.to_contact ?? 0
   const contactedRaw = countsByStatus.contacted ?? 0
   const interestedRaw = countsByStatus.interested ?? 0
   const offerSentRaw = countsByStatus.offer_sent ?? 0
@@ -75,6 +79,7 @@ export function buildFunnel(
     sourced:
       sourcedRaw +
       qualifiedRaw +
+      toContactRaw +
       contactedRaw +
       interestedRaw +
       offerSentRaw +
@@ -82,6 +87,7 @@ export function buildFunnel(
       convertedRaw,
     qualified:
       qualifiedRaw +
+      toContactRaw +
       contactedRaw +
       interestedRaw +
       offerSentRaw +

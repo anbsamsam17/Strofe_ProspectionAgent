@@ -13,7 +13,8 @@ const cspValue = [
   scriptSrc,
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' blob: data: https:",
-  "font-src 'self'",
+  // data: requis pour les fonts inline de FullCalendar (.fc-icon TTF data-URI).
+  "font-src 'self' data:",
   "connect-src 'self' https://*.supabase.co https://api.openai.com https://api.insee.fr https://*.sentry.io",
   "frame-ancestors 'none'",
   "object-src 'none'",
