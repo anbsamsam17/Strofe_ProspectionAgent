@@ -1,6 +1,7 @@
 import { notFound, redirect } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
+import { BackToProspectsLink } from '@/components/prospects/back-to-prospects-link'
 import type {
   Priority,
   Prospect,
@@ -257,12 +258,14 @@ export default async function ProspectDetailPage({ params }: PageProps) {
   return (
     <div className="mx-auto max-w-5xl space-y-5">
 
-      {/* ── Header retour ── */}
+      {/* ── Header retour ──
+          Sprint 3 retour client #8 — BackToProspectsLink utilise router.back()
+          si possible pour preserver les ?statut=&secteur=&q= appliques avant
+          d'arriver sur la fiche. Fallback Link standard si pas d'historique. */}
       <div>
-        <Link
-          href="/prospects"
+        <BackToProspectsLink
           className="mb-4 inline-flex items-center gap-1.5 text-sm text-gray-400 transition-colors hover:text-white"
-          aria-label="Retour à la liste des prospects"
+          ariaLabel="Retour à la liste des prospects"
         >
           <svg
             xmlns="http://www.w3.org/2000/svg"
@@ -279,7 +282,7 @@ export default async function ProspectDetailPage({ params }: PageProps) {
             <polyline points="15 18 9 12 15 6" />
           </svg>
           Prospects
-        </Link>
+        </BackToProspectsLink>
 
         <div className="flex flex-wrap items-start gap-x-6 gap-y-4">
           <div className="min-w-0 flex-1">
