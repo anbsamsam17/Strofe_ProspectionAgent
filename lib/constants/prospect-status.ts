@@ -186,6 +186,9 @@ export const STATUS_STYLES_SOFT: Record<ProspectStatus, StatusStyle> = {
 export const KANBAN_COLUMN_ORDER: ProspectStatus[] = [
   'sourced',
   'qualified',
+  // Migration 028 — entre qualified (qualif auto) et contacted (1er contact).
+  // L'utilisateur a explicitement decide de contacter ce prospect.
+  'to_contact',
   'contacted',
   'interested',
   'offer_sent',
