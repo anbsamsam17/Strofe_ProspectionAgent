@@ -37,7 +37,7 @@ function pageError(reason: string): string {
 <html lang="fr"><head><meta charset="utf-8"><title>Lien invalide</title>
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <style>body{font-family:system-ui,sans-serif;background:#0a0e1a;color:#e5e7eb;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;padding:24px}main{max-width:480px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:16px;padding:32px;backdrop-filter:blur(8px)}h1{color:#fca5a5;font-size:1.5rem;margin:0 0 12px}p{color:#d1d5db;line-height:1.6}a{color:#22d3ee;text-decoration:underline}</style>
-</head><body><main><h1>Lien invalide ou expiré</h1><p>Ce lien de désinscription n&rsquo;est plus valide (raison&nbsp;: ${reason}). Vous pouvez nous contacter directement à <a href="mailto:dpo@strofe.fr">dpo@strofe.fr</a> pour exercer votre droit d&rsquo;opposition.</p></main></body></html>`
+</head><body><main><h1>Lien invalide ou expiré</h1><p>Ce lien de désinscription n&rsquo;est plus valide (raison&nbsp;: ${reason}). Vous pouvez nous contacter directement à <a href="mailto:contact@strofe.fr">contact@strofe.fr</a> pour exercer votre droit d&rsquo;opposition.</p></main></body></html>`
 }
 
 export async function GET(

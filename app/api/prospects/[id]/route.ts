@@ -19,6 +19,10 @@ export const dynamic = 'force-dynamic'
 const PROSPECT_STATUTS: [ProspectStatus, ...ProspectStatus[]] = [
   'sourced',
   'qualified',
+  // GLN — Sprint 3 V3 retour client #10 : statut "à contacter" (migration 028).
+  // Décision humaine d'amorce, entre 'qualified' et 'contacted'. Sans cette valeur
+  // le PATCH renvoie 400 alors que la colonne accepte la valeur côté DB.
+  'to_contact',
   'contacted',
   'interested',
   'rdv',
@@ -26,6 +30,10 @@ const PROSPECT_STATUTS: [ProspectStatus, ...ProspectStatus[]] = [
   'converted',
   'rejected',
   'on_hold',
+  // GLN — Sprint 3 retour client #6 : statut opt-out explicite (migration 017).
+  // Sans cette valeur, le PATCH renvoie 400 VALIDATION_ERROR alors que la colonne
+  // accepte la valeur côté DB.
+  'do_not_contact',
 ]
 
 // ------------------------------------------------------------
@@ -115,6 +123,29 @@ const PatchBodySchema = z.object({
   archived: z.boolean().optional(),
   /** Notes libres ; null pour effacer, string (vide ok) pour remplacer. */
   notes: z.string().max(NOTES_MAX_LENGTH).nullable().optional(),
+
+  // ── GLN-041 — Deal value + probability (forecast pipeline pondéré) ──────
+  /**
+   * Valeur estimée du deal en EUR. NUMERIC(10,2) DB → plafond app 99 999 999.99
+   * (= 99 M€). `null` pour effacer la valeur.
+   */
+  deal_value: z
+    .number()
+    .min(0)
+    .max(99_999_999.99)
+    .nullable()
+    .optional(),
+  /**
+   * Probabilité de cloture 0-100 (smallint DB). `null` pour repasser sur
+   * la valeur par défaut du statut côté UI.
+   */
+  deal_probability: z
+    .number()
+    .int()
+    .min(0)
+    .max(100)
+    .nullable()
+    .optional(),
 })
 
 // ------------------------------------------------------------

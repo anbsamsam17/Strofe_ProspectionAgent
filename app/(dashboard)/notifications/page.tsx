@@ -4,6 +4,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 
 import { createClient } from '@/lib/supabase/server'
 import { DismissButton } from '@/components/notifications/dismiss-button'
+import { EditExchangeDialog } from '@/components/prospects/edit-exchange-dialog'
 
 export const dynamic = 'force-dynamic'
 
@@ -330,12 +331,22 @@ function ExchangeCard({
           <p className="text-xs leading-relaxed text-gray-400">{notes}</p>
         )}
 
-        {/* Action */}
-        {showDismiss && (
-          <div className="pt-1">
-            <DismissButton exchangeId={exchange.id} />
-          </div>
-        )}
+        {/* Actions : Modifier (toujours) + Traité (uniquement si rappel actif) */}
+        <div className="flex flex-wrap items-center gap-2 pt-1">
+          <EditExchangeDialog
+            prospectId={exchange.prospect_id}
+            variant="text"
+            exchange={{
+              id: exchange.id,
+              occurred_at: exchange.occurred_at,
+              type: exchange.type as ExchangeType,
+              result: exchange.result,
+              notes: exchange.notes,
+              callback_date: exchange.callback_date,
+            }}
+          />
+          {showDismiss && <DismissButton exchangeId={exchange.id} />}
+        </div>
       </div>
     </li>
   )
@@ -378,7 +389,25 @@ async function fetchNotificationsData(userId: string) {
   // vues/colonnes recentes (cf. app/api/admin/sirene-status/route.ts).
   const sb = supabase as unknown as SupabaseClient
   const now = new Date()
-  const inSevenDays = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000)
+  // Sprint 3 retour client #16 — "Cette semaine" = jusqu'a dimanche 23:59:59
+  // local (convention ISO 8601 : lundi=1...dimanche=7). Avant : `now + 7j`
+  // glissant qui n'avait pas de sens metier (un mercredi inclut le mercredi
+  // suivant). Apres : tout ce qui est dans la semaine calendaire courante.
+  // Helper inline (pas de dep externe pour 4 lignes) :
+  // - getDay() : 0=dimanche, 1=lundi, ..., 6=samedi (convention JS native).
+  // - On veut le nb de jours jusqu'a dimanche : dimanche → 0, lundi → 6,
+  //   mardi → 5, ..., samedi → 1.
+  const dayOfWeek = now.getDay() // 0 = dimanche, 1 = lundi, ...
+  const daysUntilSunday = dayOfWeek === 0 ? 0 : 7 - dayOfWeek
+  const endOfWeek = new Date(
+    now.getFullYear(),
+    now.getMonth(),
+    now.getDate() + daysUntilSunday,
+    23,
+    59,
+    59,
+    999,
+  )
   const fourteenDaysAgo = new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000)
 
   // Relances actives : TOUTES les relances futures non traitées + en retard.
@@ -525,11 +554,11 @@ async function fetchNotificationsData(userId: string) {
   const thisWeek = callbacks.filter((ex) => {
     if (!ex.callback_date) return false
     const d = new Date(ex.callback_date)
-    return d >= tomorrowMidnight && d <= inSevenDays
+    return d >= tomorrowMidnight && d <= endOfWeek
   })
   const later = callbacks.filter((ex) => {
     if (!ex.callback_date) return false
-    return new Date(ex.callback_date) > inSevenDays
+    return new Date(ex.callback_date) > endOfWeek
   })
 
   return { overdue, today, thisWeek, later, hotExchanges, now }

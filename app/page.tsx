@@ -892,7 +892,7 @@ function Footer() {
             Inscription
           </Link>
           <a
-            href="mailto:samir.anbri@gmail.com"
+            href="mailto:contact@strofe.fr"
             className="text-xs text-gray-400 transition-colors duration-150 hover:text-white"
           >
             Contact

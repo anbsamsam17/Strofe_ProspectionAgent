@@ -34,6 +34,21 @@ interface ProspectsFiltersProps {
   currentContactTypes?: ContactFilterType[]
   currentBegesFilters?: BegesFilterValue[]
   currentSort?: SortValue
+  /** GLN-081 — Filtre rapide "Hot leads uniquement" (?hot=1). */
+  currentHotOnly?: boolean
+  /** GLN-006 — Filtre rapide "BEGES non conforme Décret 2022" (?decret_non_compliant=1). */
+  currentDecretNonCompliantOnly?: boolean
+  /**
+   * Sprint 3 retour client #1 — Etat replie/deplie de la zone de filtres.
+   * `true` = barre compacte affichee (gain de place). Etat persiste via
+   * `?filters=collapsed` pour conserver le choix entre onglets et au partage URL.
+   */
+  currentCollapsed?: boolean
+  /**
+   * Sprint 3 retour client #2 — Recherche libre cote serveur (raison sociale,
+   * SIREN, email contact, nom dirigeant). Submit Enter ou blur → push ?q=...
+   */
+  currentSearchQuery?: string
 }
 
 // TODO(Agent A): `offer_sent` à ajouter à `ProspectStatus` (`lib/types.ts`).
@@ -45,8 +60,10 @@ type StatusFilterValue = ProspectStatus | 'offer_sent'
 // `rdv` est legacy — fusionné visuellement avec « Intéressé ». On garde la valeur
 // dans le pipeline tant que des lignes existantes en base ne sont pas migrées.
 const ALL_STATUTS: { value: StatusFilterValue; label: string; dot: string }[] = [
-  { value: 'sourced', label: 'Pas de contact identifié', dot: 'bg-gray-400' },
+  { value: 'sourced', label: 'Nouveau', dot: 'bg-gray-400' },
   { value: 'qualified', label: 'Qualifié', dot: 'bg-blue-500' },
+  // Migration 028 — décision humaine d'amorce, entre 'qualified' et 'contacted'.
+  { value: 'to_contact', label: 'À contacter', dot: 'bg-cyan-400' },
   { value: 'contacted', label: 'Contacté', dot: 'bg-yellow-500' },
   { value: 'interested', label: 'Intéressé', dot: 'bg-green-500' },
   { value: 'offer_sent', label: 'Offre envoyée', dot: 'bg-indigo-500' },
@@ -89,11 +106,48 @@ export function ProspectsFilters({
   currentContactTypes = [],
   currentBegesFilters = [],
   currentSort = DEFAULT_SORT,
+  currentHotOnly = false,
+  currentDecretNonCompliantOnly = false,
+  currentCollapsed = false,
+  currentSearchQuery = '',
 }: ProspectsFiltersProps) {
   const router = useRouter()
   const pathname = usePathname()
   const searchParams = useSearchParams()
   const [isPending, startTransition] = useTransition()
+  const [collapsed, setCollapsed] = useState<boolean>(currentCollapsed)
+  const [searchQuery, setSearchQuery] = useState<string>(currentSearchQuery)
+
+  function commitSearchQuery(value: string) {
+    const trimmed = value.trim().slice(0, 200)
+    // Skip si pas de changement effectif (evite re-render inutile au blur).
+    if (trimmed === currentSearchQuery) return
+    const params = new URLSearchParams(searchParams.toString())
+    params.set('page', '1')
+    if (trimmed) {
+      params.set('q', trimmed)
+    } else {
+      params.delete('q')
+    }
+    startTransition(() => {
+      router.push(`${pathname}?${params.toString()}`)
+    })
+  }
+
+  function toggleCollapsed() {
+    const next = !collapsed
+    setCollapsed(next)
+    // Persistance URL pour preserver l'etat multi-onglets / partage de lien.
+    const params = new URLSearchParams(searchParams.toString())
+    if (next) {
+      params.set('filters', 'collapsed')
+    } else {
+      params.delete('filters')
+    }
+    startTransition(() => {
+      router.push(`${pathname}?${params.toString()}`)
+    })
+  }
 
   const [statuts, setStatuts] = useState<string[]>(currentStatuts)
   const [secteur, setSecteur] = useState(currentSecteur)
@@ -103,6 +157,10 @@ export function ProspectsFilters({
   const [contactTypes, setContactTypes] = useState<ContactFilterType[]>(currentContactTypes)
   const [begesFilters, setBegesFilters] = useState<BegesFilterValue[]>(currentBegesFilters)
   const [sort, setSort] = useState<SortValue>(currentSort)
+  const [hotOnly, setHotOnly] = useState<boolean>(currentHotOnly)
+  const [decretNonCompliantOnly, setDecretNonCompliantOnly] = useState<boolean>(
+    currentDecretNonCompliantOnly,
+  )
   const [moreOpen, setMoreOpen] = useState<boolean>(false)
 
   function applyFilters(
@@ -114,9 +172,25 @@ export function ProspectsFilters({
     newContactTypes: ContactFilterType[],
     newBegesFilters: BegesFilterValue[],
     newSort: SortValue,
+    newHotOnly: boolean = hotOnly,
+    newDecretNonCompliantOnly: boolean = decretNonCompliantOnly,
   ) {
     const params = new URLSearchParams(searchParams.toString())
     params.set('page', '1')
+
+    // GLN-081 — Filtre rapide Hot leads uniquement (?hot=1).
+    if (newHotOnly) {
+      params.set('hot', '1')
+    } else {
+      params.delete('hot')
+    }
+
+    // GLN-006 — Filtre rapide BEGES non conforme Décret 2022-982 (?decret_non_compliant=1).
+    if (newDecretNonCompliantOnly) {
+      params.set('decret_non_compliant', '1')
+    } else {
+      params.delete('decret_non_compliant')
+    }
 
     if (newStatuts.length > 0) {
       params.set('statut', newStatuts.join(','))
@@ -236,6 +310,39 @@ export function ProspectsFilters({
     applyFilters(statuts, secteur, scoreMin, scoreMax, next, contactTypes, begesFilters, sort)
   }
 
+  function toggleHotOnly() {
+    const next = !hotOnly
+    setHotOnly(next)
+    applyFilters(
+      statuts,
+      secteur,
+      scoreMin,
+      scoreMax,
+      archived,
+      contactTypes,
+      begesFilters,
+      sort,
+      next,
+    )
+  }
+
+  function toggleDecretNonCompliantOnly() {
+    const next = !decretNonCompliantOnly
+    setDecretNonCompliantOnly(next)
+    applyFilters(
+      statuts,
+      secteur,
+      scoreMin,
+      scoreMax,
+      archived,
+      contactTypes,
+      begesFilters,
+      sort,
+      hotOnly,
+      next,
+    )
+  }
+
   function selectSort(value: SortValue) {
     if (value === sort) return
     setSort(value)
@@ -251,8 +358,16 @@ export function ProspectsFilters({
     setContactTypes([])
     setBegesFilters([])
     setSort(DEFAULT_SORT)
+    setHotOnly(false)
+    setDecretNonCompliantOnly(false)
+    setSearchQuery('')
     startTransition(() => {
-      router.push(pathname)
+      // On preserve l'etat `?filters=collapsed` si actif — un user qui a replie
+      // ne veut pas voir le panneau s'ouvrir au reset.
+      const preservedParams = new URLSearchParams()
+      if (collapsed) preservedParams.set('filters', 'collapsed')
+      const qs = preservedParams.toString()
+      router.push(qs ? `${pathname}?${qs}` : pathname)
     })
   }
 
@@ -263,7 +378,24 @@ export function ProspectsFilters({
     hasScoreFilter ||
     archived ||
     contactTypes.length > 0 ||
-    begesFilters.length > 0
+    begesFilters.length > 0 ||
+    hotOnly ||
+    decretNonCompliantOnly ||
+    Boolean(currentSearchQuery)
+
+  // Sprint 3 retour client #1 — Comptage des filtres actifs pour le badge
+  // affiche dans le bouton "Filtres (N)" en mode replie. Statut/contact/beges
+  // multi-select comptent comme 1 chacun (le user pense en "categorie").
+  const activeFilterCount =
+    (statuts.length > 0 ? 1 : 0) +
+    (secteur ? 1 : 0) +
+    (hasScoreFilter ? 1 : 0) +
+    (archived ? 1 : 0) +
+    (contactTypes.length > 0 ? 1 : 0) +
+    (begesFilters.length > 0 ? 1 : 0) +
+    (hotOnly ? 1 : 0) +
+    (decretNonCompliantOnly ? 1 : 0) +
+    (currentSearchQuery ? 1 : 0)
 
   // Pourcentages pour la track active du range (entre les 2 thumbs).
   const scoreLeftPct = (scoreMin / SCORE_MAX_BOUND) * 100
@@ -278,11 +410,257 @@ export function ProspectsFilters({
   const pillActive =
     'border-green-500/40 bg-green-500/15 text-green-300 ring-1 ring-green-500/25'
 
+  // Sprint 3 retour client #1 — Mode replie : barre compacte qui prend ~50px
+  // de hauteur au lieu de 250-300px en mode complet. L'utilisateur regagne
+  // de la place pour voir plus de lignes du tableau sans perdre l'acces aux
+  // filtres (resume + bouton "Filtres (N)" reste visible et cliquable).
+  if (collapsed) {
+    return (
+      <div
+        className={`flex flex-wrap items-center gap-2 rounded-2xl border border-white/[0.08] bg-white/[0.03] px-3 py-2 backdrop-blur-md shadow-sm transition-opacity sm:px-4 ${isPending ? 'opacity-60' : ''}`}
+        aria-label="Filtres des prospects (replies)"
+      >
+        <button
+          type="button"
+          onClick={toggleCollapsed}
+          aria-expanded={false}
+          aria-controls="prospects-filters-panel"
+          className="inline-flex flex-shrink-0 items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs font-medium text-gray-200 transition-colors hover:border-green-500/30 hover:bg-green-500/10 hover:text-green-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-green-500/40"
+        >
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden="true"
+          >
+            <line x1="4" y1="6" x2="20" y2="6" />
+            <line x1="7" y1="12" x2="17" y2="12" />
+            <line x1="10" y1="18" x2="14" y2="18" />
+          </svg>
+          Filtres
+          {activeFilterCount > 0 && (
+            <span
+              className="inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-green-500/25 px-1.5 font-mono text-[10px] font-bold tabular-nums text-green-200 ring-1 ring-green-500/40"
+              aria-label={`${activeFilterCount} filtre${activeFilterCount > 1 ? 's' : ''} actif${activeFilterCount > 1 ? 's' : ''}`}
+            >
+              {activeFilterCount}
+            </span>
+          )}
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="12"
+            height="12"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className="ml-0.5"
+            aria-hidden="true"
+          >
+            <polyline points="6 9 12 15 18 9" />
+          </svg>
+        </button>
+
+        {/* Sprint 3 retour client #2 — Recherche libre disponible meme en mode
+            replie : c'est l'usage le plus frequent, le user ne veut pas
+            re-deplier juste pour rechercher. */}
+        <div className="relative min-w-[200px] flex-1">
+          <label htmlFor="filter-search-collapsed" className="sr-only">
+            Rechercher un prospect
+          </label>
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
+            aria-hidden="true"
+          >
+            <circle cx="11" cy="11" r="8" />
+            <line x1="21" y1="21" x2="16.65" y2="16.65" />
+          </svg>
+          <input
+            id="filter-search-collapsed"
+            type="search"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            onBlur={(e) => commitSearchQuery(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault()
+                commitSearchQuery(searchQuery)
+              }
+            }}
+            placeholder="Rechercher (raison sociale, SIREN, email, dirigeant)"
+            maxLength={200}
+            className="w-full rounded-full border border-white/[0.08] bg-white/[0.04] backdrop-blur-md py-1.5 pl-9 pr-3 text-xs text-white placeholder-gray-400 transition focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-500/20"
+          />
+        </div>
+
+        {hasFilters && (
+          <div className="flex w-full items-center gap-2 overflow-hidden sm:w-auto sm:flex-1">
+            <p className="flex-1 truncate text-[11px] text-gray-400">
+              {[
+                currentSearchQuery && `recherche "${currentSearchQuery}"`,
+                hotOnly && 'Hot leads',
+                decretNonCompliantOnly && 'Décret 2022 non conforme',
+                statuts.length > 0 && `${statuts.length} statut${statuts.length > 1 ? 's' : ''}`,
+                secteur && `secteur "${secteur}"`,
+                hasScoreFilter && `score ${scoreMin}–${scoreMax}`,
+                archived && 'archivés',
+                begesFilters.includes('obligation') && 'Obligation BEGES',
+                begesFilters.includes('missing') && 'BEGES manquant',
+                contactTypes.length > 0 &&
+                  `contact : ${contactTypes
+                    .map((t) => ALL_CONTACT_TYPES.find((c) => c.value === t)?.label ?? t)
+                    .join(' / ')}`,
+              ]
+                .filter(Boolean)
+                .join(' · ')}
+            </p>
+            <button
+              type="button"
+              onClick={handleReset}
+              aria-label="Réinitialiser tous les filtres"
+              className="inline-flex flex-shrink-0 items-center gap-1 rounded-md px-2 py-1 text-[11px] font-medium text-gray-300 transition-colors hover:bg-white/[0.06] hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-green-500/40"
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="11"
+                height="11"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+              >
+                <line x1="18" y1="6" x2="6" y2="18" />
+                <line x1="6" y1="6" x2="18" y2="18" />
+              </svg>
+              Réinitialiser
+            </button>
+          </div>
+        )}
+      </div>
+    )
+  }
+
   return (
     <div
+      id="prospects-filters-panel"
       className={`rounded-2xl border border-white/[0.08] bg-white/[0.03] backdrop-blur-md shadow-sm transition-opacity ${isPending ? 'opacity-60' : ''}`}
       aria-label="Filtres des prospects"
     >
+      {/* Sprint 3 retour client #2 — Barre de recherche libre (raison sociale,
+          SIREN, email, dirigeant). Submit Enter ou blur → push ?q=...
+          Sprint 3 retour client #1 — Bouton repli aligne en haut-droite du
+          panneau deplie pour discoverabilite (chevron vers le haut). */}
+      <div className="flex items-center gap-2 border-b border-white/[0.06] px-3 py-2 sm:px-4">
+        <div className="relative flex-1">
+          <label htmlFor="filter-search" className="sr-only">
+            Rechercher un prospect
+          </label>
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
+            aria-hidden="true"
+          >
+            <circle cx="11" cy="11" r="8" />
+            <line x1="21" y1="21" x2="16.65" y2="16.65" />
+          </svg>
+          <input
+            id="filter-search"
+            type="search"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            onBlur={(e) => commitSearchQuery(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault()
+                commitSearchQuery(searchQuery)
+              }
+            }}
+            placeholder="Rechercher (raison sociale, SIREN, email, dirigeant)"
+            maxLength={200}
+            className="w-full rounded-full border border-white/[0.08] bg-white/[0.04] backdrop-blur-md py-2 pl-9 pr-9 text-xs text-white placeholder-gray-400 transition focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-500/20"
+          />
+          {searchQuery && (
+            <button
+              type="button"
+              onClick={() => {
+                setSearchQuery('')
+                commitSearchQuery('')
+              }}
+              aria-label="Effacer la recherche"
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 rounded-full p-1 text-gray-400 transition-colors hover:bg-white/[0.06] hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-green-500/40"
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="11"
+                height="11"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+              >
+                <line x1="18" y1="6" x2="6" y2="18" />
+                <line x1="6" y1="6" x2="18" y2="18" />
+              </svg>
+            </button>
+          )}
+        </div>
+        <button
+          type="button"
+          onClick={toggleCollapsed}
+          aria-expanded={true}
+          aria-controls="prospects-filters-panel"
+          aria-label="Replier la zone de filtres"
+          className="inline-flex flex-shrink-0 items-center gap-1 rounded-md px-2 py-1 text-[11px] font-medium text-gray-400 transition-colors hover:bg-white/[0.06] hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-green-500/40"
+        >
+          Replier
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="12"
+            height="12"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden="true"
+          >
+            <polyline points="18 15 12 9 6 15" />
+          </svg>
+        </button>
+      </div>
+
       {/* ── Bloc statuts — placé AU-DESSUS du ribbon pour visibilité maximale.
           Flex-wrap : toutes les étiquettes restent visibles et cliquables
           sans scroll horizontal (vs. ancienne version qui tronquait à droite). */}
@@ -453,8 +831,59 @@ export function ProspectsFilters({
           </div>
         </fieldset>
 
-        {/* Toggles compacts (icônes) — Obligation / Manquant / Archivés */}
+        {/* Toggles compacts (icônes) — Hot / Obligation / Manquant / Archivés */}
         <div className="flex items-center gap-1.5" role="group" aria-label="Filtres rapides BEGES">
+          {/* GLN-081 — Filtre rapide Hot leads (obligation + BEGES défaillant
+              + email + effectif >= 250). Premier toggle pour visibilité. */}
+          <ToggleIconButton
+            active={hotOnly}
+            onClick={toggleHotOnly}
+            label="Hot leads uniquement"
+            tone="red"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z" />
+            </svg>
+          </ToggleIconButton>
+
+          {/* GLN-006 — Filtre rapide BEGES non conforme Décret 2022-982.
+              Cible commerciale : BEGES publié post-2023 sans scope 3 ou
+              sans plan d'action → renouvellement quasi-obligatoire. */}
+          <ToggleIconButton
+            active={decretNonCompliantOnly}
+            onClick={toggleDecretNonCompliantOnly}
+            label="BEGES non conforme Décret 2022"
+            tone="amber"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <circle cx="12" cy="12" r="10" />
+              <line x1="12" y1="8" x2="12" y2="12" />
+              <line x1="12" y1="16" x2="12.01" y2="16" />
+            </svg>
+          </ToggleIconButton>
+
           <ToggleIconButton
             active={begesFilters.includes('obligation')}
             onClick={() => toggleBegesValue('obligation')}
@@ -593,6 +1022,8 @@ export function ProspectsFilters({
         <div className="flex items-center justify-between border-t border-white/[0.06] px-4 py-2.5">
           <p className="truncate text-[11px] text-gray-400">
             {[
+              hotOnly && 'Hot leads',
+              decretNonCompliantOnly && 'Décret 2022 non conforme',
               statuts.length > 0 && `${statuts.length} statut${statuts.length > 1 ? 's' : ''}`,
               secteur && `secteur "${secteur}"`,
               hasScoreFilter && `score ${scoreMin}–${scoreMax}`,

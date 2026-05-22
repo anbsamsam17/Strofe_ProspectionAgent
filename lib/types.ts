@@ -9,6 +9,17 @@
 export type ProspectStatus =
   | 'sourced'
   | 'qualified'
+  /**
+   * NEW (migration 028) : decision humaine "a contacter" — amorce de la
+   * Today list. Distinct de 'qualified' (qualification automatique par
+   * l'agent) : l'utilisateur place explicitement le prospect dans sa file
+   * d'appel imminente. Ordre logique pipeline :
+   *   sourced -> qualified -> to_contact -> contacted -> interested -> ...
+   * Auto-promotion (Sprint 3 V3 #9) : a l'insertion d'un echange
+   * type IN ('appel','email','linkedin'), si statut courant IN
+   * ('sourced','qualified','to_contact') -> bascule 'contacted'.
+   */
+  | 'to_contact'
   | 'contacted'
   | 'interested'
   /** Legacy — conservé pour rétrocompat, n'est plus affiché dans le nouveau Kanban. */
@@ -103,6 +114,12 @@ export interface ProfileSettings {
    * appelle `sourcerEntreprisesFallback`. Le résultat est marqué `usedFallback=true`.
    */
   prefer_fallback_recherche_entreprises?: boolean
+  /**
+   * URL Calendly ou Cal.com de l'utilisateur — injectée dans les templates email
+   * prospection (GLN-120). Validation côté API : doit commencer par
+   * `https://calendly.com/` ou `https://cal.com/`.
+   */
+  calendly_url?: string
 }
 
 /**
@@ -159,8 +176,50 @@ export interface Prospect {
    * tombe sur un fallback recherche `bilans-ges.ademe.fr/bilans?q=<siren>`.
    */
   beges_url?: string
-  /** true si le BEGES a moins de 4 ans (obligation renouvellement quadriennal) */
+  /**
+   * true si le BEGES est encore dans sa periode de validite.
+   * Periode = 4 ans pour le prive, 3 ans pour le public (Art. L229-25 + Decret 2022-982).
+   * Cf. `entite_publique` ci-dessous.
+   */
   beges_valide?: boolean
+  /**
+   * TRUE si l'entreprise est une personne morale de droit public
+   * (categorie juridique INSEE 71xx-74xx). Determine la duree de validite
+   * du BEGES : 3 ans (public) au lieu de 4 ans (prive). Migration 020 (GLN-005).
+   */
+  entite_publique?: boolean
+  /**
+   * Record ADEME Data Fair complet du bilan le plus récent (migration 023, GLN-066).
+   * Forme libre (JSONB) car la structure renvoyée par l'API évolue.
+   * Champs couramment exposés : emissions_scope_1/2/3, methodologie,
+   * perimetre_organisationnel, objectifs_reduction, plan_action,
+   * consultant_accompagnant, annee_de_reporting, date_de_publication.
+   *
+   * `undefined` (Row=null) = aucun bilan connu OU API indisponible au sourcing.
+   * Exploité par lib/agent/decret-2022.ts (conformité Décret 2022-982),
+   * scoring sectoriel, détection concurrence cabinets.
+   */
+  bilan_ges_data?: Record<string, unknown> | null
+  /**
+   * Conformité au Décret 2022-982 du 1er juillet 2022 art. 1 (migration 023, GLN-006).
+   * Depuis le 1er janvier 2023, tout BEGES publié doit inclure scope 3
+   * significatif ET plan d'action de transition chiffré.
+   *
+   *  - `true`  : BEGES publié post-2023 avec scope 3 + plan d'action.
+   *  - `false` : BEGES publié post-2023 mais incomplet (signal commercial fort
+   *              — renouvellement quasi-obligatoire).
+   *  - `undefined`/null : non applicable (pas de BEGES, ou pré-2023 hors champ,
+   *              ou data ADEME incomplète pour déterminer).
+   */
+  beges_decret_2022_compliant?: boolean | null
+  /**
+   * Flag composite "hot lead" calculé côté DB (migration 024, GLN-081).
+   * Colonne GENERATED ALWAYS — la formule est :
+   *   obligation_beges AND (NOT beges_publie OR NOT beges_valide OR beges_decret_2022_compliant = false)
+   *   AND contact_email IS NOT NULL AND effectif_min >= 250
+   * Pendant TypeScript dans `lib/agent/hot-lead.ts` pour usage UI/agent.
+   */
+  is_hot_lead?: boolean | null
   obligation_beges: boolean
   score_priorite: number
   score_details: ScoreDetails
@@ -196,6 +255,19 @@ export interface Prospect {
   gemini_raisons?: string[]
   /** Horodatage ISO 8601 de la dernière génération Gemini pour ce prospect. */
   gemini_generated_at?: string
+  // ── Deal value + probability (migration 026 — GLN-041) ────────────────────
+  /**
+   * Valeur estimée du deal en EUR (NUMERIC(10,2) DB, plafond app 99 999 999.99).
+   * `null`/`undefined` = pas encore estimé. Saisie manuelle utilisateur via
+   * `DealValueEditor`.
+   */
+  deal_value?: number | null
+  /**
+   * Probabilité 0-100 de cloture du deal (SMALLINT DB). Pré-rempli côté UI
+   * selon le statut via `defaultProbabilityForStatus` ; éditable manuellement.
+   * `null`/`undefined` = utiliser le défaut associé au statut.
+   */
+  deal_probability?: number | null
   created_at: string
   updated_at: string
 }
@@ -323,6 +395,13 @@ export interface SireneEtablissement {
   nomenclatureActivitePrincipaleEtablissement?: string
   trancheEffectifsEtablissement?: string
   anneeEffectifsEtablissement?: string
+  /**
+   * Categorie juridique INSEE (4 chiffres). Sert a detecter les personnes
+   * morales de droit public (prefixes 71xx-74xx) qui ont une validite BEGES
+   * de 3 ans au lieu de 4 ans pour le prive (GLN-005).
+   * Reference : https://www.insee.fr/fr/information/2028129
+   */
+  categorieJuridiqueUniteLegale?: string
   adresseEtablissement?: {
     numeroVoieEtablissement?: string
     typeVoieEtablissement?: string

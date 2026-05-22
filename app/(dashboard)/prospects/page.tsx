@@ -12,7 +12,9 @@ import {
   type BulkContactFilter,
   type BulkDeleteFilters,
 } from '@/components/prospects/bulk-delete-button'
+import { ImportCsvModal } from '@/components/prospects/import-csv-modal'
 import { buildBegesUrl } from '@/lib/utils/beges-url'
+import { isBegesExpiringSoon } from '@/lib/agent/beges-expiration'
 import { RunStatusBanner } from '@/components/dashboard/run-status-banner'
 import {
   STATUS_LABELS_COMPACT,
@@ -199,10 +201,20 @@ function BegesBadge({ prospect }: { prospect: Prospect }) {
     badgeLabel = 'Absent'
   }
 
+  // GLN-080 — Indicateur discret "expire dans <3 mois" : un point orange
+  // après le badge (visible mais ne casse pas la lecture du tableau).
+  const expiringSoon =
+    begesPublie === true &&
+    begesValide === true &&
+    isBegesExpiringSoon({
+      beges_derniere_publication: prospect.beges_derniere_publication ?? null,
+      entite_publique: prospect.entite_publique ?? null,
+    })
+
   const title = begesDate
     ? `Dernière publication : ${new Intl.DateTimeFormat('fr-FR', {
         dateStyle: 'short',
-      }).format(new Date(begesDate))}`
+      }).format(new Date(begesDate))}${expiringSoon ? ' · expire dans moins de 3 mois' : ''}`
     : undefined
 
   const badge = (
@@ -218,6 +230,13 @@ function BegesBadge({ prospect }: { prospect: Prospect }) {
             new Date(begesDate),
           )}
         </span>
+      )}
+      {expiringSoon && (
+        <span
+          className="ml-0.5 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-orange-400"
+          aria-label="BEGES expirant dans moins de 3 mois"
+          title="BEGES expirant dans moins de 3 mois"
+        />
       )}
     </span>
   )
@@ -263,6 +282,20 @@ interface SearchParams {
   contact_type?: string
   /** "missing" pour ne lister que les entreprises avec BEGES absent OU expiré. */
   beges?: string
+  /** "1" pour le filtre rapide "Hot leads uniquement" (GLN-081). */
+  hot?: string
+  /** "1" pour le filtre rapide "BEGES non conforme Décret 2022" (GLN-006). */
+  decret_non_compliant?: string
+  /**
+   * Sprint 3 retour client #1 — `collapsed` pour replier la zone de filtres
+   * et gagner de la place (≈250px vs ≈50px). Persiste l'etat via l'URL.
+   */
+  filters?: string
+  /**
+   * Sprint 3 retour client #2 — Recherche libre (raison sociale, SIREN,
+   * email, dirigeant). Server-side, pas de debounce (rerun a la soumission).
+   */
+  q?: string
 }
 
 // ── Sort (pills inline) ──────────────────────────────────────────────────────
@@ -382,6 +415,17 @@ export default async function ProspectsPage({
       ? Math.max(scoreMaxRaw, scoreMin)
       : 100
   const showArchived = params.archived === '1'
+  // GLN-081 — Filtre Hot leads uniquement (colonne GENERATED is_hot_lead).
+  const hotOnly = params.hot === '1'
+  // GLN-006 — Filtre BEGES non conforme Décret 2022-982 (publié post-2023
+  // sans scope 3 OU sans plan d'action). Cible commerciale renouvellement.
+  const decretNonCompliantOnly = params.decret_non_compliant === '1'
+  // Sprint 3 retour client #1 — Etat replie/deplie de la zone de filtres,
+  // persiste via ?filters=collapsed pour conserver le choix multi-onglets.
+  const filtersCollapsed = params.filters === 'collapsed'
+  // Sprint 3 retour client #2 — Recherche libre (raison sociale, SIREN,
+  // email, dirigeant). On clamp a 200 char pour limiter le coup query Postgres.
+  const searchQuery = (params.q ?? '').trim().slice(0, 200)
   const contactTypes = parseContactTypes(params.contact_type)
   // Parsing CSV : ?beges=missing,obligation → ['missing', 'obligation']
   // Toggles combinables (AND) côté query Supabase.
@@ -415,6 +459,23 @@ export default async function ProspectsPage({
   if (secteurFilter) {
     query = query.ilike('secteur_libelle', `%${secteurFilter}%`)
   }
+  // Sprint 3 retour client #2 — Recherche libre sur 4 champs (OR).
+  // PostgREST .or() : on echappe `%`/`,`/`(`/`)` pour eviter d'injecter de la
+  // syntaxe parser. Pattern ilike = %X% ; longueur deja capeee a 200 char.
+  if (searchQuery) {
+    const escaped = searchQuery
+      .replace(/[\\%_,()*]/g, (m) => `\\${m}`)
+      .replace(/"/g, '\\"')
+    const pattern = `%${escaped}%`
+    query = query.or(
+      [
+        `raison_sociale.ilike."${pattern}"`,
+        `siren.ilike."${pattern}"`,
+        `contact_email.ilike."${pattern}"`,
+        `contact_nom.ilike."${pattern}"`,
+      ].join(','),
+    )
+  }
   // Range score [min, max] — on omet `.gte` si min=0 et `.lte` si max=100
   // pour ne pas surfiltrer une plage qui couvre tout.
   if (scoreMin > 0) {
@@ -438,6 +499,18 @@ export default async function ProspectsPage({
   if (begesFilters.includes('missing')) {
     // BEGES manquant = absent (beges_publie=false) OU expiré (beges_publie=true && beges_valide=false).
     query = query.or('beges_publie.eq.false,beges_valide.eq.false')
+  }
+  // GLN-081 — Filtre rapide "Hot leads uniquement". S'appuie sur la colonne
+  // GENERATED is_hot_lead (migration 024) — formule composite côté DB.
+  if (hotOnly) {
+    query = query.eq('is_hot_lead', true)
+  }
+  // GLN-006 — Filtre rapide "BEGES non conforme Décret 2022". S'appuie sur
+  // la colonne tristate beges_decret_2022_compliant (migration 023 + helper
+  // lib/agent/decret-2022.ts). Cible : BEGES publié post-2023 mais sans
+  // scope 3 ou sans plan d'action — renouvellement quasi-obligatoire.
+  if (decretNonCompliantOnly) {
+    query = query.eq('beges_decret_2022_compliant', false)
   }
 
   // Compteur "nouveaux dernier run" — récupère le started_at du dernier run agent
@@ -477,7 +550,10 @@ export default async function ProspectsPage({
     scoreMin > 0 ||
     showArchived ||
     contactTypes.length > 0 ||
-    begesFilters.length > 0
+    begesFilters.length > 0 ||
+    hotOnly ||
+    decretNonCompliantOnly ||
+    Boolean(searchQuery)
 
   // Filtres pour le BulkDeleteButton — strictement alignés avec la query GET
   // ci-dessus. Cast safe : statutFilter sort de parseContactTypes/searchParams
@@ -508,6 +584,10 @@ export default async function ProspectsPage({
       ...(scoreMin > 0 ? { score_min: String(scoreMin) } : {}),
       ...(showArchived ? { archived: '1' } : {}),
       ...(contactTypes.length > 0 ? { contact_type: contactTypes.join(',') } : {}),
+      ...(hotOnly ? { hot: '1' } : {}),
+      ...(decretNonCompliantOnly ? { decret_non_compliant: '1' } : {}),
+      // Sprint 3 retour client #2 — Preserver la recherche au changement de page.
+      ...(searchQuery ? { q: searchQuery } : {}),
       ...newParams,
     }
     const qs = new URLSearchParams(merged).toString()
@@ -594,8 +674,9 @@ export default async function ProspectsPage({
           </p>
         </div>
 
-        {/* Actions header — bulk-delete (visible seulement si filtres actifs). */}
+        {/* Actions header — import warm + bulk-delete (visible seulement si filtres actifs). */}
         <div className="flex items-center gap-2">
+          <ImportCsvModal />
           <BulkDeleteButton filters={bulkFilters} count={totalCount} />
         </div>
       </div>
@@ -609,10 +690,15 @@ export default async function ProspectsPage({
             currentStatuts={statutFilter}
             currentSecteur={secteurFilter}
             currentScoreMin={scoreMin}
+            currentScoreMax={scoreMax}
             currentArchived={showArchived}
             currentContactTypes={contactTypes}
             currentBegesFilters={begesFilters}
             currentSort={sortValue}
+            currentHotOnly={hotOnly}
+            currentDecretNonCompliantOnly={decretNonCompliantOnly}
+            currentCollapsed={filtersCollapsed}
+            currentSearchQuery={searchQuery}
           />
         </div>
       </div>
@@ -756,9 +842,33 @@ export default async function ProspectsPage({
                       {/* 3. Entreprise */}
                       <td className="px-4 py-3.5">
                         <Link href={`/prospects/${prospect.id}`} className="block">
-                          <p className="font-semibold text-white transition-colors group-hover:text-green-300">
+                          <p className="flex items-center gap-1.5 font-semibold text-white transition-colors group-hover:text-green-300">
                             {prospect.raison_sociale || (
                               <span className="italic text-gray-500">— sans nom —</span>
+                            )}
+                            {/* GLN-081 — Micro-badge Hot lead (icône flamme),
+                                visible directement dans la liste à côté du nom. */}
+                            {prospect.is_hot_lead && (
+                              <span
+                                title="Top opportunité (Hot lead)"
+                                aria-label="Top opportunité (Hot lead)"
+                                className="inline-flex h-4 w-4 flex-shrink-0 items-center justify-center rounded-full bg-red-500/20 text-red-300 ring-1 ring-red-500/30"
+                              >
+                                <svg
+                                  xmlns="http://www.w3.org/2000/svg"
+                                  width="9"
+                                  height="9"
+                                  viewBox="0 0 24 24"
+                                  fill="currentColor"
+                                  stroke="currentColor"
+                                  strokeWidth="2"
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  aria-hidden="true"
+                                >
+                                  <path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z" />
+                                </svg>
+                              </span>
                             )}
                           </p>
                           {prospect.siren && (

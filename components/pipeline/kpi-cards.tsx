@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import type { PipelineRange } from '@/lib/pipeline/range'
 import { rangeStartISO } from '@/lib/pipeline/range'
+import { formatEuros, sumForecast } from '@/lib/pipeline/forecast'
 import { BentoCell } from '@/components/ui/bento-grid'
 import { AnimatedCounter } from '@/components/ui/animated-counter'
 
@@ -20,6 +21,8 @@ interface Kpis {
   rdvCount: number
   avgRunMs: number | null
   begesCoverage: number
+  /** GLN-041 — somme pondérée deal_value × deal_probability/100 sur prospects actifs. */
+  pipelineValue: number
 }
 
 // ── Constantes ────────────────────────────────────────────────────────────────
@@ -67,6 +70,8 @@ interface KpiCounts {
   begesPublishedCount: number
   appelsInWindow: number
   appelsWithResultInWindow: number
+  /** GLN-041 — somme pondérée pre-calculée des prospects actifs. */
+  pipelineValue: number
 }
 
 export function computeKpisFromCounts(
@@ -112,6 +117,7 @@ export function computeKpisFromCounts(
     rdvCount: c.rdvCountInWindow,
     avgRunMs,
     begesCoverage,
+    pipelineValue: c.pipelineValue,
   }
 }
 
@@ -154,6 +160,12 @@ export async function KpiCards({ range }: KpiCardsProps) {
       appelsInWindowRes,
       appelsWithResultRes,
       { data: runsRaw, error: rErr },
+      // GLN-041 — fetch deal_value + deal_probability des prospects actifs
+      // pour calculer la somme pondérée côté JS (la formule ne peut pas être
+      // pré-calculée côté DB sans GENERATED column — voir migration 026).
+      // L'index partiel idx_prospects_deal_forecast (WHERE deal_value IS NOT NULL)
+      // évite de scanner toute la table.
+      forecastRes,
     ] = await Promise.all([
       getCount(() =>
         supabase
@@ -236,6 +248,15 @@ export async function KpiCards({ range }: KpiCardsProps) {
         .select('status, started_at, completed_at')
         .order('started_at', { ascending: false })
         .limit(AVG_RUN_LIMIT),
+      // GLN-041 — Prospects actifs avec deal_value renseigné.
+      // Limite a 5000 lignes (largement au-dessus du volume realiste user) pour
+      // ne pas faire crasher la page si le user a 100k prospects.
+      supabase
+        .from('prospects')
+        .select('deal_value, deal_probability')
+        .is('archived_at', null)
+        .not('deal_value', 'is', null)
+        .limit(5000),
     ])
 
     const firstErr =
@@ -255,6 +276,20 @@ export async function KpiCards({ range }: KpiCardsProps) {
       return <KpiCardsError reason={firstErr} />
     }
 
+    // GLN-041 — Calcul somme ponderee cote JS. Erreur fetch (RLS / DB)
+    // n'est pas bloquante pour la page : on degrade en pipelineValue=0.
+    // Cast via unknown : les colonnes deal_value / deal_probability sont
+    // ajoutees par migration 026 mais pas encore dans database.types.ts
+    // tant que `npx supabase gen types` n'a pas ete relance post-push.
+    const forecastRows = (forecastRes.data ?? []) as unknown as Array<{
+      deal_value: number | null
+      deal_probability: number | null
+    }>
+    if (forecastRes.error) {
+      console.error('[KpiCards] forecast fetch error', { error: forecastRes.error.message })
+    }
+    const pipelineValue = sumForecast(forecastRows)
+
     const counts: KpiCounts = {
       totalCount: totalRes.value,
       activeCount: activeRes.value,
@@ -264,6 +299,7 @@ export async function KpiCards({ range }: KpiCardsProps) {
       begesPublishedCount: begesPublishedRes.value,
       appelsInWindow: appelsInWindowRes.value,
       appelsWithResultInWindow: appelsWithResultRes.value,
+      pipelineValue,
     }
 
     const runs = (runsRaw ?? []) as unknown as AgentRunRow[]
@@ -339,6 +375,16 @@ export async function KpiCards({ range }: KpiCardsProps) {
         numericSuffix="%"
         sublabel="Prospects avec bilan publié"
         icon={<IconLeaf />}
+      />
+      {/* GLN-041 — somme ponderee des deal_value × deal_probability / 100
+          sur les prospects actifs (hors archive). */}
+      <KpiCard
+        index={7}
+        accent="violet"
+        label="Pipeline value"
+        value={formatEuros(kpis.pipelineValue)}
+        sublabel="Forecast pondéré (€)"
+        icon={<IconEuro />}
       />
     </div>
   )
@@ -494,6 +540,17 @@ function IconClock() {
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
         <circle cx="12" cy="12" r="10" />
         <polyline points="12 6 12 12 16 14" />
+      </svg>
+    </span>
+  )
+}
+function IconEuro() {
+  return (
+    <span className="rounded-lg bg-violet-500/15 p-2 text-violet-400 ring-1 ring-violet-500/25">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <path d="M4 10h12" />
+        <path d="M4 14h9" />
+        <path d="M19 6a7.5 7.5 0 0 0-5.5-2C8.806 4 5 7.806 5 12.5S8.806 21 13.5 21A7.5 7.5 0 0 0 19 19" />
       </svg>
     </span>
   )

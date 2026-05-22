@@ -34,6 +34,7 @@ import {
 import { sortableKeyboardCoordinates } from '@dnd-kit/sortable'
 import type { Prospect, ProspectStatus } from '@/lib/types'
 import { ProspectCard3D } from '@/components/ui/prospect-card-3d'
+import { formatEuros, sumForecast } from '@/lib/pipeline/forecast'
 import { KanbanSidePanel } from './kanban-side-panel'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -151,6 +152,17 @@ const COLUMN_STYLES: Record<
     card: 'border-emerald-500/15',
     cardHover: 'hover:border-emerald-400/40 hover:shadow-md',
     accent: 'bg-emerald-500',
+  },
+  // Migration 028 : cyan pour 'to_contact' — décision humaine d'amorce,
+  // distincte du bleu 'qualified' (qualif auto) et du jaune 'contacted'.
+  cyan: {
+    header: 'bg-cyan-500/10 ring-1 ring-cyan-500/20',
+    headerText: 'text-cyan-200',
+    dot: 'bg-cyan-400',
+    badge: 'bg-cyan-500/15 text-cyan-200 ring-1 ring-cyan-500/25',
+    card: 'border-cyan-500/15',
+    cardHover: 'hover:border-cyan-400/40 hover:shadow-md',
+    accent: 'bg-cyan-500',
   },
   // Migration 017 : slate translucide pour 'do_not_contact'. Volontairement
   // sobre (≠ rouge 'rejected') — signale un statut "passif" (à ne pas relancer).
@@ -380,6 +392,10 @@ function DroppableColumn({
 }: DroppableColumnProps) {
   const { setNodeRef } = useDroppable({ id: column.status })
 
+  // GLN-041 — Somme ponderee des deals de la colonne (forecast pipeline).
+  // sumForecast filtre deja les prospects sans deal_value/deal_probability.
+  const columnForecast = sumForecast(items)
+
   return (
     <div
       ref={setNodeRef}
@@ -389,25 +405,37 @@ function DroppableColumn({
           : 'bg-transparent ring-2 ring-transparent'
       }`}
       role="group"
-      aria-label={`Colonne ${column.label} — ${items.length} prospect${items.length > 1 ? 's' : ''}`}
+      aria-label={`Colonne ${column.label} — ${items.length} prospect${items.length > 1 ? 's' : ''}${columnForecast > 0 ? ` — ${formatEuros(columnForecast)} forecast pondéré` : ''}`}
     >
       <div
-        className={`flex items-center justify-between gap-3 rounded-2xl px-4 py-3 ${styles.header}`}
+        className={`flex flex-col gap-1 rounded-2xl px-4 py-3 ${styles.header}`}
       >
-        <div className="flex min-w-0 items-center gap-2.5">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex min-w-0 items-center gap-2.5">
+            <span
+              className={`h-2.5 w-2.5 flex-shrink-0 rounded-full ${styles.dot} shadow-sm`}
+              aria-hidden="true"
+            />
+            <span className={`truncate text-sm font-semibold ${styles.headerText}`}>
+              {column.label}
+            </span>
+          </div>
           <span
-            className={`h-2.5 w-2.5 flex-shrink-0 rounded-full ${styles.dot} shadow-sm`}
-            aria-hidden="true"
-          />
-          <span className={`truncate text-sm font-semibold ${styles.headerText}`}>
-            {column.label}
+            className={`flex-shrink-0 rounded-full px-2 py-0.5 text-xs font-bold tabular-nums ${styles.badge}`}
+          >
+            {items.length}
           </span>
         </div>
-        <span
-          className={`flex-shrink-0 rounded-full px-2 py-0.5 text-xs font-bold tabular-nums ${styles.badge}`}
-        >
-          {items.length}
-        </span>
+        {/* Forecast ponderé de la colonne — affiché seulement si au moins
+            un prospect a une valeur deal saisie. */}
+        {columnForecast > 0 && (
+          <p
+            className={`text-[11px] font-semibold tabular-nums ${styles.headerText} opacity-80`}
+            aria-hidden="true"
+          >
+            {formatEuros(columnForecast)} forecast
+          </p>
+        )}
       </div>
 
       <div className="flex flex-col gap-2">

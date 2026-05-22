@@ -1259,8 +1259,24 @@ async function upsertProspectsBatch(
       })
       .select('id,created_at,updated_at')
 
-    if (result1.error && result1.error.message.includes('beges_')) {
-      const cleanBatch = batch.map(({ beges_url, beges_valide, ...rest }) => rest)
+    if (result1.error && (result1.error.message.includes('beges_') || result1.error.message.includes('bilan_ges_data'))) {
+      // Fallback rétro-compat : si migration 004 (beges_url/beges_valide) OU
+      // migration 023 (bilan_ges_data/beges_decret_2022_compliant) absente,
+      // on strippe les colonnes correspondantes et on retry.
+      const cleanBatch = batch.map((p) => {
+        const {
+          beges_url: _u,
+          beges_valide: _v,
+          bilan_ges_data: _b,
+          beges_decret_2022_compliant: _d,
+          ...rest
+        } = p
+        void _u
+        void _v
+        void _b
+        void _d
+        return rest
+      })
       const result2 = await supabase
         .from('prospects')
         .upsert(cleanBatch as unknown as Database['public']['Tables']['prospects']['Insert'][], {
@@ -1270,7 +1286,7 @@ async function upsertProspectsBatch(
       upsertError = result2.error
 
       if (!result2.error) {
-        pushLog('upsert', 'Migration 004 non appliquée — colonnes beges_url/beges_valide ignorées', 'warn')
+        pushLog('upsert', 'Migration 004/023 non appliquée — colonnes beges_*/bilan_ges_data ignorées', 'warn')
         const rows = result2.data ?? []
         for (const row of rows) {
           const r = row as { created_at: string; updated_at: string }

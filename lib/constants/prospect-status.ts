@@ -20,8 +20,10 @@ import type { ProspectStatus } from '@/lib/types'
  * conservé séparé côté kanban side panel pour rétrocompat.
  */
 export const STATUS_LABELS: Record<ProspectStatus, string> = {
-  sourced: 'Pas de contact identifié',
+  sourced: 'Nouveau',
   qualified: 'Qualifié',
+  // Migration 028 : decision humaine d'amorce — entre qualified et contacted.
+  to_contact: 'À contacter',
   contacted: 'Contacté',
   interested: 'Intéressé',
   rdv: 'RDV',
@@ -40,6 +42,7 @@ export const STATUS_LABELS: Record<ProspectStatus, string> = {
 export const STATUS_LABELS_COMPACT: Record<ProspectStatus, string> = {
   ...STATUS_LABELS,
   rdv: 'Intéressé',
+  to_contact: 'À contacter',
 }
 
 /**
@@ -49,6 +52,9 @@ export const STATUS_LABELS_COMPACT: Record<ProspectStatus, string> = {
 const STATUS_COLOR: Record<ProspectStatus, string> = {
   sourced: 'gray',
   qualified: 'blue',
+  // Migration 028 — cyan : étape "décision humaine d'amorce", distincte du
+  // bleu 'qualified' (qualif auto) et du jaune 'contacted' (1er contact fait).
+  to_contact: 'cyan',
   contacted: 'yellow',
   interested: 'green',
   rdv: 'purple',
@@ -79,6 +85,11 @@ export const STATUS_STYLES_SOLID: Record<ProspectStatus, StatusStyle> = {
   qualified: {
     badge: 'bg-blue-950 text-blue-400',
     dot: 'bg-blue-500',
+  },
+  // Migration 028 — cyan, entre qualified (bleu) et contacted (jaune).
+  to_contact: {
+    badge: 'bg-cyan-950 text-cyan-300',
+    dot: 'bg-cyan-400',
   },
   contacted: {
     badge: 'bg-yellow-950 text-yellow-400',
@@ -128,6 +139,11 @@ export const STATUS_STYLES_SOFT: Record<ProspectStatus, StatusStyle> = {
     badge: 'bg-blue-950 text-blue-400',
     dot: 'bg-blue-500',
   },
+  // Migration 028 — cyan, cohérent avec la variante solid.
+  to_contact: {
+    badge: 'bg-cyan-950 text-cyan-300',
+    dot: 'bg-cyan-400',
+  },
   contacted: {
     badge: 'bg-yellow-950 text-yellow-400',
     dot: 'bg-yellow-500',
@@ -170,6 +186,9 @@ export const STATUS_STYLES_SOFT: Record<ProspectStatus, StatusStyle> = {
 export const KANBAN_COLUMN_ORDER: ProspectStatus[] = [
   'sourced',
   'qualified',
+  // Migration 028 — entre qualified (qualif auto) et contacted (1er contact).
+  // L'utilisateur a explicitement decide de contacter ce prospect.
+  'to_contact',
   'contacted',
   'interested',
   'offer_sent',

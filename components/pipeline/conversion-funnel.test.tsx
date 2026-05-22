@@ -59,6 +59,7 @@ function makeCounts(
   return {
     sourced: 0,
     qualified: 0,
+    to_contact: 0,
     contacted: 0,
     interested: 0,
     offer_sent: 0,

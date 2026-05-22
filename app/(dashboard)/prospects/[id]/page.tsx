@@ -1,6 +1,7 @@
 import { notFound, redirect } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
+import { BackToProspectsLink } from '@/components/prospects/back-to-prospects-link'
 import type {
   Priority,
   Prospect,
@@ -14,9 +15,18 @@ import { ProspectDetailEditor } from '@/components/prospects/prospect-detail-edi
 import { StatusDropdown } from '@/components/prospects/status-dropdown'
 import { PriorityDropdown } from '@/components/prospects/priority-dropdown'
 import { ContactsList, type ProspectContact } from '@/components/prospects/contacts-list'
+import { DealValueEditor } from '@/components/prospects/deal-value-editor'
 import { ExchangesPanel, type ProspectExchange } from '@/components/prospects/exchanges-panel'
 import { buildBegesUrl } from '@/lib/utils/beges-url'
+import { isBegesExpiringSoon } from '@/lib/agent/beges-expiration'
+import {
+  getDecret2022Reason,
+  formatDecret2022ReasonLabel,
+} from '@/lib/agent/decret-2022'
 import { NafHierarchyView } from '@/components/prospects/naf-hierarchy-view'
+import { SendEmailButton } from '@/components/email/send-email-button'
+import { TEMPLATES } from '@/lib/email/templates/prospection'
+import type { EmailPersona } from '@/lib/email/detect-persona'
 
 export const dynamic = 'force-dynamic'
 
@@ -193,6 +203,45 @@ export default async function ProspectDetailPage({ params }: PageProps) {
   const begesUrl = buildBegesUrl(prospect)
   const currentPriorite: ManualPriority = prospect.priorite ?? 'moyenne'
 
+  // GLN-020 : préparation données EmailComposer
+  // first_contact_at est ajouté par migration 022 — colonne pas encore dans
+  // database.types.ts. Cast safe : si null/undefined → firstContact = true.
+  const firstContact = (prospect as unknown as { first_contact_at?: string | null })
+    .first_contact_at == null
+  const emailComposerContacts = contacts.map((c) => ({
+    id: c.id,
+    prenom: c.prenom,
+    nom: c.nom,
+    email: c.email,
+    email_status: (c as unknown as { email_status?: string | null }).email_status ?? null,
+    poste: c.poste,
+  }))
+
+  // Fallback legacy (GLN-020 fix 2026-05-20) :
+  // L'API /api/prospects/[id]/enrich écrit dans les colonnes legacy
+  // `prospects.contact_*` (pas dans `prospect_contacts`). Si l'utilisateur
+  // a enrichi via UI mais que la table normalisée est vide, on synthétise
+  // un pseudo-contact `legacy-<prospectId>` pour permettre l'envoi email.
+  // Côté API `/api/email/send`, ce préfixe est détecté et le contact
+  // est lu depuis `prospects.contact_*` au lieu de `prospect_contacts`.
+  const hasValidContact = emailComposerContacts.some((c) => c.email)
+  if (!hasValidContact && prospect.contact_email) {
+    emailComposerContacts.push({
+      id: `legacy-${prospect.id}`,
+      prenom: prospect.contact_prenom ?? null,
+      nom: prospect.contact_nom ?? null,
+      email: prospect.contact_email,
+      email_status: null,
+      poste: prospect.contact_poste ?? null,
+    })
+  }
+  const emailTemplates: Record<EmailPersona, { subject: string; body: string }> = {
+    daf: { subject: TEMPLATES.daf.subject, body: TEMPLATES.daf.body },
+    rse: { subject: TEMPLATES.rse.subject, body: TEMPLATES.rse.body },
+    dg: { subject: TEMPLATES.dg.subject, body: TEMPLATES.dg.body },
+    drh: { subject: TEMPLATES.drh.subject, body: TEMPLATES.drh.body },
+  }
+
   // Effectif
   const effectif =
     prospect.effectif_min && prospect.effectif_max
@@ -209,12 +258,14 @@ export default async function ProspectDetailPage({ params }: PageProps) {
   return (
     <div className="mx-auto max-w-5xl space-y-5">
 
-      {/* ── Header retour ── */}
+      {/* ── Header retour ──
+          Sprint 3 retour client #8 — BackToProspectsLink utilise router.back()
+          si possible pour preserver les ?statut=&secteur=&q= appliques avant
+          d'arriver sur la fiche. Fallback Link standard si pas d'historique. */}
       <div>
-        <Link
-          href="/prospects"
+        <BackToProspectsLink
           className="mb-4 inline-flex items-center gap-1.5 text-sm text-gray-400 transition-colors hover:text-white"
-          aria-label="Retour à la liste des prospects"
+          ariaLabel="Retour à la liste des prospects"
         >
           <svg
             xmlns="http://www.w3.org/2000/svg"
@@ -231,7 +282,7 @@ export default async function ProspectDetailPage({ params }: PageProps) {
             <polyline points="15 18 9 12 15 6" />
           </svg>
           Prospects
-        </Link>
+        </BackToProspectsLink>
 
         <div className="flex flex-wrap items-start gap-x-6 gap-y-4">
           <div className="min-w-0 flex-1">
@@ -255,6 +306,32 @@ export default async function ProspectDetailPage({ params }: PageProps) {
               currentPriorite={currentPriorite}
             />
 
+            {/* GLN-081 — Badge "Hot lead" (composite : obligation + BEGES défaillant
+                + email + effectif >= 250). Cliquable visuellement neutre — sert juste
+                à signaler la priorisation au consultant. */}
+            {prospect.is_hot_lead && (
+              <span
+                className="inline-flex items-center gap-1.5 rounded-full bg-red-500/15 px-3 py-1 text-sm font-semibold text-red-200 ring-1 ring-red-500/25"
+                title="Top opportunité : obligation BEGES + BEGES défaillant + email disponible + effectif >= 250 sal."
+              >
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="12"
+                  height="12"
+                  viewBox="0 0 24 24"
+                  fill="currentColor"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden="true"
+                >
+                  <path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z" />
+                </svg>
+                Hot lead
+              </span>
+            )}
+
             {/* Badge archive */}
             {prospect.archived_at && (
               <span className="inline-flex items-center gap-1.5 rounded-full bg-orange-500/15 px-3 py-1 text-sm font-medium text-orange-200 ring-1 ring-orange-500/25">
@@ -277,6 +354,15 @@ export default async function ProspectDetailPage({ params }: PageProps) {
                 Archivé
               </span>
             )}
+
+            {/* CTA envoi email (GLN-020) */}
+            <SendEmailButton
+              prospectId={prospect.id}
+              prospectRaisonSociale={prospect.raison_sociale}
+              firstContact={firstContact}
+              contacts={emailComposerContacts}
+              templates={emailTemplates}
+            />
 
             {/* Menu actions secondaires (archiver, supprimer, etc.) */}
             <div className="ml-1">
@@ -401,6 +487,16 @@ export default async function ProspectDetailPage({ params }: PageProps) {
           </div>
         </SectionCard>
 
+        {/* ── Deal (GLN-041) — valeur EUR + probabilite + forecast ── */}
+        <SectionCard title="Deal">
+          <DealValueEditor
+            prospectId={prospect.id}
+            statut={prospect.statut}
+            initialDealValue={prospect.deal_value ?? null}
+            initialDealProbability={prospect.deal_probability ?? null}
+          />
+        </SectionCard>
+
         {/* ── Contacts identifiés (multi) ── */}
         <ContactsList prospect={prospect} contacts={contacts} />
 
@@ -443,6 +539,80 @@ export default async function ProspectDetailPage({ params }: PageProps) {
                     Obligation BEGES
                   </span>
                 )}
+                {/* GLN-080 — Badge "BEGES expirant" : la validité tombe à
+                    échéance dans <= 90 jours (3 ans public / 4 ans privé
+                    selon Art. L229-25). Signal commercial (renouvellement
+                    imminent). Scope volontairement réduit : pas de cron ni
+                    d'envoi email — juste un badge UI. */}
+                {isBegesExpiringSoon({
+                  beges_derniere_publication: prospect.beges_derniere_publication ?? null,
+                  entite_publique: prospect.entite_publique ?? null,
+                }) && (
+                  <span
+                    className="inline-flex items-center gap-1.5 rounded-full bg-orange-500/15 px-3 py-1 text-sm font-medium text-orange-200 ring-1 ring-orange-500/25"
+                    title="Le BEGES de ce prospect expire dans moins de 3 mois (calcul Art. L229-25 + validité publique/privée)."
+                  >
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      width="12"
+                      height="12"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2.5"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      aria-hidden="true"
+                    >
+                      <circle cx="12" cy="12" r="10" />
+                      <polyline points="12 6 12 12 16 14" />
+                    </svg>
+                    BEGES expirant
+                  </span>
+                )}
+                {/* GLN-006 — Badge "Non conforme Décret 2022" :
+                    BEGES publié post-2023 sans scope 3 ou sans plan d'action
+                    (Décret 2022-982 art. 1). Signal commercial fort —
+                    renouvellement quasi-obligatoire. Le détail "scope 3
+                    manquant" / "plan d'action manquant" est affiché en
+                    sous-texte pour préciser le pitch commercial. */}
+                {prospect.beges_decret_2022_compliant === false && (() => {
+                  const decretReason = getDecret2022Reason(
+                    prospect.bilan_ges_data as Record<string, unknown> | null,
+                  )
+                  const reasonLabel = formatDecret2022ReasonLabel(decretReason)
+                  return (
+                    <span
+                      className="inline-flex items-center gap-1.5 rounded-full bg-orange-500/15 px-3 py-1 text-sm font-medium text-orange-200 ring-1 ring-orange-500/25"
+                      title="BEGES publié sans scope 3 ou sans plan d'action de transition — renouvellement nécessaire selon Décret 2022-982 art. 1"
+                    >
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        width="12"
+                        height="12"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2.5"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        aria-hidden="true"
+                      >
+                        <circle cx="12" cy="12" r="10" />
+                        <line x1="12" y1="8" x2="12" y2="12" />
+                        <line x1="12" y1="16" x2="12.01" y2="16" />
+                      </svg>
+                      <span>
+                        Non conforme Décret 2022
+                        {reasonLabel && (
+                          <span className="ml-1 text-xs text-orange-300/80">
+                            ({reasonLabel})
+                          </span>
+                        )}
+                      </span>
+                    </span>
+                  )
+                })()}
               </div>
 
               {prospect.beges_derniere_publication && (

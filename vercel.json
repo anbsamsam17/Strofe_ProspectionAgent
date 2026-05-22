@@ -7,6 +7,10 @@
     {
       "path": "/api/agent/reap-stale",
       "schedule": "0 4 * * *"
+    },
+    {
+      "path": "/api/cron/purge-prospects",
+      "schedule": "0 3 * * *"
     }
   ]
 }

@@ -218,6 +218,30 @@ export type Database = {
         }
         Relationships: []
       }
+      domain_blacklist: {
+        Row: {
+          created_at: string
+          domain: string
+          id: string
+          reason: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          domain: string
+          id?: string
+          reason?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          domain?: string
+          id?: string
+          reason?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       opt_out: {
         Row: {
           created_at: string
@@ -406,10 +430,12 @@ export type Database = {
         Row: {
           adresse: string | null
           archived_at: string | null
+          beges_decret_2022_compliant: boolean | null
           beges_derniere_publication: string | null
           beges_publie: boolean
           beges_url: string | null
           beges_valide: boolean | null
+          bilan_ges_data: Json | null
           code_postal: string | null
           contact_completeness: number | null
           contact_email: string | null
@@ -423,13 +449,18 @@ export type Database = {
           contact_telephone: string | null
           contact_tier: string | null
           created_at: string
+          deal_probability: number | null
+          deal_value: number | null
           effectif_max: number | null
           effectif_min: number | null
           enriched_at: string | null
+          entite_publique: boolean | null
+          first_contact_at: string | null
           gemini_generated_at: string | null
           gemini_raisons: Json | null
           gemini_score: number | null
           id: string
+          is_hot_lead: boolean | null
           last_enrichment_run_at: string | null
           notes: string | null
           obligation_beges: boolean
@@ -451,10 +482,12 @@ export type Database = {
         Insert: {
           adresse?: string | null
           archived_at?: string | null
+          beges_decret_2022_compliant?: boolean | null
           beges_derniere_publication?: string | null
           beges_publie?: boolean
           beges_url?: string | null
           beges_valide?: boolean | null
+          bilan_ges_data?: Json | null
           code_postal?: string | null
           contact_completeness?: number | null
           contact_email?: string | null
@@ -468,13 +501,18 @@ export type Database = {
           contact_telephone?: string | null
           contact_tier?: string | null
           created_at?: string
+          deal_probability?: number | null
+          deal_value?: number | null
           effectif_max?: number | null
           effectif_min?: number | null
           enriched_at?: string | null
+          entite_publique?: boolean | null
+          first_contact_at?: string | null
           gemini_generated_at?: string | null
           gemini_raisons?: Json | null
           gemini_score?: number | null
           id?: string
+          is_hot_lead?: boolean | null
           last_enrichment_run_at?: string | null
           notes?: string | null
           obligation_beges?: boolean
@@ -496,10 +534,12 @@ export type Database = {
         Update: {
           adresse?: string | null
           archived_at?: string | null
+          beges_decret_2022_compliant?: boolean | null
           beges_derniere_publication?: string | null
           beges_publie?: boolean
           beges_url?: string | null
           beges_valide?: boolean | null
+          bilan_ges_data?: Json | null
           code_postal?: string | null
           contact_completeness?: number | null
           contact_email?: string | null
@@ -513,13 +553,18 @@ export type Database = {
           contact_telephone?: string | null
           contact_tier?: string | null
           created_at?: string
+          deal_probability?: number | null
+          deal_value?: number | null
           effectif_max?: number | null
           effectif_min?: number | null
           enriched_at?: string | null
+          entite_publique?: boolean | null
+          first_contact_at?: string | null
           gemini_generated_at?: string | null
           gemini_raisons?: Json | null
           gemini_score?: number | null
           id?: string
+          is_hot_lead?: boolean | null
           last_enrichment_run_at?: string | null
           notes?: string | null
           obligation_beges?: boolean
@@ -540,11 +585,97 @@ export type Database = {
         }
         Relationships: []
       }
+      sirene_cache: {
+        Row: {
+          activite_principale: string | null
+          adresse: string | null
+          code_postal: string | null
+          commune: string | null
+          date_creation: string | null
+          date_maj_insee: string | null
+          effectif_max: number | null
+          effectif_min: number | null
+          etat_administratif: string | null
+          imported_at: string | null
+          raison_sociale: string | null
+          siren: string
+          siret: string
+          source_file: string | null
+          tranche_effectifs: string | null
+        }
+        Insert: {
+          activite_principale?: string | null
+          adresse?: string | null
+          code_postal?: string | null
+          commune?: string | null
+          date_creation?: string | null
+          date_maj_insee?: string | null
+          effectif_max?: number | null
+          effectif_min?: number | null
+          etat_administratif?: string | null
+          imported_at?: string | null
+          raison_sociale?: string | null
+          siren: string
+          siret: string
+          source_file?: string | null
+          tranche_effectifs?: string | null
+        }
+        Update: {
+          activite_principale?: string | null
+          adresse?: string | null
+          code_postal?: string | null
+          commune?: string | null
+          date_creation?: string | null
+          date_maj_insee?: string | null
+          effectif_max?: number | null
+          effectif_min?: number | null
+          etat_administratif?: string | null
+          imported_at?: string | null
+          raison_sociale?: string | null
+          siren?: string
+          siret?: string
+          source_file?: string | null
+          tranche_effectifs?: string | null
+        }
+        Relationships: []
+      }
     }
     Views: {
-      [_ in never]: never
+      sirene_cache_size: {
+        Row: {
+          active_count: number | null
+          days_since_import: number | null
+          last_import_at: string | null
+          total_bytes: number | null
+          total_size: string | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
+      search_sirene_cache: {
+        Args: {
+          p_code_postal_max: string
+          p_code_postal_min: string
+          p_exclude_sirens: string[]
+          p_limit?: number
+          p_naf_codes: string[]
+          p_offset?: number
+          p_tranche_effectifs: string[]
+        }
+        Returns: {
+          activite_principale: string
+          adresse: string
+          code_postal: string
+          commune: string
+          effectif_max: number
+          effectif_min: number
+          raison_sociale: string
+          siren: string
+          siret: string
+          tranche_effectifs: string
+        }[]
+      }
       show_limit: { Args: never; Returns: number }
       show_trgm: { Args: { "": string }; Returns: string[] }
     }
@@ -573,6 +704,7 @@ export type Database = {
         | "on_hold"
         | "offer_sent"
         | "do_not_contact"
+        | "to_contact"
     }
     CompositeTypes: {
       [_ in never]: never

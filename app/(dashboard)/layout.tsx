@@ -4,6 +4,7 @@ import { Sidebar } from '@/components/layout/sidebar'
 import { DashboardHeader } from '@/components/layout/dashboard-header'
 import { PageTransition } from '@/components/layout/page-transition'
 import { NotificationBell } from '@/components/notifications/notification-bell'
+import { ToastProvider } from '@/components/ui/toast'
 import type { AgentRun } from '@/lib/types'
 
 // Force le rendu dynamique sur TOUT le layout dashboard :
@@ -55,24 +56,28 @@ export default async function DashboardLayout({
     profileData?.full_name ?? profileData?.email ?? authenticatedUser.email ?? 'Utilisateur'
 
   return (
+    // ToastProvider monte au niveau dashboard pour que useToast() fonctionne
+    // dans toutes les pages enfants (calendar, copy-email-button, etc.).
     // Pas de fond solide — on laisse passer le mesh + grille tech globaux
-    // définis dans app/globals.css via body::before / body::after.
-    <div className="relative flex h-screen overflow-hidden">
-      <Sidebar />
+    // definis dans app/globals.css via body::before / body::after.
+    <ToastProvider>
+      <div className="relative flex h-screen overflow-hidden">
+        <Sidebar />
 
-      <div className="flex flex-1 flex-col overflow-hidden lg:ml-64">
-        <DashboardHeader
-          userName={userName ?? 'Utilisateur'}
-          agentRun={agentRun}
-          notificationBell={<NotificationBell />}
-        />
+        <div className="flex flex-1 flex-col overflow-hidden lg:ml-64">
+          <DashboardHeader
+            userName={userName ?? 'Utilisateur'}
+            agentRun={agentRun}
+            notificationBell={<NotificationBell />}
+          />
 
-        <main className="flex-1 overflow-y-auto">
-          <div className="p-4 pb-24 sm:p-6 lg:pb-8">
-            <PageTransition>{children}</PageTransition>
-          </div>
-        </main>
+          <main className="flex-1 overflow-y-auto">
+            <div className="p-4 pb-24 sm:p-6 lg:pb-8">
+              <PageTransition>{children}</PageTransition>
+            </div>
+          </main>
+        </div>
       </div>
-    </div>
+    </ToastProvider>
   )
 }

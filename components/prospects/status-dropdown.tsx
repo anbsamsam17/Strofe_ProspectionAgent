@@ -19,7 +19,7 @@ interface StatusOption {
 const STATUS_OPTIONS: StatusOption[] = [
   {
     value: 'sourced',
-    label: 'Pas de contact identifié',
+    label: 'Nouveau',
     dot: 'bg-gray-400',
     badge: 'bg-white/[0.06] text-gray-200 ring-1 ring-white/[0.08]',
   },
@@ -28,6 +28,15 @@ const STATUS_OPTIONS: StatusOption[] = [
     label: 'Qualifié',
     dot: 'bg-blue-400',
     badge: 'bg-blue-500/15 text-blue-200 ring-1 ring-blue-500/25',
+  },
+  // Migration 028 — décision humaine d'amorce, entre 'qualified' et 'contacted'.
+  // Cyan : visuellement distinct du bleu 'qualified' (qualif auto) et du jaune
+  // 'contacted' (1er contact effectif).
+  {
+    value: 'to_contact',
+    label: 'À contacter',
+    dot: 'bg-cyan-400',
+    badge: 'bg-cyan-500/15 text-cyan-200 ring-1 ring-cyan-500/25',
   },
   {
     value: 'contacted',

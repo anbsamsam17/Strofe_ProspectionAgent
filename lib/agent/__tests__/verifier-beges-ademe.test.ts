@@ -370,6 +370,76 @@ describe('verifierBegesAdeme', () => {
     expect(result?.courriel).toBe('rse@psa.fr')
   })
 
+  it('GLN-066 — expose raw_record avec le payload Data Fair complet du bilan choisi', async () => {
+    // Payload "réaliste" reproduisant les champs ADEME Data Fair exploitables
+    // downstream (scope 3 + plan_action pour Décret 2022, methodologie, etc.).
+    const rawRecord = {
+      siren_principal: 542065479,
+      raison_sociale: 'PSA',
+      annee_de_reporting: 2024,
+      date_de_publication: '2024-09-01',
+      id: 'uuid-2024',
+      emissions_scope_1: 1234.5,
+      emissions_scope_2: 678.9,
+      emissions_scope_3: 5432.1,
+      methodologie: 'Bilan Carbone',
+      perimetre_organisationnel: 'Société mère + filiales',
+      plan_action_transition: 'Réduction 30% scope 1+2 d\'ici 2030',
+      objectifs_reduction: 'SBTi 1.5°C',
+      consultant_accompagnant: 'Greenly',
+    }
+
+    const fetchMock = vi.fn(async () =>
+      makeJsonResponse({ results: [rawRecord], total: 1 }),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    const result = await verifierBegesAdeme('542065479')
+    expect(result).not.toBeNull()
+    expect(result?.raw_record).toBeDefined()
+    // Vérifie que TOUS les champs Data Fair (typés ou non) sont conservés.
+    expect(result?.raw_record?.emissions_scope_3).toBe(5432.1)
+    expect(result?.raw_record?.methodologie).toBe('Bilan Carbone')
+    expect(result?.raw_record?.plan_action_transition).toBe(
+      'Réduction 30% scope 1+2 d\'ici 2030',
+    )
+    expect(result?.raw_record?.consultant_accompagnant).toBe('Greenly')
+  })
+
+  it('GLN-066 — raw_record correspond au bilan le plus récent quand plusieurs années sont retournées', async () => {
+    const fetchMock = vi.fn(async () =>
+      makeJsonResponse({
+        results: [
+          {
+            siren_principal: 542065479,
+            raison_sociale: 'PSA',
+            annee_de_reporting: 2020,
+            date_de_publication: '2021-06-01',
+            id: 'uuid-2020',
+            methodologie: 'GHG Protocol',
+          },
+          {
+            siren_principal: 542065479,
+            raison_sociale: 'PSA',
+            annee_de_reporting: 2023,
+            date_de_publication: '2024-01-15',
+            id: 'uuid-2023',
+            methodologie: 'Bilan Carbone',
+            emissions_scope_3: 9999,
+          },
+        ],
+        total: 2,
+      }),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    const result = await verifierBegesAdeme('542065479')
+    expect(result?.annee_reporting).toBe(2023)
+    // Le raw_record exposé doit être celui du bilan le plus récent (2023).
+    expect(result?.raw_record?.methodologie).toBe('Bilan Carbone')
+    expect(result?.raw_record?.emissions_scope_3).toBe(9999)
+  })
+
   it('skip les records malformés sans casser (id manquant dans la liste)', async () => {
     const fetchMock = vi.fn(async () =>
       makeJsonResponse({

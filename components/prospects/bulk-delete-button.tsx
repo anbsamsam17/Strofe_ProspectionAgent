@@ -44,7 +44,7 @@ interface BulkDeleteButtonProps {
 const CONFIRM_WORD = 'SUPPRIMER'
 
 const STATUS_LABELS_FR: Record<string, string> = {
-  sourced: 'Pas de contact identifié',
+  sourced: 'Nouveau',
   qualified: 'Qualifié',
   contacted: 'Contacté',
   interested: 'Intéressé',

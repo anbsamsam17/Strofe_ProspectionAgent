@@ -6,6 +6,7 @@
 // ============================================================
 
 import { NextRequest, NextResponse } from 'next/server'
+import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { createClient } from '@/lib/supabase/server'
@@ -102,6 +103,11 @@ export async function PATCH(req: NextRequest) {
       { status: 404 },
     )
   }
+
+  // Sprint 3 retour client #18 — Invalider le cache RSC de /notifications pour
+  // que router.refresh() côté client reflète immediatement la disparition de la
+  // relance traitée (sans rester sur le snapshot precedent).
+  revalidatePath('/notifications')
 
   return NextResponse.json({ data: { dismissed: true } }, { status: 200 })
 }

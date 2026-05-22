@@ -45,8 +45,26 @@ const navItems: NavItem[] = [
     ),
   },
   {
+    // Sprint 3 retour client #14 — vue calendrier mois/semaine (FullCalendar)
+    // des rappels (prospect_exchanges.callback_date). Distincte de la page
+    // /notifications qui est une liste chronologique des relances à faire.
+    href: '/calendar',
+    label: 'Calendrier',
+    icon: (
+      <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+        <line x1="16" y1="2" x2="16" y2="6" />
+        <line x1="8" y1="2" x2="8" y2="6" />
+        <line x1="3" y1="10" x2="21" y2="10" />
+        <line x1="8" y1="14" x2="10" y2="14" />
+        <line x1="14" y1="14" x2="16" y2="14" />
+        <line x1="8" y1="18" x2="10" y2="18" />
+      </svg>
+    ),
+  },
+  {
     href: '/notifications',
-    label: 'Calendrier de suivi',
+    label: 'Notifications',
     icon: (
       <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
         <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
@@ -69,9 +87,10 @@ const navItems: NavItem[] = [
   },
 ]
 
-// Indices de référence — Prospects + Pipeline + Glan + Calendrier en primary, Paramètres rendu à part.
-const PRIMARY_NAV_ITEMS = navItems.slice(0, 4)
-const SETTINGS_NAV_ITEM = navItems[4]
+// Indices de référence — Prospects + Pipeline + Glan + Calendrier de suivi +
+// Calendrier en primary, Paramètres rendu à part en bas.
+const PRIMARY_NAV_ITEMS = navItems.slice(0, 5)
+const SETTINGS_NAV_ITEM = navItems[5]
 
 export function Sidebar() {
   const pathname = usePathname()
@@ -200,7 +219,7 @@ export function Sidebar() {
         </div>
       </aside>
 
-      {/* ── Navigation mobile en bas — 5 entrées (Prospects, Pipeline, Glan, Calendrier, Paramètres) ── */}
+      {/* ── Navigation mobile en bas — 6 entrées (Prospects, Pipeline, Glan, Calendrier de suivi, Calendrier, Paramètres) ── */}
       <nav
         className="fixed bottom-0 left-0 right-0 z-40 flex items-stretch border-t border-white/[0.08] bg-black/60 backdrop-blur-xl lg:hidden"
         style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}

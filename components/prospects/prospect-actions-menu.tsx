@@ -14,12 +14,17 @@ interface ProspectActionsMenuProps {
 const STATUS_OPTIONS: { value: ProspectStatus; label: string; dot: string }[] = [
   { value: 'sourced', label: 'Sourcé', dot: 'bg-gray-400' },
   { value: 'qualified', label: 'Qualifié', dot: 'bg-blue-500' },
+  // Migration 028 — entre 'qualified' et 'contacted'. Cyan = décision humaine.
+  { value: 'to_contact', label: 'À contacter', dot: 'bg-cyan-400' },
   { value: 'contacted', label: 'Contacté', dot: 'bg-yellow-500' },
   { value: 'interested', label: 'Intéressé', dot: 'bg-green-500' },
   { value: 'rdv', label: 'RDV', dot: 'bg-purple-500' },
+  // GLN — Sprint 3 retour client #6 : statuts manquants ajoutés à la liste UI.
+  { value: 'offer_sent', label: 'Offre envoyée', dot: 'bg-indigo-500' },
   { value: 'converted', label: 'Converti', dot: 'bg-emerald-500' },
   { value: 'rejected', label: 'Rejeté', dot: 'bg-red-500' },
   { value: 'on_hold', label: 'En pause', dot: 'bg-orange-500' },
+  { value: 'do_not_contact', label: 'Ne pas contacter', dot: 'bg-gray-700' },
 ]
 
 // Statuts dont la suppression directe est interdite côté API (cf. route DELETE).

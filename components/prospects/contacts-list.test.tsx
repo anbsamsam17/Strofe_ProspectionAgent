@@ -32,6 +32,16 @@ vi.mock('./enrich-contact-button', () => ({
   ),
 }))
 
+// Mock VerifyEmailButton (GLN-062) — même raison : useRouter requis pour
+// router.refresh() après vérification.
+vi.mock('./verify-email-button', () => ({
+  VerifyEmailButton: ({ contactId }: { contactId: string }) => (
+    <button type="button" data-testid={`verify-email-mock-${contactId}`}>
+      Vérifier
+    </button>
+  ),
+}))
+
 import { ContactsList, type ProspectContact } from './contacts-list'
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────

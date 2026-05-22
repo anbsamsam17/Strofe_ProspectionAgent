@@ -26,8 +26,11 @@ interface PipelinePageProps {
 // - `rdv` (legacy) reste en DB mais n'est plus exposé comme colonne distincte ;
 //   à terme on pourra requalifier ces prospects en `interested`.
 const PIPELINE_COLUMNS: { status: KanbanStatus; label: string; color: string }[] = [
-  { status: 'sourced', label: 'Pas de contact identifié', color: 'gray' },
+  { status: 'sourced', label: 'Nouveau', color: 'gray' },
   { status: 'qualified', label: 'Qualifié', color: 'blue' },
+  // Migration 028 : 'À contacter' — décision humaine d'amorce, entre
+  // 'qualified' (qualif auto agent) et 'contacted' (1er contact effectué).
+  { status: 'to_contact', label: 'À contacter', color: 'cyan' },
   { status: 'contacted', label: 'Contacté', color: 'yellow' },
   { status: 'interested', label: 'Intéressé', color: 'green' },
   { status: 'offer_sent', label: 'Offre envoyée', color: 'indigo' },
@@ -48,6 +51,7 @@ const PIPELINE_COLUMNS: { status: KanbanStatus; label: string; color: string }[]
 const KANBAN_STATUSES: ProspectStatus[] = [
   'sourced',
   'qualified',
+  'to_contact',
   'contacted',
   'interested',
   'rdv',
@@ -65,6 +69,8 @@ const KANBAN_STATUSES: ProspectStatus[] = [
 const ALL_STATUSES: readonly ProspectStatus[] = [
   'sourced',
   'qualified',
+  // Migration 028 : décision humaine d'amorce.
+  'to_contact',
   'contacted',
   'interested',
   'rdv',
@@ -120,11 +126,15 @@ async function fetchPipelineData(): Promise<PipelineData> {
   //
   // 9 counts head exact + 1 fetch prospects = 10 round-trips en parallèle.
 
+  // Sprint 3 retour client #13 — Exclure les prospects archivés du pipeline
+  // (Kanban + funnel) pour rester cohérent avec la liste /prospects. Les archivés
+  // restent comptabilisés dans /archives et accessibles via la fiche.
   const countPromises = ALL_STATUSES.map((statut) =>
     supabase
       .from('prospects')
       .select('id', { count: 'exact', head: true })
       .eq('statut', statut)
+      .is('archived_at', null)
       .then((res) => ({ statut, count: res.count ?? 0, error: res.error })),
   )
 
@@ -133,6 +143,7 @@ async function fetchPipelineData(): Promise<PipelineData> {
       .from('prospects')
       .select('*')
       .in('statut', KANBAN_STATUSES)
+      .is('archived_at', null)
       .order('score_priorite', { ascending: false })
       .range(0, KANBAN_DISPLAY_LIMIT - 1),
     ...countPromises,

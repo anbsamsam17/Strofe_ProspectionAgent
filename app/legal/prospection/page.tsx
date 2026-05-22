@@ -24,24 +24,37 @@ export default function ProspectionLegalPage() {
         </header>
 
         <section className="space-y-8 text-gray-200 leading-relaxed">
+          {/* TODO(GLN-001): infos juridiques à valider par juriste avant déploiement prod */}
           <div>
             <h2 className="mb-3 text-xl font-semibold text-white">
               1. Responsable du traitement
             </h2>
             <p>
               Le présent service de prospection commerciale est édité par{' '}
-              <strong className="text-white">STROFE</strong> (à compléter : forme
-              juridique, SIREN, siège). Pour toute question relative à vos
-              données, contactez notre DPO à l&apos;adresse{' '}
-              {/* TODO: email DPO à remplir */}
-              <a
-                href="mailto:dpo@strofe.fr"
-                className="text-cyan-400 underline hover:text-cyan-300"
-              >
-                dpo@strofe.fr
-              </a>
-              .
+              <strong className="text-white">STROFE</strong>.
             </p>
+            <ul className="mt-3 list-inside list-disc space-y-1.5 text-gray-300">
+              <li>
+                Forme juridique :{' '}
+                <span className="text-gray-400">[à valider juriste]</span>
+              </li>
+              <li>
+                SIREN : <span className="text-gray-400">[à finaliser]</span>
+              </li>
+              <li>
+                Siège social :{' '}
+                <span className="text-gray-400">[à finaliser]</span>
+              </li>
+              <li>
+                Contact référent données personnelles :{' '}
+                <a
+                  href="mailto:contact@strofe.fr"
+                  className="text-cyan-400 underline hover:text-cyan-300"
+                >
+                  contact@strofe.fr
+                </a>
+              </li>
+            </ul>
           </div>
 
           <div>
@@ -215,10 +228,10 @@ export default function ProspectionLegalPage() {
             <p className="mt-4">
               Pour exercer ces droits, envoyez un email à{' '}
               <a
-                href="mailto:dpo@strofe.fr"
+                href="mailto:contact@strofe.fr"
                 className="text-cyan-400 underline hover:text-cyan-300"
               >
-                dpo@strofe.fr
+                contact@strofe.fr
               </a>{' '}
               en précisant votre demande. Nous répondrons dans un délai de 30
               jours maximum.

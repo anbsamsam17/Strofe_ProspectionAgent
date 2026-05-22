@@ -9,6 +9,7 @@ import type {
   SireneEtablissement,
   SireneResponse,
 } from '@/lib/types'
+import { isDecret2022Compliant } from './decret-2022'
 
 // ------------------------------------------------------------
 // ERREURS TYPÉES
@@ -346,6 +347,11 @@ interface AdemeBegesRawRecord {
 /**
  * Type enrichi pour usage interne : contient les champs supplémentaires
  * renvoyés par l'API Data Fair (contact, URL bilan, validité).
+ *
+ * Le champ `raw_record` (GLN-066) contient l'INTÉGRALITÉ de la ligne ADEME
+ * Data Fair pour permettre l'exploitation downstream de tous les champs
+ * (emissions scope 1/2/3, methodologie, plan_action, consultant_accompagnant…)
+ * sans devoir relancer un fetch ADEME.
  */
 interface AdemeBegesEnrichi {
   siren: string
@@ -359,6 +365,14 @@ interface AdemeBegesEnrichi {
   fonction?: string
   /** Email du responsable */
   courriel?: string
+  /**
+   * Record JSON brut retourné par l'API Data Fair pour ce bilan
+   * (GLN-066). Conservé tel quel pour exploitation downstream
+   * (Décret 2022-982, intensité carbone, détection concurrence…).
+   * Inclut typiquement : emissions_scope_1/2/3, methodologie, perimetre,
+   * objectifs_reduction, plan_action, consultant_accompagnant.
+   */
+  raw_record?: Record<string, unknown>
 }
 
 
@@ -1082,6 +1096,12 @@ interface RechercheEntreprisesResult {
   activite_principale: string
   tranche_effectif_salarie: string
   etat_administratif: string
+  /**
+   * Categorie juridique INSEE (4 chiffres) — utile pour la detection des
+   * personnes morales de droit public (validite BEGES 3 ans vs 4 ans prive).
+   * Cf. GLN-005 / Decret 2022-982.
+   */
+  nature_juridique?: string
 }
 
 /**
@@ -1234,6 +1254,9 @@ export async function sourcerEntreprisesFallback(
           libelleCommuneEtablissement: r.siege.libelle_commune,
           activitePrincipaleEtablissement: r.siege.activite_principale || r.activite_principale,
           trancheEffectifsEtablissement: r.siege.tranche_effectif_salarie || r.tranche_effectif_salarie,
+          // Recherche Entreprises expose `nature_juridique` (code INSEE 4 chiffres)
+          // au niveau de l'entreprise — necessaire pour la regle GLN-005.
+          categorieJuridiqueUniteLegale: r.nature_juridique,
           etatAdministratifEtablissement: 'A',
           adresseEtablissement: {
             libelleVoieEtablissement: r.siege.adresse,
@@ -1417,7 +1440,7 @@ export async function verifierBegesAdeme(siren: string): Promise<AdemeBegesEnric
     return null
   }
 
-  let data: { results?: AdemeBegesRawRecord[]; total?: number }
+  let data: { results?: unknown[]; total?: number }
   try {
     data = await response.json()
   } catch {
@@ -1429,17 +1452,33 @@ export async function verifierBegesAdeme(siren: string): Promise<AdemeBegesEnric
     return null
   }
 
-  // Normalisation + filtrage strict sur siren_principal (coerce int → string).
+  // GLN-066 — On conserve les records bruts EN PARALLÈLE de la normalisation
+  // pour pouvoir récupérer le payload Data Fair complet (tous les champs
+  // exposés par l'API, y compris ceux non typés dans AdemeBegesRawRecord :
+  // emissions_scope_1/2/3, methodologie, plan_action, etc.).
+  // Stratégie : on normalise pour le filtrage SIREN strict, mais on garde
+  // le mapping idx→raw pour ressortir le record brut du bilan choisi.
+  const rawRecords: Array<Record<string, unknown>> = []
+  const normalized: Array<{ rec: AdemeBegesDataFairRecord; raw: Record<string, unknown> }> = []
+  for (const rawUnknown of results) {
+    if (typeof rawUnknown !== 'object' || rawUnknown === null) continue
+    const raw = rawUnknown as Record<string, unknown>
+    rawRecords.push(raw)
+    // Normalisation typée : passe par AdemeBegesRawRecord pour récupérer les
+    // champs identifiants/contact strictement validés.
+    const rec = normalizeAdemeRecord(raw as AdemeBegesRawRecord)
+    if (rec !== null) {
+      normalized.push({ rec, raw })
+    }
+  }
+
+  // Filtrage strict sur siren_principal (coerce int → string).
   // Plus de fallback "premier résultat" : si aucun match exact, on retourne null
   // (évite de stocker une URL BEGES qui pointe vers une autre entreprise — cf.
   // bug 2026-05-14 rapporté par l'utilisateur).
-  const normalized = results
-    .map((r) => normalizeAdemeRecord(r))
-    .filter((r): r is AdemeBegesDataFairRecord => r !== null)
-
   const matches = normalized
-    .filter((r) => r.siren_principal === siren)
-    .sort((a, b) => b.annee_de_reporting - a.annee_de_reporting)
+    .filter((m) => m.rec.siren_principal === siren)
+    .sort((a, b) => b.rec.annee_de_reporting - a.rec.annee_de_reporting)
 
   if (matches.length === 0) {
     // Aucun bilan ne correspond exactement au SIREN demandé. Log discret pour
@@ -1458,7 +1497,7 @@ export async function verifierBegesAdeme(siren: string): Promise<AdemeBegesEnric
     return null
   }
 
-  const record = matches[0]
+  const { rec: record, raw: rawRecord } = matches[0]
 
   return {
     siren: record.siren_principal,
@@ -1469,6 +1508,7 @@ export async function verifierBegesAdeme(siren: string): Promise<AdemeBegesEnric
     responsable_du_suivi: record.responsable_du_suivi || undefined,
     fonction: record.fonction || undefined,
     courriel: record.courriel || undefined,
+    raw_record: rawRecord,
   }
 }
 
@@ -1557,6 +1597,63 @@ export async function rechercherTelephone(siren: string): Promise<string | null>
 }
 
 // ------------------------------------------------------------
+// HELPERS — DOM-TOM (L229-25 alinea 1)
+// ------------------------------------------------------------
+
+/**
+ * Prefixes de codes postaux des departements et collectivites d'outre-mer.
+ * L'Article L.229-25 du Code de l'environnement impose le BEGES aux
+ * personnes morales de droit prive de plus de 250 salaries en outre-mer
+ * (vs 500 en metropole).
+ *
+ * Couvre :
+ * - 971 Guadeloupe, 972 Martinique, 973 Guyane, 974 La Reunion, 976 Mayotte
+ * - 975 Saint-Pierre-et-Miquelon, 977 Saint-Barthelemy, 978 Saint-Martin
+ * - 986 Wallis-et-Futuna, 987 Polynesie francaise, 988 Nouvelle-Caledonie
+ */
+const DOM_POSTAL_PREFIXES = /^(971|972|973|974|975|976|977|978|98[678])/
+
+function isDomTom(codePostal: string | null | undefined): boolean {
+  return !!codePostal && DOM_POSTAL_PREFIXES.test(codePostal)
+}
+
+// Tranches INSEE — seuils BEGES :
+// - tranche 32 = 250-499 salaries (seuil DOM-TOM)
+// - tranche 41 = 500-999 salaries (seuil metropole)
+// Source : https://www.sirene.fr/sirene/public/variable/trancheEffectifsUniteLegale
+const BEGES_TRANCHE_MIN_METROPOLE = 41
+const BEGES_TRANCHE_MIN_DOM_TOM = 32
+
+// ------------------------------------------------------------
+// HELPERS — ENTITE PUBLIQUE (Decret 2022-982)
+// ------------------------------------------------------------
+
+/**
+ * Detecte si une categorie juridique INSEE correspond a une personne morale
+ * de droit public.
+ *
+ * Categories cibles (premier chiffre = 7) :
+ * - 71xx : administrations d'Etat (services centraux, services deconcentres...)
+ * - 72xx : collectivites territoriales (communes, departements, regions...)
+ * - 73xx : etablissements publics administratifs (universites, hopitaux...)
+ * - 74xx : autres personnes morales de droit public (groupements, OPH...)
+ *
+ * Reference : https://www.insee.fr/fr/information/2028129
+ */
+function isEntitePublique(categorieJuridique: string | null | undefined): boolean {
+  if (!categorieJuridique) return false
+  return /^7[1234]/.test(categorieJuridique)
+}
+
+/**
+ * Duree de validite du BEGES en annees.
+ * - 3 ans : personne morale de droit public (Decret 2022-982)
+ * - 4 ans : personne morale de droit prive (Art. L229-25 et al.)
+ */
+const BEGES_VALIDITE_PRIVE_ANS = 4
+const BEGES_VALIDITE_PUBLIC_ANS = 3
+
+// ------------------------------------------------------------
 // ENRICHISSEMENT PROSPECT
 // ------------------------------------------------------------
 
@@ -1564,13 +1661,34 @@ export async function rechercherTelephone(siren: string): Promise<string | null>
  * Convertit un établissement Sirene en un objet Prospect partiel.
  * Appelle ADEME pour le statut BEGES.
  * Détermine l'obligation BEGES selon la tranche d'effectifs.
+ *
+ * Seuil obligation BEGES (Art. L229-25 Code de l'environnement) :
+ * - Métropole : ≥ 500 salariés (tranche INSEE ≥ 41)
+ * - DOM-TOM (CP 971-978, 986-988) : ≥ 250 salariés (tranche INSEE ≥ 32)
+ *
+ * Validité BEGES (Décret 2022-982) :
+ * - Privé (cat. juridique INSEE != 71xx-74xx) : 4 ans
+ * - Public (cat. juridique INSEE 71xx-74xx)   : 3 ans
  */
 export async function enrichirProspect(
   etab: SireneEtablissement,
 ): Promise<Partial<Prospect>> {
-  // Tranche 41 correspond à 500-999 salariés — seuil obligation BEGES (≥ 500)
   const tranche = parseInt(etab.trancheEffectifsEtablissement ?? '0', 10)
-  const obligationBeges = tranche >= 41
+
+  // Code postal pour determination DOM-TOM (necessite pour seuil BEGES applicable)
+  const codePostal =
+    etab.codePostalEtablissement ??
+    etab.adresseEtablissement?.codePostalEtablissement ??
+    null
+
+  const trancheMin = isDomTom(codePostal)
+    ? BEGES_TRANCHE_MIN_DOM_TOM
+    : BEGES_TRANCHE_MIN_METROPOLE
+  const obligationBeges = tranche >= trancheMin
+
+  // Detection entite publique via categorie juridique INSEE (prefixes 71xx-74xx).
+  // Determine la duree de validite du BEGES (3 ans vs 4 ans). Cf. Decret 2022-982.
+  const entitePublique = isEntitePublique(etab.categorieJuridiqueUniteLegale)
 
   // Résolution des effectifs min/max depuis la tranche INSEE
   const { effectifMin, effectifMax } = trancheToEffectif(tranche)
@@ -1608,12 +1726,16 @@ export async function enrichirProspect(
     )
   }
 
-  // Calcul de la validité BEGES : un BEGES est valide si son année de reporting
-  // est dans les 4 dernières années (obligation de renouvellement quadriennal).
-  // Ex: en 2026, un BEGES de 2022 est encore valide, un de 2021 ne l'est plus.
+  // Calcul de la validité BEGES (Decret 2022-982) :
+  // - Prive : un BEGES est valide si annee_reporting >= currentYear - 4 (4 ans).
+  // - Public : annee_reporting >= currentYear - 3 (3 ans).
+  // Ex: en 2026, prive → 2022+, public → 2023+.
   const currentYear = new Date().getFullYear()
+  const validitePeriode = entitePublique
+    ? BEGES_VALIDITE_PUBLIC_ANS
+    : BEGES_VALIDITE_PRIVE_ANS
   const begesValide = begesAdeme !== null
-    ? begesAdeme.annee_reporting >= currentYear - 4
+    ? begesAdeme.annee_reporting >= currentYear - validitePeriode
     : undefined
 
   // Enrichissement téléphone : tentative via Recherche Entreprises (open data).
@@ -1646,12 +1768,20 @@ export async function enrichirProspect(
       : undefined,
     beges_url: begesAdeme?.url_bilan ?? undefined,
     beges_valide: begesValide,
+    // GLN-066 — record ADEME Data Fair complet (JSONB DB). Exploité par
+    // lib/agent/decret-2022.ts (Décret 2022-982), scoring sectoriel, détection
+    // concurrence, etc.
+    bilan_ges_data: begesAdeme?.raw_record ?? undefined,
+    // GLN-006 — Conformité Décret 2022-982 (scope 3 + plan d'action).
+    // `null` quand non applicable (pré-2023, pas de BEGES, ou data incomplète).
+    beges_decret_2022_compliant: isDecret2022Compliant(begesAdeme?.raw_record ?? null),
     // Enrichissement contact depuis les données ADEME + téléphone Recherche Entreprises
     contact_nom: begesAdeme?.responsable_du_suivi ?? undefined,
     contact_poste: begesAdeme?.fonction ?? undefined,
     contact_email: begesAdeme?.courriel ?? undefined,
     contact_telephone: contactTelephone ?? undefined,
     obligation_beges: obligationBeges,
+    entite_publique: entitePublique,
     source: 'sirene_api',
     signaux: [],
   }

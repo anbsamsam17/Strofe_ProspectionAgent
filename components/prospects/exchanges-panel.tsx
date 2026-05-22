@@ -1,4 +1,7 @@
+import Link from 'next/link'
+
 import type { CallResult } from '@/lib/types'
+import { EditExchangeDialog } from './edit-exchange-dialog'
 import { NewExchangeDialog } from './new-exchange-dialog'
 
 // ── Types locaux ──────────────────────────────────────────────────────────────
@@ -34,6 +37,12 @@ interface CallHistoryItem {
 // Item normalisé pour l'affichage unifié (exchange OU appel).
 interface TimelineItem {
   key: string
+  /**
+   * ID brut du document source (prospect_exchanges.id pour les échanges,
+   * daily_list_items.id pour les appels legacy). Nécessaire pour permettre
+   * l'édition inline d'un échange via PATCH (Sprint 3 #11).
+   */
+  sourceId: string
   occurred_at: string
   type: ExchangeType
   result: string | null
@@ -195,6 +204,7 @@ export function ExchangesPanel({ prospectId, exchanges, calls }: ExchangesPanelP
   const timeline: TimelineItem[] = [
     ...exchanges.map<TimelineItem>((ex) => ({
       key: `ex-${ex.id}`,
+      sourceId: ex.id,
       occurred_at: ex.occurred_at,
       type: ex.type,
       result: ex.result,
@@ -204,6 +214,7 @@ export function ExchangesPanel({ prospectId, exchanges, calls }: ExchangesPanelP
     })),
     ...calls.map<TimelineItem>((c) => ({
       key: `call-${c.id}`,
+      sourceId: c.id,
       occurred_at: c.called_at,
       type: 'appel',
       result: c.call_result,
@@ -259,9 +270,57 @@ export function ExchangesPanel({ prospectId, exchanges, calls }: ExchangesPanelP
                         </span>
                       )}
                       {item.callback_date && (
-                        <span className="inline-flex items-center gap-1 rounded-full bg-blue-500/15 px-2.5 py-0.5 text-xs font-medium text-blue-200 ring-1 ring-blue-500/25">
-                          Rappel le {formatShortDate(item.callback_date)}
-                        </span>
+                        // Sprint 3 retour client #12 — date cliquable qui
+                        // ouvre la vue calendrier sur le rappel concerne
+                        // (focus via ?focus=<exchange.id>). L'edition via le
+                        // crayon a cote reste accessible pour modifier in
+                        // place sans changer de page.
+                        item.source === 'exchange' ? (
+                          <Link
+                            href={`/calendar?focus=${item.sourceId}`}
+                            title="Ouvrir dans le calendrier"
+                            className="inline-flex items-center gap-1 rounded-full bg-blue-500/15 px-2.5 py-0.5 text-xs font-medium text-blue-200 ring-1 ring-blue-500/25 transition-colors hover:bg-blue-500/25 hover:text-blue-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-400/50"
+                          >
+                            <svg
+                              xmlns="http://www.w3.org/2000/svg"
+                              width="10"
+                              height="10"
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="2"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              aria-hidden="true"
+                            >
+                              <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+                              <line x1="16" y1="2" x2="16" y2="6" />
+                              <line x1="8" y1="2" x2="8" y2="6" />
+                              <line x1="3" y1="10" x2="21" y2="10" />
+                            </svg>
+                            Rappel le {formatShortDate(item.callback_date)}
+                          </Link>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-blue-500/15 px-2.5 py-0.5 text-xs font-medium text-blue-200 ring-1 ring-blue-500/25">
+                            Rappel le {formatShortDate(item.callback_date)}
+                          </span>
+                        )
+                      )}
+                      {/* Sprint 3 #11 — édition inline d'un échange manuel (prospect_exchanges).
+                          Pas exposé pour les items legacy `source==='call'` (table
+                          daily_list_items droppée post-pivot, plus rien à éditer). */}
+                      {item.source === 'exchange' && (
+                        <EditExchangeDialog
+                          prospectId={prospectId}
+                          exchange={{
+                            id: item.sourceId,
+                            occurred_at: item.occurred_at,
+                            type: item.type,
+                            result: item.result,
+                            notes: item.notes,
+                            callback_date: item.callback_date,
+                          }}
+                        />
                       )}
                     </div>
                     {item.notes && (

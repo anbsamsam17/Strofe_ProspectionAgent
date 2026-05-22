@@ -189,5 +189,45 @@ export async function POST(
     )
   }
 
+  // Sprint 3 retour client #9 — Auto-promotion vers 'contacted' au 1er échange
+  // réel (appel/email/linkedin). Garde-fou strict : on NE régresse JAMAIS un
+  // statut avancé (interested/rdv/offer_sent/converted/rejected/on_hold/
+  // do_not_contact restent intouchés). Best-effort : si la lecture du statut
+  // ou l'update échoue, on log mais on ne casse pas la réponse 201.
+  const PROMOTABLE_FROM: ReadonlyArray<string> = [
+    'sourced',
+    'qualified',
+    'to_contact',
+  ]
+  const PROMOTABLE_TYPES: ReadonlyArray<string> = [
+    'appel',
+    'email',
+    'linkedin',
+  ]
+  if (PROMOTABLE_TYPES.includes(parsed.data.type)) {
+    const { data: currentProspect, error: readErr } = await supabase
+      .from('prospects')
+      .select('statut')
+      .eq('id', id)
+      .maybeSingle()
+    if (!readErr && currentProspect && PROMOTABLE_FROM.includes(currentProspect.statut)) {
+      const { error: promoteErr } = await supabase
+        .from('prospects')
+        .update({ statut: 'contacted' })
+        .eq('id', id)
+      if (promoteErr) {
+        console.error(
+          JSON.stringify({
+            module: 'exchanges-post',
+            level: 'warn',
+            msg: 'auto-promotion contacted failed (non-blocking)',
+            prospect_id: id,
+            error: promoteErr.message,
+          }),
+        )
+      }
+    }
+  }
+
   return NextResponse.json({ data: inserted }, { status: 201 })
 }

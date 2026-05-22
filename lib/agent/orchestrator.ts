@@ -21,6 +21,7 @@ import type {
   AgentRun,
   ProfileSettings,
 } from '@/lib/types'
+import { checkBlacklistedDomains } from './blacklist-checker'
 import { enrichirContact, getCreditsUsed } from './contact-enrichment'
 import { isProfessionalEmail } from './email-is-pro'
 import { filterOptedOutSirens } from './opt-out-checker'
@@ -968,6 +969,41 @@ export async function runAgentNocturne(
     await updateRunInDB(run, supabaseAdmin)
   } catch (err) {
     log(run, 'contact_enrichment', 'Enrichissement contacts échoué — pipeline non bloqué', 'warn', {
+      error: err instanceof Error ? err.message : String(err),
+    })
+  }
+
+  // --------------------------------------------------------
+  // PHASE 4.25 : BLACKLIST DOMAINES (GLN-061)
+  // Phase NON-FATALE — post-enrichment, on bascule en `do_not_contact`
+  // les prospects dont le contact_email matche un domaine blacklisté par
+  // l'utilisateur (clients existants, concurrents).
+  // Skippe silencieusement si migration 021 absente.
+  // --------------------------------------------------------
+  try {
+    run.phase = 'blacklist_check'
+    const blacklistResult = await checkBlacklistedDomains(run.user_id, supabaseAdmin)
+    if (blacklistResult.skipped) {
+      log(run, 'blacklist_check', 'Blacklist domaines skippée', 'info', {
+        reason: blacklistResult.skipReason,
+      })
+    } else {
+      log(
+        run,
+        'blacklist_check',
+        `${blacklistResult.matched} prospect(s) basculé(s) en do_not_contact via blacklist domaine`,
+        'info',
+        {
+          matched: blacklistResult.matched,
+          domains: Array.from(
+            new Set(blacklistResult.matches.map((m) => m.matched_domain)),
+          ),
+        },
+      )
+    }
+    await updateRunInDB(run, supabaseAdmin)
+  } catch (err) {
+    log(run, 'blacklist_check', 'Blacklist domaines échoué — pipeline non bloqué', 'warn', {
       error: err instanceof Error ? err.message : String(err),
     })
   }
