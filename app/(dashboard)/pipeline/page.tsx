@@ -120,11 +120,15 @@ async function fetchPipelineData(): Promise<PipelineData> {
   //
   // 9 counts head exact + 1 fetch prospects = 10 round-trips en parallèle.
 
+  // Sprint 3 retour client #13 — Exclure les prospects archivés du pipeline
+  // (Kanban + funnel) pour rester cohérent avec la liste /prospects. Les archivés
+  // restent comptabilisés dans /archives et accessibles via la fiche.
   const countPromises = ALL_STATUSES.map((statut) =>
     supabase
       .from('prospects')
       .select('id', { count: 'exact', head: true })
       .eq('statut', statut)
+      .is('archived_at', null)
       .then((res) => ({ statut, count: res.count ?? 0, error: res.error })),
   )
 
@@ -133,6 +137,7 @@ async function fetchPipelineData(): Promise<PipelineData> {
       .from('prospects')
       .select('*')
       .in('statut', KANBAN_STATUSES)
+      .is('archived_at', null)
       .order('score_priorite', { ascending: false })
       .range(0, KANBAN_DISPLAY_LIMIT - 1),
     ...countPromises,
