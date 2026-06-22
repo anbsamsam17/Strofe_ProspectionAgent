@@ -1,0 +1,57 @@
+# Dependabot — mises a jour automatiques des dependances
+# Doc : https://docs.github.com/code-security/dependabot/dependabot-version-updates
+version: 2
+
+updates:
+  # --- Dependances npm (racine du repo) ---
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "Europe/Paris"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "npm"
+    commit-message:
+      prefix: "deps"
+      prefix-development: "deps-dev"
+      include: "scope"
+    # Regroupe les mises a jour patch/minor pour limiter le nombre de PR.
+    # Les majors restent en PR individuelles (revue manuelle requise).
+    groups:
+      npm-patch:
+        applies-to: version-updates
+        update-types:
+          - "patch"
+      npm-minor:
+        applies-to: version-updates
+        update-types:
+          - "minor"
+
+  # --- Actions GitHub utilisees dans les workflows (.github/workflows) ---
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "Europe/Paris"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "github-actions"
+    commit-message:
+      prefix: "ci"
+      include: "scope"
+    groups:
+      actions-patch:
+        applies-to: version-updates
+        update-types:
+          - "patch"
+      actions-minor:
+        applies-to: version-updates
+        update-types:
+          - "minor"
