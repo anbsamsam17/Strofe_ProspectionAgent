@@ -164,9 +164,25 @@ flowchart TB
 
 ## 🖼️ Aperçu
 
-> _Captures à venir (anonymisées) — voir `docs/screenshots/`._
->
-> Les écrans du CRM contiennent des données clients réelles : aucune capture n'est commitée.
+> Captures de l'application en production. Les entreprises affichées sont des données **publiques** (base SIRENE/INSEE), aucune donnée confidentielle client.
+
+### Prospects scorés & filtrés
+
+![Liste des prospects avec scoring 0-100, filtres par statut/secteur et conformité BEGES](docs/screenshots/prospects-scoring.png)
+
+*Sortie du pipeline de sourcing : prospects qualifiés, score IA 0-100, statut BEGES (échéance d'obligation), 10 statuts CRM et filtres composables.*
+
+### Tableau de bord pipeline
+
+![Tableau de bord du pipeline commercial : KPIs de conversion par étape](docs/screenshots/pipeline-dashboard.png)
+
+*Analytics du pipeline : volume de prospects, taux de qualification, temps de traitement, valeur prévisionnelle.*
+
+### Notifications & relances
+
+![Centre de notifications : relances email et rappels d'appels planifiés](docs/screenshots/notifications.png)
+
+*Suivi commercial : relances email, rappels d'appels et planification au calendrier.*
 
 ---
 
