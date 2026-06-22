@@ -65,8 +65,9 @@ describe('StatusDropdown — ouverture menu', () => {
 
     expect(trigger).toHaveAttribute('aria-expanded', 'true')
     expect(screen.getByRole('listbox', { name: /Sélectionner un statut CRM/i })).toBeInTheDocument()
-    // 9 statuts disponibles dans le menu (8 historiques + do_not_contact mig.017).
-    expect(screen.getAllByRole('option')).toHaveLength(9)
+    // 10 statuts disponibles dans le menu : 8 historiques + do_not_contact (mig.017)
+    // + to_contact (mig.028 — "À contacter", décision humaine d'amorce).
+    expect(screen.getAllByRole('option')).toHaveLength(10)
   })
 
   it('expose l\'option "Ne pas contacter" (statut do_not_contact, mig. 017)', () => {

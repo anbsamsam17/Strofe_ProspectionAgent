@@ -6,10 +6,23 @@ import { describe, it, expect } from 'vitest'
 import { buildBegesUrl } from '../beges-url'
 
 describe('buildBegesUrl', () => {
-  it('retourne l\'URL stockée si elle pointe vers une fiche bilans-ges', () => {
+  // Stratégie validée 2026-05-22 (commits da69b0c + 54578ea) : quand un SIREN
+  // valide est disponible, la recherche `/bilans?q=<SIREN>` est PRIORITAIRE sur
+  // le `beges_url` stocké (UUID CKAN legacy pré-2026 souvent obsolète depuis la
+  // migration ADEME janvier 2026). Le beges_url stocké n'est utilisé qu'en
+  // dernier recours, faute de SIREN exploitable (cf. test dédié plus bas).
+  it('priorise la recherche SIREN sur le beges_url stocké quand le SIREN est valide', () => {
     const url = buildBegesUrl({
       beges_url: 'https://bilans-ges.ademe.fr/bilans/abc123',
       siren: '123456789',
+    })
+    expect(url).toBe('https://bilans-ges.ademe.fr/bilans?q=123456789')
+  })
+
+  it('retourne le beges_url stocké en dernier recours (pas de SIREN exploitable)', () => {
+    const url = buildBegesUrl({
+      beges_url: 'https://bilans-ges.ademe.fr/bilans/abc123',
+      siren: '',
     })
     expect(url).toBe('https://bilans-ges.ademe.fr/bilans/abc123')
   })
@@ -71,11 +84,13 @@ describe('buildBegesUrl', () => {
     expect(url).toBeNull()
   })
 
-  it('accepte un autre domaine que bilans-ges si l\'URL semble être une fiche', () => {
-    // Permet à un usager de mettre une URL custom (rapport PDF, intranet, etc.)
+  it('accepte un autre domaine que bilans-ges en dernier recours (URL custom, pas de SIREN)', () => {
+    // Permet à un usager de mettre une URL custom (rapport PDF, intranet, etc.).
+    // N'est retournée que faute de SIREN exploitable : la recherche SIREN reste
+    // prioritaire quand un SIREN valide est présent (cf. stratégie 2026-05-22).
     const url = buildBegesUrl({
       beges_url: 'https://example.com/rapport-rse-2024.pdf',
-      siren: '123456789',
+      siren: '',
     })
     expect(url).toBe('https://example.com/rapport-rse-2024.pdf')
   })

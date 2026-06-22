@@ -24,3 +24,33 @@ if (typeof window !== 'undefined' && !window.matchMedia) {
     dispatchEvent: vi.fn(),
   }))
 }
+
+// jsdom ne fournit pas `ResizeObserver` (utilisé par PipelineClient pour
+// recalculer la disposition des colonnes Kanban, ainsi que par plusieurs
+// primitives Radix/headless). Sans ce stub : `ResizeObserver is not defined`.
+if (typeof globalThis !== 'undefined' && !('ResizeObserver' in globalThis)) {
+  class ResizeObserverStub {
+    observe = vi.fn()
+    unobserve = vi.fn()
+    disconnect = vi.fn()
+  }
+  globalThis.ResizeObserver =
+    ResizeObserverStub as unknown as typeof ResizeObserver
+}
+
+// jsdom ne fournit pas non plus `IntersectionObserver` (gap classique) —
+// utilisé pour le lazy-loading / les animations à l'apparition. On stub
+// pour éviter `IntersectionObserver is not defined` en tests.
+if (typeof globalThis !== 'undefined' && !('IntersectionObserver' in globalThis)) {
+  class IntersectionObserverStub {
+    readonly root = null
+    readonly rootMargin = ''
+    readonly thresholds: ReadonlyArray<number> = []
+    observe = vi.fn()
+    unobserve = vi.fn()
+    disconnect = vi.fn()
+    takeRecords = vi.fn(() => [])
+  }
+  globalThis.IntersectionObserver =
+    IntersectionObserverStub as unknown as typeof IntersectionObserver
+}

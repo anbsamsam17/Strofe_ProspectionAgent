@@ -82,11 +82,11 @@ describe('ProspectsFilters — rendu nominal', () => {
     // Arrange + Act
     render(<ProspectsFilters {...defaultProps} />)
 
-    // Assert : 9 pills de statut présents (8 historiques + do_not_contact mig.017)
-    // Le fieldset utilise <legend>Statut</legend> — match exact pour éviter
-    // de matcher d'autres groups (ex. "Filtres rapides BEGES").
+    // Assert : 10 pills de statut présents : 8 historiques + do_not_contact (mig.017)
+    // + to_contact (mig.028 — "À contacter"). Le fieldset utilise <legend>Statut</legend>
+    // — match exact pour éviter de matcher d'autres groups (ex. "Filtres rapides BEGES").
     const statutGroup = screen.getByRole('group', { name: /^Statut$/i })
-    expect(within(statutGroup).getAllByRole('button')).toHaveLength(9)
+    expect(within(statutGroup).getAllByRole('button')).toHaveLength(10)
 
     // Assert : input secteur
     expect(screen.getByLabelText(/Secteur/i)).toBeInTheDocument()
