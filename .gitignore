@@ -96,3 +96,9 @@ presentation/
 .claude/worktrees/
 .claude/e3-orig-salvage/
 memory/sessions/
+
+# Scripts dev manipulant des credentials/tokens de test — hors repo public
+scripts/gen-session-tokens.mjs
+scripts/set-test-password.mjs
+scripts/gen-magic-link.mjs
+scripts/gen-confirm-url.mjs
