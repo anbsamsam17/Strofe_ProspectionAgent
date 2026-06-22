@@ -104,7 +104,12 @@ interface MockChainable {
 function makeMockSupabase(opts: {
   blacklistData: Array<{ domain: string }>
   blacklistError?: { message: string; code?: string }
-  prospectsData: Array<{ id: string; contact_email: string | null; statut: string }>
+  prospectsData: Array<{
+    id: string
+    contact_email: string | null
+    statut: string
+    notes?: string | null
+  }>
   prospectsError?: { message: string }
   updateError?: { message: string }
 }) {
@@ -191,7 +196,12 @@ describe('checkBlacklistedDomains', () => {
     const { supabase, updateCalls } = makeMockSupabase({
       blacklistData: [{ domain: 'greenly.earth' }],
       prospectsData: [
-        { id: 'p1', contact_email: 'alice@greenly.earth', statut: 'qualified' },
+        {
+          id: 'p1',
+          contact_email: 'alice@greenly.earth',
+          statut: 'qualified',
+          notes: 'RDV pris le 12/03 — rappeler en avril',
+        },
         { id: 'p2', contact_email: 'bob@autre.fr', statut: 'qualified' },
       ],
     })
@@ -203,6 +213,30 @@ describe('checkBlacklistedDomains', () => {
     expect(updateCalls[0].id).toBe('p1')
     expect(updateCalls[0].payload.statut).toBe('do_not_contact')
     expect(updateCalls[0].payload.notes).toContain('greenly.earth')
+    // Append : la note consultant existante doit être préservée (pas écrasée).
+    expect(updateCalls[0].payload.notes).toContain(
+      'RDV pris le 12/03 — rappeler en avril',
+    )
+    expect(updateCalls[0].payload.notes).toBe(
+      'RDV pris le 12/03 — rappeler en avril | Blacklist domaine: greenly.earth',
+    )
+  })
+
+  it('n\'ajoute pas de séparateur si le prospect n\'a pas de note existante', async () => {
+    const { supabase, updateCalls } = makeMockSupabase({
+      blacklistData: [{ domain: 'greenly.earth' }],
+      prospectsData: [
+        {
+          id: 'p1',
+          contact_email: 'alice@greenly.earth',
+          statut: 'qualified',
+          notes: null,
+        },
+      ],
+    })
+    const result = await checkBlacklistedDomains(USER_ID, supabase)
+    expect(result.matched).toBe(1)
+    expect(updateCalls[0].payload.notes).toBe('Blacklist domaine: greenly.earth')
   })
 
   it('matche en case-insensitive sur l\'email', async () => {

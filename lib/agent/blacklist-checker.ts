@@ -88,6 +88,7 @@ interface ProspectForCheck {
   id: string
   contact_email: string | null
   statut: string
+  notes: string | null
 }
 
 /**
@@ -155,7 +156,7 @@ export async function checkBlacklistedDomains(
   //    explicite via eq pour service_role).
   const prospectsQuery = await supabase
     .from('prospects')
-    .select('id, contact_email, statut')
+    .select('id, contact_email, statut, notes')
     .eq('user_id', userId)
     .is('archived_at', null)
     .not('contact_email', 'is', null)
@@ -170,6 +171,8 @@ export async function checkBlacklistedDomains(
 
   const prospects = (prospectsQuery.data ?? []) as ProspectForCheck[]
   const matches: BlacklistMatch[] = []
+  // Notes existantes par prospect, pour append (et non écrasement) à l'update.
+  const existingNotesById = new Map<string, string | null>()
 
   for (const p of prospects) {
     const domain = extractEmailDomain(p.contact_email)
@@ -180,6 +183,7 @@ export async function checkBlacklistedDomains(
         contact_email: p.contact_email!,
         matched_domain: domain,
       })
+      existingNotesById.set(p.id, p.notes)
     }
   }
 
@@ -195,11 +199,14 @@ export async function checkBlacklistedDomains(
   let updatedCount = 0
   for (const match of matches) {
     const noteSuffix = `Blacklist domaine: ${match.matched_domain}`
+    // Append à la note existante (consultant) au lieu de l'écraser.
+    const existingNotes = existingNotesById.get(match.prospect_id)
+    const mergedNotes = [existingNotes, noteSuffix].filter(Boolean).join(' | ')
     const { error: updateError } = await supabase
       .from('prospects')
       .update({
         statut: 'do_not_contact',
-        notes: noteSuffix,
+        notes: mergedNotes,
       })
       .eq('id', match.prospect_id)
 
