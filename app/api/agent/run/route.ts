@@ -14,11 +14,7 @@ import { createAdminClient, createClient } from '@/lib/supabase/server'
 import { runAgentNocturne } from '@/lib/agent/orchestrator'
 import { runSourcing } from '@/lib/agent/sourcing-runner'
 import type { AgentRun } from '@/lib/types'
-
-// TODO: Remplacer par import { isCronRequest } from '@/lib/auth/cron'
-//       une fois que lib/auth/cron.ts est créé par l'agent dédié.
-//       Laisser la copie locale en attendant pour éviter une erreur de compilation.
-import { timingSafeEqual } from 'crypto'
+import { isCronRequest } from '@/lib/auth/cron'
 
 // Vercel Pro — le run nocturne peut prendre plusieurs minutes
 export const maxDuration = 300
@@ -35,24 +31,6 @@ const RunBodySchema = z.object({
 // ------------------------------------------------------------
 // Helpers
 // ------------------------------------------------------------
-
-/** Vérifie que le header Authorization correspond au secret cron configuré.
- *  Copie locale de lib/auth/cron.ts#isCronRequest — à remplacer par l'import
- *  dès que ce module est disponible.
- */
-function isCronRequest(request: NextRequest): boolean {
-  const cronSecret = process.env.CRON_SECRET
-  if (!cronSecret) return false
-
-  const authHeader = request.headers.get('authorization') ?? ''
-  const provided = authHeader.replace('Bearer ', '').trim()
-
-  // Padding à longueur fixe pour éviter le leak de longueur via timing
-  const expectedBuf = Buffer.from(cronSecret.padEnd(128, '\0'))
-  const providedBuf = Buffer.from(provided.padEnd(128, '\0'))
-
-  return timingSafeEqual(expectedBuf, providedBuf) && provided.length === cronSecret.length
-}
 
 /** Construit la réponse stats normalisée à partir d'un AgentRun. */
 function buildRunStats(run: AgentRun) {
