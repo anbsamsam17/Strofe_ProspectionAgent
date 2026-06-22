@@ -1,0 +1,60 @@
+# =============================================================================
+# Workflow : CodeQL
+# -----------------------------------------------------------------------------
+# Role       : analyse statique de securite (SAST) du code JavaScript/TypeScript
+#              via CodeQL, avec remontee des alertes dans l'onglet Security du
+#              depot (code scanning).
+# Declencheurs:
+#   - push sur `main` : scan a chaque integration sur la branche principale.
+#   - pull_request ciblant `main` : scan des changements proposes.
+#   - schedule : scan hebdomadaire pour detecter les vulnerabilites des
+#     dependances/requetes CodeQL mises a jour, meme sans nouveau commit.
+# Permissions : `security-events: write` requis pour publier les alertes
+#               de code scanning ; le reste reste en lecture (moindre privilege).
+# =============================================================================
+
+name: CodeQL
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    # Tous les lundis a 06:00 UTC
+    - cron: '0 6 * * 1'
+
+# Annule les analyses precedentes sur la meme ref pour economiser les minutes
+concurrency:
+  group: codeql-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  analyze:
+    name: Analyze (javascript-typescript)
+    runs-on: ubuntu-latest
+
+    permissions:
+      # Lecture du code source
+      contents: read
+      # Requis pour publier les resultats du scan dans l'onglet Security
+      security-events: write
+      # Requis pour les depots prives afin que CodeQL detecte les workflows
+      actions: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: javascript-typescript
+          # 'security-and-quality' couvre les requetes securite + qualite ;
+          # 'security-extended' est une alternative plus large.
+          queries: security-and-quality
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: '/language:javascript-typescript'

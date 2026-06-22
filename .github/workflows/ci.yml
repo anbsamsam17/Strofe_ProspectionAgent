@@ -18,6 +18,12 @@
 
 name: CI
 
+# Principe du moindre privilege : ce workflow ne fait que lire le code source
+# (checkout) et publier un artefact de couverture. Aucun job n'ecrit dans le
+# depot ni n'utilise le GITHUB_TOKEN en ecriture.
+permissions:
+  contents: read
+
 on:
   push:
     branches: [develop, main]

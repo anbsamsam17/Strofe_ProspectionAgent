@@ -80,7 +80,14 @@ jobs:
       - name: Deploy to Vercel (preview)
         id: deploy
         run: |
+          set -euo pipefail
           PREVIEW_URL=$(vercel deploy --prebuilt --token=${{ secrets.VERCEL_TOKEN }})
+          # Garde-fou : on echoue explicitement si Vercel ne renvoie pas d'URL,
+          # pour ne pas commenter la PR avec une URL vide en cas de deploiement KO.
+          if [ -z "$PREVIEW_URL" ]; then
+            echo "::error::vercel deploy n'a retourne aucune URL de preview."
+            exit 1
+          fi
           echo "preview_url=$PREVIEW_URL" >> $GITHUB_OUTPUT
 
       # Commente la PR avec l'URL de preview — mis à jour à chaque commit

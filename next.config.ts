@@ -61,6 +61,14 @@ export default withSentryConfig(nextConfig, {
   project: process.env.SENTRY_PROJECT,
   authToken: process.env.SENTRY_AUTH_TOKEN,
   silent: true,
+  // Source maps desactivees a dessein : elles ne sont ni emises ni uploadees
+  // vers Sentry, ce qui evite d'exposer le code source d'origine et reduit la
+  // duree du build. Contrepartie : les stack traces Sentry ne sont pas
+  // demappees (lignes/fichiers minifies). Pour retrouver des traces lisibles
+  // sans exposer les maps publiquement, passer a des "hidden source maps" :
+  //   sourcemaps: { disable: false } + productionBrowserSourceMaps: false,
+  // Sentry genere alors les maps, les uploade puis les supprime du bundle
+  // (elles ne sont pas servies aux clients). Volontairement inchange ici.
   sourcemaps: { disable: true },
   disableLogger: true,
 })

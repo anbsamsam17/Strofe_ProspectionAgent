@@ -20,6 +20,12 @@
 
 name: Sirene Cache Monthly Import
 
+# Principe du moindre privilege : l'ETL lit le code source (checkout) et appelle
+# des API externes via des secrets d'environnement. Il n'ecrit jamais dans le
+# depot, donc le GITHUB_TOKEN n'a besoin que d'un acces en lecture.
+permissions:
+  contents: read
+
 on:
   # Cron mensuel : 1er du mois à 04:00 UTC (~05:00 Paris hiver / 06:00 ete)
   schedule:
