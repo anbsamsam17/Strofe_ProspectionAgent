@@ -672,6 +672,20 @@ async function phaseContactEnrichment(
 const GEMINI_TOP_N = 15
 
 /**
+ * Ancienneté au-delà de laquelle un prospect déjà scoré Gemini est re-scoré
+ * (jours). Aligne le code sur la docstring de `phaseGeminiScoring` qui promet
+ * un re-scoring des prospects scorés il y a plus de 7 jours.
+ */
+const GEMINI_RESCORE_AFTER_DAYS = 7
+
+/** Borne ISO `now - GEMINI_RESCORE_AFTER_DAYS` pour le filtre de re-scoring. */
+function GEMINI_RESCORE_THRESHOLD_ISO(): string {
+  return new Date(
+    Date.now() - GEMINI_RESCORE_AFTER_DAYS * 24 * 60 * 60 * 1000,
+  ).toISOString()
+}
+
+/**
  * Parallélisme du batch Gemini (rate-limit Gemini 2.0 Flash).
  * Le module `gemini-scoring` gère déjà un batch interne, mais on l'appelle ici
  * en séquence par groupes pour granularité du logging et préserver les quotas
@@ -687,7 +701,10 @@ const GEMINI_BATCH_PARALLELISM = 5
  * Contraintes :
  * - Top N = 15 prospects max par run (cf. DAILY_CALL_TARGET).
  * - Filtre : prospects non encore scorés (`gemini_generated_at IS NULL`) OU
- *   scorés > 7 jours (re-scoring si données enrichies entre-temps).
+ *   scorés il y a > 7 jours (re-scoring si données enrichies entre-temps).
+ * - Échec TRANSITOIRE (timeout / 429 / 5xx) : `gemini_generated_at` reste NULL
+ *   (rien n'est persisté) pour que le prospect soit re-tenté au prochain run,
+ *   au lieu d'être verrouillé à un score 0 (cf. `transient_failure`).
  * - Phase NON-FATALE : une erreur ici ne bloque pas le pipeline.
  * - Sans `GEMINI_API_KEY` : phase skippée silencieusement.
  * - PII : aucun `contact_email` / `contact_telephone` / `contact_nom` envoyé au prompt.
@@ -739,7 +756,13 @@ async function phaseGeminiScoring(
     // Migration 017 : exclure les opt-out manuels — pas de scoring Gemini sur
     // des prospects qu'on ne contactera jamais (économie de quota + RGPD).
     .neq('statut', 'do_not_contact')
-    .is('gemini_generated_at', null)
+    // Jamais scorés (gemini_generated_at NULL) OU scorés il y a > 7 jours
+    // (re-scoring si les données ont été enrichies entre-temps). Tient la
+    // promesse de la docstring ci-dessus. Le filtre NULL seul verrouillait à
+    // vie les prospects qu'un échec transitoire avait laissés à un score 0
+    // (cf. fix transient_failure dans gemini-scoring.ts qui laisse désormais
+    // gemini_generated_at NULL sur timeout/429/5xx).
+    .or(`gemini_generated_at.is.null,gemini_generated_at.lt.${GEMINI_RESCORE_THRESHOLD_ISO()}`)
     .order('score_priorite', { ascending: false })
     .limit(GEMINI_TOP_N)
 
@@ -822,6 +845,19 @@ async function phaseGeminiScoring(
     )
 
     for (const { id, result } of results) {
+      // Échec TRANSITOIRE (timeout / 429 / 5xx) : on NE persiste PAS
+      // gemini_generated_at (on laisse la colonne intacte / NULL) pour que le
+      // prospect soit re-tenté au prochain run, au lieu d'être verrouillé à un
+      // score 0. On skippe donc l'update entièrement (rien d'exploitable à
+      // écrire), et on le compte comme échec.
+      if (result.transient_failure) {
+        failedCount += 1
+        log(run, 'gemini_scoring', `Scoring Gemini transitoire échoué — retry au prochain run (prospect ${id})`, 'warn', {
+          prospect_id: id,
+        })
+        continue
+      }
+
       const updatePayload = {
         gemini_score: result.interet_score,
         gemini_raisons: result.raisons as unknown as Json,

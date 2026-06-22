@@ -95,6 +95,16 @@ export interface GeminiScoringResult {
   raisons: string[]
   /** ISO timestamp génération. */
   generated_at: string
+  /**
+   * `true` si le résultat est un fallback issu d'un ÉCHEC TRANSITOIRE
+   * (timeout / 429 / 5xx / réseau) plutôt que d'une réponse valide.
+   *
+   * Dans ce cas le caller NE DOIT PAS persister `gemini_generated_at` :
+   * laisser la colonne NULL permet de re-tenter le prospect au prochain run
+   * au lieu de le verrouiller à `interet_score: 0` (cf. orchestrator.ts,
+   * phaseGeminiScoring). Absent/`false` = réponse exploitable à persister.
+   */
+  transient_failure?: boolean
 }
 
 // ------------------------------------------------------------
@@ -321,11 +331,21 @@ function parseGeminiResponse(rawContent: string): {
 // FALLBACK
 // ------------------------------------------------------------
 
-function fallbackResult(raison: string): GeminiScoringResult {
+/**
+ * Construit un résultat de fallback (score 0 + raison explicative).
+ *
+ * @param transient — `true` pour un échec TRANSITOIRE (timeout / 429 / 5xx /
+ *   réseau) : le caller laissera alors `gemini_generated_at` NULL pour permettre
+ *   le retry au prochain run. `false` (défaut) pour un échec DÉFINITIF
+ *   (clé absente, JSON/Zod KO, erreur non-retriable) : le résultat est stable
+ *   et peut être persisté tel quel.
+ */
+function fallbackResult(raison: string, transient = false): GeminiScoringResult {
   return {
     interet_score: 0,
     raisons: [raison],
     generated_at: new Date().toISOString(),
+    transient_failure: transient,
   }
 }
 
@@ -458,10 +478,16 @@ export async function scoreLeadAvecGemini(
   }
 
   // Tous les essais ont échoué — fallback propre.
+  // Échec TRANSITOIRE (timeout / 429 / 5xx / réseau) → on signale au caller de
+  // NE PAS persister gemini_generated_at, afin de re-tenter au prochain run.
+  // Échec DÉFINITIF (ex. validation Zod KO, JSON malformé, erreur non-retriable)
+  // → résultat stable, persistable tel quel.
+  const transient = isRetriableGeminiError(lastError)
   return fallbackResult(
     `Scoring Gemini indisponible — fallback (${
       lastError instanceof Error ? lastError.message : 'erreur inconnue'
     })`,
+    transient,
   )
 }
 

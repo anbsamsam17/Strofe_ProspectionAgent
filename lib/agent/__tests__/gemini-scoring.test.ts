@@ -160,6 +160,19 @@ describe('scoreLeadAvecGemini — retry erreur retriable', () => {
     expect(_generateContentMock).toHaveBeenCalledTimes(2)
     expect(result.interet_score).toBe(78)
   })
+
+  it('marque transient_failure sur 5xx persistant (retry épuisé)', async () => {
+    const err500 = Object.assign(new Error('Internal Server Error 500'), { status: 500 })
+    _generateContentMock.mockRejectedValue(err500)
+    const { scoreLeadAvecGemini } = await import('../gemini-scoring')
+
+    const result = await scoreLeadAvecGemini(makeProspect())
+
+    expect(_generateContentMock).toHaveBeenCalledTimes(2) // 1 essai + 1 retry
+    expect(result.interet_score).toBe(0)
+    // Échec transitoire → ne pas verrouiller le prospect (retry au prochain run).
+    expect(result.transient_failure).toBe(true)
+  })
 })
 
 // ------------------------------------------------------------
@@ -179,6 +192,9 @@ describe('scoreLeadAvecGemini — fallback propre', () => {
     expect(result.raisons).toHaveLength(1)
     expect(result.raisons[0]).toMatch(/indisponible/i)
     expect(result.generated_at).toMatch(/^\d{4}-\d{2}-\d{2}T/)
+    // Échec TRANSITOIRE (429 persistant) → signalé pour permettre le retry
+    // au prochain run (l'orchestrator ne persistera pas gemini_generated_at).
+    expect(result.transient_failure).toBe(true)
   })
 
   it('retourne fallback sur erreur 400 (non retriable) — pas de retry', async () => {
@@ -191,6 +207,9 @@ describe('scoreLeadAvecGemini — fallback propre', () => {
     expect(_generateContentMock).toHaveBeenCalledTimes(1) // pas de retry
     expect(result.interet_score).toBe(0)
     expect(result.raisons[0]).toMatch(/indisponible/i)
+    // Erreur DÉFINITIVE (400 non retriable) → résultat stable, persistable
+    // (pas un échec transitoire).
+    expect(result.transient_failure).toBeFalsy()
   })
 
   it('retourne fallback sur validation Zod KO (score hors plage)', async () => {
@@ -209,6 +228,9 @@ describe('scoreLeadAvecGemini — fallback propre', () => {
 
     expect(result.interet_score).toBe(0)
     expect(result.raisons[0]).toMatch(/indisponible/i)
+    // Réponse reçue mais invalide → échec DÉFINITIF (pas transitoire) : il est
+    // sûr de persister gemini_generated_at (un retry redonnerait la même chose).
+    expect(result.transient_failure).toBeFalsy()
   })
 
   it('retourne fallback sur validation Zod KO (raisons trop peu nombreuses)', async () => {
