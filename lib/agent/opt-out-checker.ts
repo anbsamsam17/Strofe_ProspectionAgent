@@ -48,6 +48,12 @@ interface OptOutRow {
  * - Erreurs DB : on retourne `false` (mode "fail-open" pour ne pas bloquer
  *   le pipeline en cas de souci infra — la prochaine passe relèvera).
  *
+ * ATTENTION — fail-open : en cas d'erreur DB cette fonction considère le
+ * prospect comme NON opté-out. Ne JAMAIS la réutiliser telle quelle sur un
+ * chemin d'envoi direct (email/SMS), où une erreur doit au contraire bloquer
+ * l'envoi (fail-closed). Cf. la route d'envoi email qui implémente le contrôle
+ * opt-out en fail-closed.
+ *
  * @returns `true` si l'un des critères matche une ligne opt_out, sinon `false`.
  */
 export async function isOptedOut(

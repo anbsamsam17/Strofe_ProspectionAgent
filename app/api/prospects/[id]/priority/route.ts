@@ -78,12 +78,12 @@ export async function PATCH(
   }
 
   // RLS implicite — l'update ne traversera que les prospects de l'user.
-  // TODO(coord-A): la colonne `priorite` (migration 009) n'est pas dans
-  // database.types.ts → cast `as never` pour bypass le typing strict en
-  // attendant la regénération.
+  // `priorite` est typée `string` dans database.types.ts (migration 009) ;
+  // la valeur est déjà restreinte par le z.enum(PRIORITES) ci-dessus, donc
+  // l'update est typé sans cast.
   const { data: updated, error: updateError } = await supabase
     .from('prospects')
-    .update({ priorite: parsed.data.priorite } as never)
+    .update({ priorite: parsed.data.priorite })
     .eq('id', id)
     .select('id, priorite')
     .maybeSingle()

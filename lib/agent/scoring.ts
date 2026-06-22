@@ -77,6 +77,15 @@ const BEGES_ANTICIPATION_MAX = 500
  */
 const BEGES_DECRET_2022_BOOST = 30
 
+/**
+ * Majoration supplémentaire appliquée au cas « non conforme Décret 2022-982 »
+ * (GLN-006). S'ajoute à BEGES_ANTICIPATION_SCORE (50) et BEGES_DECRET_2022_BOOST
+ * (30) pour porter le sous-score à 100 (50 + 30 + 20), puis plafonné à
+ * SUBSCORE_MAX. Isolé en constante nommée pour expliciter la composition du
+ * sous-score (la valeur reste inchangée).
+ */
+const BEGES_DECRET_2022_NON_COMPLIANT_BONUS = 20
+
 // ------------------------------------------------------------
 // CONSTANTES — PILIER 3 (CONTACT)
 // ------------------------------------------------------------
@@ -219,11 +228,18 @@ function _scoreBeges(prospect: Partial<Prospect>): number {
   if (begesPublie && begesValide === false) return BEGES_HOT_SCORE
 
   // Cas 3 — GLN-006 : bilan publié, valide, MAIS non conforme Décret 2022-982.
-  // Score de base 70 (signal moins urgent qu'une infraction L229-25 pure ou
-  // qu'un bilan expiré, mais commercialement très exploitable car le décret
-  // impose le renouvellement avec scope 3 + plan d'action). +30 via boost.
+  // Sous-score = 50 (anticipation) + 30 (boost décret) + 20 (bonus non-conformité)
+  // = 100, plafonné à SUBSCORE_MAX (100). Signal moins urgent qu'une infraction
+  // L229-25 pure ou qu'un bilan expiré (qui valent BEGES_HOT_SCORE = 100 d'emblée),
+  // mais commercialement très exploitable car le décret impose le renouvellement
+  // avec scope 3 + plan d'action.
   if (obligationBeges && begesPublie && decret2022NonCompliant) {
-    return Math.min(SUBSCORE_MAX, BEGES_ANTICIPATION_SCORE + BEGES_DECRET_2022_BOOST + 20)
+    return Math.min(
+      SUBSCORE_MAX,
+      BEGES_ANTICIPATION_SCORE +
+        BEGES_DECRET_2022_BOOST +
+        BEGES_DECRET_2022_NON_COMPLIANT_BONUS,
+    )
   }
 
   // Cas 4 : anticipation commerciale — entreprise proche du seuil sans

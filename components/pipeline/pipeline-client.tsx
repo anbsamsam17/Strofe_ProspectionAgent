@@ -39,10 +39,10 @@ import { KanbanSidePanel } from './kanban-side-panel'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-// `offer_sent` est un nouveau statut ajouté par Agent A à `ProspectStatus`. Tant
-// que ce merge n'a pas eu lieu, on type-élargit localement pour ne pas casser
-// le build des autres composants qui dépendent encore de l'enum existant.
-// TODO(coord-A): remplacer par ProspectStatus une fois `offer_sent` mergé.
+// `offer_sent` fait désormais partie de `ProspectStatus` (lib/types.ts,
+// migration 010). L'union explicite est conservée à titre redondant et sans
+// effet (offer_sent ∈ ProspectStatus) ; elle pourra être simplifiée en
+// `ProspectStatus` lors d'un futur passage purement typage.
 export type KanbanStatus = ProspectStatus | 'offer_sent'
 
 interface PipelineColumn {

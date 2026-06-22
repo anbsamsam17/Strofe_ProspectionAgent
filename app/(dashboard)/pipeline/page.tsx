@@ -21,8 +21,8 @@ interface PipelinePageProps {
 }
 
 // Colonnes Kanban — 8 colonnes alignées sur la spec utilisateur.
-// - `offer_sent` est un nouveau statut ajouté par Agent A à `ProspectStatus`.
-//   TODO(coord-A): typage natif `ProspectStatus` une fois le merge effectué.
+// - `offer_sent` fait désormais partie de `ProspectStatus` (lib/types.ts,
+//   migration 010) ; `KanbanStatus` l'inclut donc nativement.
 // - `rdv` (legacy) reste en DB mais n'est plus exposé comme colonne distincte ;
 //   à terme on pourra requalifier ces prospects en `interested`.
 const PIPELINE_COLUMNS: { status: KanbanStatus; label: string; color: string }[] = [

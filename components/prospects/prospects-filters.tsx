@@ -51,9 +51,10 @@ interface ProspectsFiltersProps {
   currentSearchQuery?: string
 }
 
-// TODO(Agent A): `offer_sent` à ajouter à `ProspectStatus` (`lib/types.ts`).
-// En attendant la migration, on l'expose ici en union locale pour rester
-// compatible avec les futurs prospects sans casser le typage de `lib/types.ts`.
+// `offer_sent` fait désormais partie de `ProspectStatus` (lib/types.ts,
+// migration 010). L'union explicite est conservée à titre redondant et sans
+// effet (offer_sent ∈ ProspectStatus) ; elle pourra être simplifiée en
+// `ProspectStatus` lors d'un futur passage purement typage.
 type StatusFilterValue = ProspectStatus | 'offer_sent'
 
 // Labels alignés sur la colonne Statut du tableau (`app/(dashboard)/prospects/page.tsx`).

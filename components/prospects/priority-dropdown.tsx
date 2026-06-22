@@ -4,8 +4,11 @@ import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import type { Priority } from '@/lib/types'
 
-// Alias pour la priorité éditable manuellement (3 valeurs uniquement).
-// TODO(coord-A): aligner sur ManualPriority si réintroduit dans lib/types.ts.
+// Alias local pour la priorité éditable manuellement (3 valeurs uniquement).
+// `Priority` (lib/types.ts) est déjà restreint à ces 3 valeurs et `ManualPriority`
+// y existe désormais comme alias ; cet `Extract` local est donc équivalent et
+// pourrait être remplacé par l'import de `ManualPriority` lors d'un futur passage
+// purement typage.
 type ManualPriority = Extract<Priority, 'haute' | 'moyenne' | 'basse'>
 
 // ── Constantes ────────────────────────────────────────────────────────────────

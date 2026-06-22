@@ -99,10 +99,10 @@ function formatDate(iso: string | undefined): string | null {
   return new Intl.DateTimeFormat('fr-FR', { day: '2-digit', month: 'short', year: 'numeric' }).format(date)
 }
 
-// Prospect.priorite n'existe pas encore (Agent A). On dérive une priorité par
-// défaut depuis `score_priorite` pour piloter l'UI tant que la colonne DB n'est
-// pas créée. Seuils alignés sur ceux des badges score : ≥75 haute, ≥50 normale.
-// TODO(coord-A): lire prospect.priorite quand la colonne sera disponible.
+// La colonne `priorite` existe désormais (migration 009, cf. Prospect.priorite).
+// Ce panneau affiche encore une priorité DÉRIVÉE de `score_priorite` (priorité
+// calculée), volontairement indépendante de l'éventuelle priorité manuelle :
+// seuils alignés sur les badges score (≥75 haute, ≥50 moyenne, sinon basse).
 function derivePriority(prospect: Prospect): Priority {
   if (prospect.score_priorite >= 75) return 'haute'
   if (prospect.score_priorite >= 50) return 'moyenne'
@@ -339,10 +339,11 @@ function StatusInlineDropdown({
   )
 }
 
-// Priorité : dropdown local — la colonne `priorite` n'existe pas encore en DB
-// pour la table `prospects` (seul DailyListItem la porte). On le présente en
-// read-only avec un indicateur "dérivé du score" pour le moment.
-// TODO(coord-A+D): brancher sur PATCH /api/prospects/[id] { priorite } + colonne DB.
+// Priorité : présentée en read-only avec l'indicateur "dérivée du score".
+// La colonne `priorite` (migration 009) et l'endpoint PATCH
+// /api/prospects/[id]/priority existent déjà ; ce panneau n'est pas encore
+// branché dessus en édition (il affiche la priorité dérivée du score, cf.
+// derivePriority). Édition manuelle disponible ailleurs via <PriorityDropdown>.
 function PriorityInlineDropdown({ priorite }: { priorite: Priority }) {
   const current = PRIORITY_LABELS[priorite]
   return (

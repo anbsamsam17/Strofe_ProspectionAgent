@@ -8,7 +8,9 @@ import { NewExchangeDialog } from './new-exchange-dialog'
 
 /**
  * Type d'échange manuel (table prospect_exchanges, migration 012).
- * TODO(coord-A): déplacer dans lib/types.ts une fois Agent A à jour.
+ * Des types canoniques `ExchangeType` / `ProspectExchange` existent désormais
+ * dans lib/types.ts ; ces définitions locales pourront être remplacées par
+ * l'import partagé lors d'un futur passage purement typage.
  */
 export type ExchangeType = 'appel' | 'email' | 'linkedin' | 'rdv' | 'autre'
 

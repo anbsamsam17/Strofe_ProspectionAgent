@@ -16,7 +16,9 @@ import { VerifyEmailButton } from './verify-email-button'
  * 015 (enrichment v2) — optionnels pour rester compatibles avec les lignes
  * pré-migration et les fixtures de tests.
  *
- * TODO(coord-A): déplacer dans lib/types.ts une fois Agent A à jour.
+ * Un type canonique `ProspectContact` existe désormais dans lib/types.ts ;
+ * cette définition locale pourra être remplacée par l'import partagé lors d'un
+ * futur passage purement typage (vérifier l'alignement exact des champs).
  */
 export interface ProspectContact {
   id: string
