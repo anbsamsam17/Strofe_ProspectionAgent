@@ -52,7 +52,7 @@
     "@types/unzipper": "^0.10.11",
     "@vitejs/plugin-react": "^4.3.4",
     "@vitest/coverage-v8": "^3.1.1",
-    "csv-parse": "^6.2.1",
+    "csv-parse": "^7.0.0",
     "eslint": "^9",
     "eslint-config-next": "15.2.4",
     "jsdom": "^26.1.0",
