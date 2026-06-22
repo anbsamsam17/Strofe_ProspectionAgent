@@ -101,6 +101,14 @@ flowchart TB
 - **Modèle de données** : `profiles` (extension `auth.users`, settings JSONB), `prospects` (identité SIRENE + BEGES + score + statut CRM), `daily_lists` / `daily_list_items` (la liste d'appels du jour), `agent_runs` (journal du cron), `sirene_cache` (cache local du registre).
 - **3 clients Supabase** distincts : browser (anon), SSR (anon + cookies), admin (service_role, serveur uniquement).
 
+### ⭐ Points forts base de données
+
+- **Colonne `GENERATED ALWAYS … STORED`** : le flag *hot lead* est calculé **dans la base** à chaque `UPDATE`, jamais en code — garantit la cohérence UI / agent et alimente un index partiel `WHERE is_hot_lead = TRUE` (`supabase/migrations/024_hot_lead_composite.sql:39`).
+- **RPC `SECURITY DEFINER` + `STABLE`** `search_sirene_cache(...)` : encapsule tout le sourcing multi-critères (NAF, tranche, plage CP, dedup SIREN) en un appel SQL unique et bypasse la ré-évaluation RLS par ligne (`supabase/migrations/019_sirene_search_function.sql:95`).
+- **Index GIN trigram (`pg_trgm`) + full-text français** : recherche `ILIKE` sur `secteur_libelle` (`supabase/migrations/003_perf_indexes.sql:29`) et `to_tsvector('french', …)` sur `raison_sociale` (`supabase/migrations/019_sirene_search_function.sql:82`).
+- **ENUMs étendus par `ALTER TYPE … ADD VALUE IF NOT EXISTS`** : évolution non destructive des statuts au fil des besoins (`supabase/migrations/010_prospect_status_offer_sent.sql:27`, `017_do_not_contact_status.sql:51`, `028_status_to_contact.sql:48`, `007_call_result_extended.sql:29`).
+- **RLS multi-tenant à 4 policies + contrainte d'idempotence** : SELECT / INSERT / UPDATE / DELETE en `auth.uid() = user_id` plus `UNIQUE(user_id, siren)` sur `prospects` (`supabase/migrations/001_initial.sql:261` et `326`-`341`).
+
 ---
 
 ## 🔄 Pipeline de données
@@ -116,6 +124,13 @@ flowchart TB
 - → **orchestrateur** → **sourcing en cascade** (cache local → SIRENE → Recherche Entreprises) → **enrichissement ADEME / contacts** → **scoring Gemini** (`gemini-2.0-flash`, sortie JSON validée par **Zod**, fallback propre) + génération de **pitchs OpenAI `gpt-4o`** → **upsert** dans `prospects` / `daily_list_items`,
 - **logs structurés JSON** persistés dans `agent_runs.logs`,
 - crons complémentaires : `reap-stale` (4h) et `purge-prospects` (3h).
+
+### ⭐ Points forts pipeline data
+
+- **Observabilité data-quality** : chaque ligne rejetée à l'import SIRENE est comptée et **catégorisée par cause** (10 causes : `etat`, `siege`, `tranche_missing/excluded`, `naf_missing/excluded`, `siren_missing/format`, `siret_missing/format`), avec un mode **`DRY_RUN`** qui parse et reporte sans rien écrire (`scripts/import-sirene-bulk.ts:257` et `:88`).
+- **Idempotence** : upsert `onConflict: 'siren'` par **batches de 500**, rejouable sans corrompre la base (`scripts/import-sirene-bulk.ts:350` et `:80`).
+- **Résilience** : **retry exponentiel ×3** sur 5xx / timeout au download (`scripts/import-sirene-bulk.ts:509`), **garde-fou storage** (ABORT au-delà du quota) et abandon immédiat sur 4xx non-retryable (`scripts/import-sirene-bulk.ts:513`).
+- **Reprise & robustesse du sourcing nocturne** : **curseur de pagination persisté** dans `profiles.sourcing_state` (invalidé si la signature des filtres change), **circuit breaker** sur l'enrichissement téléphone et **heartbeat 30 s** poussé dans `agent_runs.logs` (`lib/agent/sourcing-runner.ts:7`, `:37`, `:202`).
 
 ---
 
