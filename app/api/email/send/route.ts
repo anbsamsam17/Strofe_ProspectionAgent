@@ -22,6 +22,7 @@ import { Resend } from 'resend'
 import * as React from 'react'
 
 import { createClient } from '@/lib/supabase/server'
+import { isOptedOut } from '@/lib/agent/opt-out-checker'
 import { TEMPLATES } from '@/lib/email/templates/prospection'
 import {
   interpolateTemplate,
@@ -117,6 +118,7 @@ export async function POST(request: NextRequest) {
     beges_derniere_publication: string | null
     entite_publique: boolean | null
     first_contact_at: string | null
+    statut: string | null
     siren: string | null
     contact_prenom: string | null
     contact_nom: string | null
@@ -216,6 +218,58 @@ export async function POST(request: NextRequest) {
       email: contactRow.email,
       poste: contactRow.poste,
     }
+  }
+
+  // 4bis. Vérification opt-out RGPD (art. 21) AVANT tout envoi.
+  // Contrairement au pipeline (fail-open, cf. orchestrator l.530-538), le chemin
+  // d'envoi MANUEL est FAIL-CLOSED : si on ne peut pas confirmer que le
+  // destinataire n'est PAS désinscrit, on bloque l'envoi.
+  //
+  // Deux sources d'opt-out :
+  //   a) statut prospect `do_not_contact` (opt-out manuel utilisateur, migr. 017),
+  //   b) table `opt_out` (désinscription 1 clic du prospect — siren et/ou email),
+  //      revérifiée via `isOptedOut` (même logique que le scoring/pitch).
+  if (prospect.statut === 'do_not_contact') {
+    return NextResponse.json(
+      {
+        error: {
+          code: 'OPTED_OUT',
+          message: 'Ce prospect est marqué « ne pas contacter » (opt-out RGPD). Envoi bloqué.',
+        },
+      },
+      { status: 409 },
+    )
+  }
+
+  let recipientOptedOut: boolean
+  try {
+    recipientOptedOut = await isOptedOut(supabase, user.id, {
+      siren: prospect.siren ?? undefined,
+      email: contact.email,
+    })
+  } catch (err) {
+    // FAIL-CLOSED : impossible de vérifier l'opt-out → on n'envoie pas.
+    const msg = err instanceof Error ? err.message : 'erreur vérification opt-out'
+    return NextResponse.json(
+      {
+        error: {
+          code: 'OPT_OUT_CHECK_FAILED',
+          message: `Vérification opt-out impossible, envoi bloqué (RGPD) : ${msg}`,
+        },
+      },
+      { status: 409 },
+    )
+  }
+  if (recipientOptedOut) {
+    return NextResponse.json(
+      {
+        error: {
+          code: 'OPTED_OUT',
+          message: 'Ce destinataire s\'est désinscrit (opt-out RGPD). Envoi bloqué.',
+        },
+      },
+      { status: 409 },
+    )
   }
 
   // 5. Fetch profile (Calendly URL + reply-to)

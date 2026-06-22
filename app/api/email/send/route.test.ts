@@ -75,6 +75,11 @@ interface SetupOptions {
   /** Nb d'emails déjà envoyés à ce prospect — utilise pour le fallback
    *  isFirstContact via count prospect_exchanges. Défaut 0. */
   priorEmailCount?: number
+  /** Ligne opt_out renvoyée par isOptedOut (siren ET email). `null` (défaut) =
+   *  destinataire NON désinscrit → envoi autorisé. */
+  optOutRow?: { id: string } | null
+  /** Force une erreur DB sur la table opt_out (test fail-closed). */
+  optOutDbError?: { message: string } | null
 }
 
 function setupHandlers(opts: SetupOptions = {}) {
@@ -119,7 +124,27 @@ function setupHandlers(opts: SetupOptions = {}) {
         ...opts.profile,
       }
 
+  // isOptedOut() interroge `opt_out` :
+  //   - SIREN : .select('id').eq('user_id').eq('siren').limit().maybeSingle()
+  //   - email : .select('id').eq('user_id').ilike('email').limit().maybeSingle()
+  // On mocke un maybeSingle commun renvoyant la ligne opt_out (ou null).
+  const optOutResult = {
+    data: opts.optOutDbError ? null : (opts.optOutRow ?? null),
+    error: opts.optOutDbError ?? null,
+  }
+  const optOutMaybeSingle = vi.fn().mockResolvedValue(optOutResult)
+
   fromHandlers.current = {
+    opt_out: () => ({
+      select: () => ({
+        eq: () => ({
+          // chaîne SIREN : .eq('siren').limit().maybeSingle()
+          eq: () => ({ limit: () => ({ maybeSingle: optOutMaybeSingle }) }),
+          // chaîne email : .ilike('email').limit().maybeSingle()
+          ilike: () => ({ limit: () => ({ maybeSingle: optOutMaybeSingle }) }),
+        }),
+      }),
+    }),
     prospects: () => ({
       select: () => ({
         eq: () => ({
@@ -334,5 +359,51 @@ describe('POST /api/email/send', () => {
 
     const res = await POST(makeRequest(VALID_BODY))
     expect(res.status).toBe(500)
+  })
+
+  // ----------------------------------------------------------
+  // RGPD — opt-out (art. 21) : blocage avant envoi (B4)
+  // ----------------------------------------------------------
+
+  it('RGPD : bloque l\'envoi (409) si le prospect est en statut do_not_contact', async () => {
+    setupHandlers({ prospect: { statut: 'do_not_contact' } })
+
+    const res = await POST(makeRequest(VALID_BODY))
+    expect(res.status).toBe(409)
+    const json = await res.json()
+    expect(json.error.code).toBe('OPTED_OUT')
+    expect(mockResendSend).not.toHaveBeenCalled()
+  })
+
+  it('RGPD : bloque l\'envoi (409) si le destinataire est désinscrit (table opt_out)', async () => {
+    setupHandlers({ optOutRow: { id: 'optout-uuid' } })
+
+    const res = await POST(makeRequest(VALID_BODY))
+    expect(res.status).toBe(409)
+    const json = await res.json()
+    expect(json.error.code).toBe('OPTED_OUT')
+    expect(mockResendSend).not.toHaveBeenCalled()
+  })
+
+  it('RGPD : fail-closed (409) si la vérification opt-out lève une exception', async () => {
+    setupHandlers()
+    // Force isOptedOut à throw : la table opt_out n'est plus mockée.
+    fromHandlers.current.opt_out = () => {
+      throw new Error('opt_out check boom')
+    }
+
+    const res = await POST(makeRequest(VALID_BODY))
+    expect(res.status).toBe(409)
+    const json = await res.json()
+    expect(json.error.code).toBe('OPT_OUT_CHECK_FAILED')
+    expect(mockResendSend).not.toHaveBeenCalled()
+  })
+
+  it('RGPD : autorise l\'envoi si le destinataire n\'est pas désinscrit', async () => {
+    setupHandlers({ optOutRow: null })
+
+    const res = await POST(makeRequest(VALID_BODY))
+    expect(res.status).toBe(201)
+    expect(mockResendSend).toHaveBeenCalledTimes(1)
   })
 })
