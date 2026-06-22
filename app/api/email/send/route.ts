@@ -142,6 +142,13 @@ export async function POST(request: NextRequest) {
       { status: 404 },
     )
   }
+  // Cast `unknown -> ProspectRow` sûr : les types Supabase générés
+  // (database.types.ts) ne reflètent pas encore la colonne `first_contact_at`
+  // (migration 022), d'où le double cast pour contourner l'inférence partielle.
+  // Sûr car : (a) le `select('*')` ramène bien la ligne complète de `prospects`,
+  // (b) `prospectId` a été validé en amont par le schema Zod (UUID_RE),
+  // (c) les champs sont lus en lecture seule sans contrat d'écriture.
+  // À retirer après régénération des types via scripts/regen-supabase-types.ps1.
   const prospect = prospectRaw as unknown as ProspectRow
 
   // 4. Fetch contact + check ownership chain
@@ -224,6 +231,13 @@ export async function POST(request: NextRequest) {
     .select('*')
     .eq('id', user.id)
     .single()
+  // Cast `unknown -> ProfileRow | null` sûr : la colonne `email` sur `profiles`
+  // est ajoutée par une migration non encore reflétée dans database.types.ts,
+  // d'où le double cast pour contourner l'inférence partielle des types générés.
+  // Sûr car : (a) `user.id` provient de la session Supabase authentifiée (pas
+  // d'entrée utilisateur), (b) tous les champs sont lus en lecture seule et
+  // déjà gardés par `?.` / fallback en aval, (c) le `null` est explicitement
+  // géré (profil absent). À retirer après scripts/regen-supabase-types.ps1.
   const profile = (profileRaw ?? null) as unknown as ProfileRow | null
 
   const settings = (profile?.settings ?? {}) as Partial<ProfileSettings>
@@ -387,6 +401,14 @@ export async function POST(request: NextRequest) {
   if (isFirstContact) {
     // Cast unknown — colonne ajoutée par migration 022 mais pas encore reflétée
     // dans database.types.ts (auto-régénéré par scripts/regen-supabase-types.ps1).
+    // Cast `unknown -> Record<string, unknown>` sûr : la colonne
+    // `first_contact_at` (migration 022) n'est pas encore dans le type Update
+    // généré de `prospects`, ce qui ferait échouer le typage de `.update(...)`.
+    // Sûr car : (a) la valeur est une ISO string produite côté serveur (pas
+    // d'entrée utilisateur), (b) le filtre `.eq('id', prospectId)` cible une
+    // seule ligne dont l'appartenance a été vérifiée plus haut (RLS + ownership),
+    // (c) l'échec d'update est non bloquant et loggé. À retirer après
+    // régénération des types via scripts/regen-supabase-types.ps1.
     const updatePayload = {
       first_contact_at: new Date().toISOString(),
     } as unknown as Record<string, unknown>

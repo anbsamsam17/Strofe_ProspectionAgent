@@ -1,3 +1,21 @@
+# =============================================================================
+# Workflow : CI
+# -----------------------------------------------------------------------------
+# Role       : pipeline d'integration continue (qualite + build) du SaaS.
+# Declencheurs:
+#   - push sur les branches `develop` et `main`.
+#   - pull_request ciblant `main`.
+#   - concurrency : annule les runs precedents sur la meme ref pour economiser
+#     les minutes GitHub Actions.
+# Jobs :
+#   - lint      : `npm run lint`.
+#   - typecheck : `npm run type-check`.
+#   - test      : `npm run test:coverage` + upload de l'artefact coverage/.
+#   - build     : `npm run build` (depend de lint+typecheck+test), avec
+#     variables d'environnement fictives (placeholders) et cache .next/cache.
+# Secrets : aucun secret reel requis (le job build utilise des placeholders).
+# =============================================================================
+
 name: CI
 
 on:

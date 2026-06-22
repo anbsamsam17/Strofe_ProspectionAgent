@@ -1,3 +1,13 @@
+// =============================================================================
+// Configuration Vitest (tests unitaires + couverture)
+// -----------------------------------------------------------------------------
+// Environnement jsdom, globals actives, setup via ./vitest.setup.ts.
+// coverage.include = ['lib/agent/**'] : choix assume (et non un oubli) — la
+// couverture est volontairement restreinte a la logique metier critique de
+// l'agent (lib/agent), ou les seuils lines/functions a 80 % sont pertinents.
+// Etendre l'include diluerait la mesure avec du code UI/glue moins critique.
+// =============================================================================
+
 import { defineConfig } from 'vitest/config'
 import react from '@vitejs/plugin-react'
 import path from 'path'

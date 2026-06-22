@@ -1,3 +1,22 @@
+# =============================================================================
+# Workflow : Deploy Preview
+# -----------------------------------------------------------------------------
+# Role       : deploie un environnement de preview Vercel pour chaque PR et
+#              commente la PR avec l'URL generee.
+# Declencheurs:
+#   - pull_request ciblant `main` (types opened, synchronize, reopened).
+#   - concurrency : annule le deploiement preview en cours d'une PR quand un
+#     nouveau commit arrive.
+# Jobs :
+#   - test           : gate pre-deploiement (`npm run test`), fail fast.
+#   - deploy-preview : depend de test ; vercel pull/build/deploy (prebuilt)
+#     puis commentaire de la PR avec l'URL de preview (cree ou met a jour le
+#     commentaire existant du bot). Permission `pull-requests: write` requise.
+# Secrets :
+#   VERCEL_TOKEN (auth Vercel CLI) ; NEXT_PUBLIC_SUPABASE_URL,
+#   NEXT_PUBLIC_SUPABASE_ANON_KEY, NEXT_PUBLIC_APP_URL (fallback placeholders).
+# =============================================================================
+
 name: Deploy Preview
 
 on:

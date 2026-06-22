@@ -1,4 +1,15 @@
 -- ============================================================
+-- COLLISION DE NUMÉROTATION 014 : trois migrations partagent le préfixe 014
+--   (014_prospects_gemini_scoring / 014_drop_daily_lists_and_rename /
+--    014_notification_callback_done), créées en parallèle sur des branches
+--   distinctes la même semaine, d'où le même numéro libre après 013.
+-- ORDRE D'APPLICATION VOULU (par date d'en-tête, chronologie d'écriture) :
+--   1) 014_prospects_gemini_scoring   (2026-05-14)
+--   2) 014_drop_daily_lists_and_rename (2026-05-15)  <-- CE FICHIER, à jouer EN DEUXIÈME
+--   3) 014_notification_callback_done  (2026-05-17)
+-- Les trois ciblent des objets disjoints (prospects / daily_lists+profiles /
+--   prospect_exchanges) : aucune dépendance croisée, l'ordre par date est sûr.
+-- ============================================================
 -- Migration 014 — Cleanup post-pivot ProspectionAgent
 -- Date : 2026-05-15
 --

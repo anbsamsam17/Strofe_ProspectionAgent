@@ -1,3 +1,23 @@
+# =============================================================================
+# Workflow : Sirene Cache Monthly Import
+# -----------------------------------------------------------------------------
+# Role       : ETL mensuel qui rafraichit le cache SIRENE (referentiel
+#              entreprises) utilise par l'agent de prospection.
+# Declencheurs:
+#   - schedule : cron '0 4 1 * *' = le 1er de chaque mois a 04:00 UTC.
+#   - workflow_dispatch : declenchement manuel (UI GitHub / `gh workflow run`),
+#     avec input `force` pour outrepasser le garde-fou de fraicheur.
+# Jobs :
+#   - import-sirene : checkout -> setup Node 22 -> npm ci ->
+#     freshness-check (skip si dernier import < 25 jours, sauf force=true) ->
+#     execution de l'ETL (`npm run import-sirene`) -> verification du statut
+#     post-import -> notification en cas d'echec.
+# Secrets (Environment "Production – strofe-prospection-agent") :
+#   NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY (acces base),
+#   APP_URL et CRON_SECRET (appels a /api/admin/sirene-status).
+# Script ETL : scripts/import-sirene-bulk.ts (alias npm "import-sirene").
+# =============================================================================
+
 name: Sirene Cache Monthly Import
 
 on:
