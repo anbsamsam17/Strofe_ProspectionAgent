@@ -22,6 +22,27 @@ free tier (storage Supabase 500 MB, quotas API tiers, timeout serverless Vercel)
 
 ---
 
+## Garanties de robustesse
+
+Synthèse transverse des propriétés de robustesse des deux pipelines, chaque ligne
+ancrée sur le code source (vérifiée) :
+
+| Garantie | Mécanisme | Référence |
+|----------|-----------|-----------|
+| **Idempotence (upsert)** | ETL : `upsert(... onConflict: 'siren', ignoreDuplicates: false)` — rejouable sans corruption. Nocturne : `upsertProspectsBatch` `onConflict: 'user_id,siren'`. | `scripts/import-sirene-bulk.ts:360`, `lib/agent/sourcing-runner.ts:1195-1328` |
+| **Streaming O(1) mémoire** | Le ZIP ~700 MB–1.1 GB est téléchargé en flux vers `/tmp` (`Readable.fromWeb` + `pipeline`) puis décompressé/parsé en streaming (`csv-parse`) — jamais chargé en mémoire. | `scripts/import-sirene-bulk.ts:528-531,611-616` |
+| **Retry / backoff** | Téléchargement : `DOWNLOAD_MAX_RETRIES=3`, backoff exponentiel (initial doublé à chaque tentative) ; HTTP 5xx → retry, 4xx → abandon immédiat. Gemini : 1 retry sur 429/5xx. | `scripts/import-sirene-bulk.ts:96,508-514,552-553`, `lib/agent/gemini-scoring.ts:38,341-358` |
+| **Garde-fou Free-tier storage** | Toutes les `STORAGE_CHECK_EVERY_ROWS` (10 000) lignes, lecture de la vue `sirene_cache_size` ; si `total_mb > MAX_STORAGE_MB` (défaut 100, plafond Free tier 500) → `StorageLimitReachedError` + `exit 2`. | `scripts/import-sirene-bulk.ts:79,88,407,700,714-721` |
+| **Compteur `batches_failed` + exit code** | Les batches perdus à l'upsert sont comptés (`batches_failed` / `rows_failed`) ; au-delà de `MAX_ROWS_FAILED` (`SIRENE_MAX_ROWS_FAILED`, défaut 0) → échec partiel signalé `exit 3` (sinon `total_upserted` sous-compterait silencieusement). Codes : 0 OK, 1 erreur fatale, 2 storage, 3 échec partiel. | `scripts/import-sirene-bulk.ts:85,589,650,706,732,817,839,848,853,865` |
+| **Dry-run** | `SIRENE_DRYRUN=1` : parse les `DRY_RUN_LIMIT` premières lignes (`SIRENE_DRYRUN_LIMIT`, défaut 2000), log colonnes réelles + échantillon + `rejection_counts`, puis sort — **sans** upsert ni check storage (gardés par `!DRY_RUN`). | `scripts/import-sirene-bulk.ts:93-94,638-663,646,700` |
+
+> Côté pipeline nocturne, ces garanties sont complétées par les garde-fous
+> anti-timeout serverless (heartbeat 30 s, soft-timeout 180 s, caps durs, circuit
+> breaker, mode dégradé) et les quotas persistés — détaillés dans la section
+> [Pipeline 2](#anti-timeout-serverless).
+
+---
+
 ## Pipeline 1 — ETL mensuel SIRENE
 
 Source : `scripts/import-sirene-bulk.ts`. Déclencheur : `.github/workflows/sirene-import.yml`.

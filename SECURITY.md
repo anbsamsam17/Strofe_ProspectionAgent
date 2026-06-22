@@ -67,6 +67,28 @@ Références : `lib/email/rgpd.ts`, migration `022_first_contact_at.sql`.
 
 ---
 
+## Modèle de menace & contrôles
+
+Synthèse des principaux contrôles de sécurité, du risque qu'ils couvrent et de leur
+point d'ancrage `fichier:ligne` (vérifié dans le code source) :
+
+| Contrôle | Risque couvert | Référence |
+|----------|----------------|-----------|
+| **RLS multi-tenant** (`auth.uid() = user_id`, 4 policies/table) | Fuite inter-tenant : un cabinet accède aux prospects/PII d'un autre. Le filtrage est délégué à Postgres, jamais re-fait côté app. | `supabase/migrations/001_initial.sql`, `lib/supabase/server.ts` |
+| **CRON_SECRET — comparaison timing-safe** | Déclenchement non autorisé des routes cron + fuite de longueur de secret par timing. `timingSafeEqual` + padding 128 octets + check de longueur. | `lib/auth/cron.ts:6-15,28` |
+| **Scrub PII Sentry (3 runtimes)** | Exfiltration de PII prospect (emails, téléphones) vers le SaaS de monitoring. `scrubSentryEvent` récursif branché sur client/server/edge. | `lib/observability/sentry-helpers.ts:81-83,108` |
+| **Opt-out HMAC** (désinscription 1 clic) | Falsification/forge d'un lien d'opt-out : désinscription d'un tiers, replay. HMAC-SHA256 + payload signé (user/cible/expiration) + vérif. temps constant. | `lib/auth/opt-out-token.ts:46-64,82` |
+| **Check opt-out fail-closed à l'envoi** | Envoi à un destinataire désinscrit (RGPD art. 21). Le chemin d'envoi manuel bloque (409) si l'opt-out ne peut pas être confirmé — `do_not_contact` + `isOptedOut`. | `app/api/email/send/route.ts:223-273` |
+| **Anti-prompt-injection IA** | Détournement du LLM de scoring via données externes (raison sociale, secteur). `sanitizeForPrompt` (strip ctrl, échappe `< >`, 8 patterns) + isolation `<données_entreprise>` + restriction PII (`Pick`). | `lib/agent/gemini-scoring.ts:83,188,199-209,270-283` |
+| **Anti zip-bomb ETL SIRENE** | Saturation disque/storage par une archive sur-compressée ou une mauvaise ressource. Décompression *streamée* (jamais chargée en mémoire) + garde-fou storage (ABORT > `MAX_STORAGE_MB` toutes les 10k lignes, exit 2) + garde format (`EXPECTED_CSV_PREFIX`). | `scripts/import-sirene-bulk.ts:528-531,79,714-721,602-605` |
+
+> Le check opt-out est volontairement **fail-open** côté pipeline nocturne (ne pas
+> bloquer un batch sur une erreur DB transitoire) mais **fail-closed** côté envoi
+> manuel : on n'envoie jamais sans confirmation que le destinataire n'est pas
+> désinscrit. Détails RLS : [`docs/SECURITY-RLS.md`](docs/SECURITY-RLS.md).
+
+---
+
 ## Backlog de durcissement
 
 Un point de durcissement identifié et documenté (non bloquant) : restreindre les GRANT au rôle `anon` sur `search_sirene_cache` et la vue `sirene_cache_size` (données publiques, mais à limiter aux rôles authentifiés). Détails et migration proposée : voir [`docs/SECURITY-RLS.md`](docs/SECURITY-RLS.md) §6.

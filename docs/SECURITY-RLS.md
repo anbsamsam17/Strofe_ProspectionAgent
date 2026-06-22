@@ -31,15 +31,35 @@ Chaque table métier a la RLS **activée** (`ALTER TABLE ... ENABLE ROW LEVEL SE
 
 Pour la table `profiles`, la colonne pivot est `id` (la PK qui référence `auth.users(id)`) au lieu de `user_id`, mais le principe est identique : `auth.uid() = id`.
 
+> **Alignement 029** — `domain_blacklist` (migration 021) était la seule table dont la
+> policy `UPDATE` déviait du standard : elle ne déclarait qu'une clause `USING` sans
+> `WITH CHECK`, ce qui filtrait les lignes modifiables mais n'empêchait pas de
+> réaffecter une ligne à un autre `user_id` lors de l'UPDATE. La migration
+> `029_domain_blacklist_update_with_check.sql` recrée la policy à l'identique en
+> ajoutant `WITH CHECK (auth.uid() = user_id)`, réalignant la table sur le standard
+> 4-policies. Référence : `029_domain_blacklist_update_with_check.sql:42-47`.
+
 ### Tables protégées
 
-- `profiles` (pivot `id`)
-- `prospects`
-- `daily_lists`
-- `daily_list_items` (la colonne `user_id` est **dénormalisée** sur cette table pour permettre une RLS sans jointure coûteuse vers `daily_lists`)
-- `agent_runs`
-- `prospect_contacts` (4 policies — contient la **PII dirigeant**, donc RLS stricte indispensable)
-- `prospect_exchanges` (4 policies)
+Tables **actuellement en production** avec RLS `auth.uid() = user_id` (4 policies) :
+
+- `profiles` (pivot `id`) — `001_initial.sql:98`
+- `prospects` — `001_initial.sql:324`
+- `agent_runs` — `001_initial.sql:695`
+- `prospect_contacts` (contient la **PII dirigeant**, donc RLS stricte indispensable) — `011_prospect_contacts.sql:87`
+- `prospect_exchanges` — `012_prospect_exchanges.sql:88`
+- `api_quotas` (quotas API mensuels par user/provider) — `015_enrichment_v2.sql:201`
+- `opt_out` (opt-out RGPD par SIREN ou email) — `015_enrichment_v2.sql:262`
+- `domain_blacklist` (blacklist domaines par tenant) — `021_domain_blacklist.sql:47`
+
+Plus une table en lecture publique mutualisée :
+
+- `sirene_cache` — RLS activée mais `SELECT USING (true)` (données publiques INSEE, sans PII), aucune policy d'écriture — `018_sirene_cache.sql:137,142-144` (cf. §4).
+
+> Tables historiques supprimées en 014 : `daily_lists` et `daily_list_items`
+> portaient elles aussi 4 policies (avec `user_id` **dénormalisé** sur
+> `daily_list_items` pour une RLS sans jointure coûteuse vers `daily_lists`).
+> Elles ont été supprimées au pivot « plus de daily list » et ne sont plus en base.
 
 ### Pourquoi `auth.uid()`
 
@@ -149,8 +169,30 @@ Aucune régression attendue côté application (aucune route `anon` ne consomme 
 
 | Mécanisme | Périmètre | Référence |
 |-----------|-----------|-----------|
-| RLS 4 policies `auth.uid()=user_id` | `profiles`, `prospects`, `daily_lists`, `daily_list_items`, `agent_runs`, `prospect_contacts`, `prospect_exchanges` | `001_initial.sql`, `011`, `012` |
+| RLS 4 policies `auth.uid()=user_id` (**10 tables**) | `profiles`, `prospects`, `agent_runs`, `prospect_contacts`, `prospect_exchanges`, `api_quotas`, `opt_out`, `domain_blacklist` (8 user-scoped) + `sirene_cache` (lecture publique) + `daily_list_items` (historique, dénormalisée, supprimée en 014) | `001`, `011`, `012`, `015`, `021`, `018` |
+| Alignement policy UPDATE (`WITH CHECK`) | `domain_blacklist` | `029_domain_blacklist_update_with_check.sql:42-47` |
 | Double barrière `UNIQUE(user_id, siren)` | `prospects` | `001_initial.sql` |
 | Exception lecture publique (sans PII) | `sirene_cache` | `018_sirene_cache.sql` |
 | Isolation `service_role` (admin, serveur-only) | `createAdminClient` | `lib/supabase/server.ts` |
 | **Backlog : restreindre GRANT `anon`** | `search_sirene_cache`, `sirene_cache_size` | `019_sirene_search_function.sql` |
+
+### Optimisation future (non appliquée) — `(select auth.uid())` / InitPlan caching
+
+> Statut : **piste d'optimisation non appliquée**. Aucun impact sécurité — purement
+> performance. À considérer si le volume par tenant croît fortement.
+
+Les policies actuelles utilisent `auth.uid() = user_id`. Postgres peut, selon le plan,
+ré-évaluer `auth.uid()` **par ligne** scannée. Le pattern recommandé par Supabase est
+d'envelopper l'appel dans un sous-`SELECT` :
+
+```sql
+-- au lieu de :  USING (auth.uid() = user_id)
+-- on écrirait : USING ((select auth.uid()) = user_id)
+```
+
+Le planner traite alors `(select auth.uid())` comme un **InitPlan** : la fonction est
+évaluée **une seule fois** par requête (résultat mis en cache) au lieu d'une fois par
+ligne, ce qui réduit nettement le coût sur les gros scans filtrés par RLS. Le résultat
+fonctionnel est strictement identique (même filtre, même isolation) — c'est pourquoi
+cette réécriture peut être appliquée sans changement de comportement le moment venu.
+Non appliquée à ce jour (volumes actuels modestes, 2 tenants).

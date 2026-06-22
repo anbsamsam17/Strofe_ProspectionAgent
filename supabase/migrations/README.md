@@ -9,9 +9,27 @@ Serre). Ce dossier contient l'historique versionné du schéma, appliqué via
 
 ---
 
+## Points techniques notables
+
+Les patterns Postgres les plus structurants du schéma, avec leur point d'ancrage
+`fichier:ligne` (vérifié dans les migrations) :
+
+| Pattern | Description | Référence |
+|---------|-------------|-----------|
+| **Colonne `GENERATED ALWAYS … STORED`** | `prospects.is_hot_lead` est un flag composite recalculé par la base (jamais écrit par l'app, absent du type *Insert*). | `024_hot_lead_composite.sql:39-49` |
+| **Index GIN trigram (ILIKE)** | `pg_trgm` + `GIN (secteur_libelle gin_trgm_ops)` pour les filtres `ILIKE '%…%'` de la page Prospects (O(n) → O(log n)). | `003_perf_indexes.sql:15,27-29` |
+| **Index GIN full-text FR** | `GIN (to_tsvector('french', coalesce(raison_sociale,'')))` sur `sirene_cache` — recherche par nom d'entreprise via `to_tsquery('french', …)`. | `019_sirene_search_function.sql:80-82` |
+| **RPC `SECURITY DEFINER`** | `search_sirene_cache(...)` encapsule le sourcing en une seule requête PL/pgSQL ; `STABLE + SECURITY DEFINER` bypass la RLS (lecture publique sans PII). | `019_sirene_search_function.sql:95,118` |
+| **Index composite** | `(user_id, score_priorite DESC, statut)` couvrant le tri+filtre de `phaseSelection`. | `003_perf_indexes.sql:48-49` |
+| **Index partiel** | `WHERE is_hot_lead = TRUE` (n'indexe que les lignes « hot ») ; idem index partiels `opt_out` (`WHERE siren/email IS NOT NULL`). | `024_hot_lead_composite.sql:62-64`, `015_enrichment_v2.sql:253-258` |
+| **RLS dénormalisée** | `daily_list_items.user_id` était dénormalisé pour une RLS sans jointure (table supprimée en 014 ; pattern conservé pour mémoire). | `001_initial.sql:585` |
+| **Unicité multi-tenant** | `UNIQUE(user_id, siren)` — clé de conflit des upserts `onConflict: 'user_id,siren'`. Variantes : `UNIQUE(user_id, provider, month_start)`, `UNIQUE(user_id, domain)`. | `001_initial.sql`, `015_enrichment_v2.sql:191-192`, `021_domain_blacklist.sql:44` |
+
+---
+
 ## Tableau des migrations
 
-28 fichiers `.sql` au total. La colonne **#** reprend le préfixe numérique du nom de
+29 fichiers `.sql` au total. La colonne **#** reprend le préfixe numérique du nom de
 fichier (l'ordre d'application réel est traité dans la note sur l'ordonnancement).
 
 | #   | Fichier                                       | But |
@@ -44,6 +62,7 @@ fichier (l'ordre d'application réel est traité dans la note sur l'ordonnanceme
 | 025 | `025_email_verification.sql`                  | Élargit le CHECK `prospect_contacts.email_status` aux statuts Hunter (`accept_all`, `webmail`, `disposable`, `unverified`). |
 | 026 | `026_deal_value.sql`                          | Colonnes `prospects.deal_value` + `deal_probability` (forecast pipeline pondéré). |
 | 028 | `028_status_to_contact.sql`                   | ENUM `prospect_status` += `to_contact` (décision humaine « à contacter »). |
+| 029 | `029_domain_blacklist_update_with_check.sql`  | Durcissement RLS : recrée la policy UPDATE de `domain_blacklist` avec `WITH CHECK (auth.uid() = user_id)` (la 021 ne déclarait que `USING`), seule table déviant du standard 4-policies. |
 
 ---
 
@@ -257,7 +276,7 @@ incidence** : `supabase db push` applique les fichiers présents dans l'ordre du
 et ne requiert pas de séquence numérique continue. La séquence appliquée est donc :
 
 ```
-001 … 015, 017, 018 … 026, 028
+001 … 015, 017, 018 … 026, 028, 029
 ```
 
-(015 suivi directement de 017 ; 026 suivi directement de 028.)
+(015 suivi directement de 017 ; 026 suivi directement de 028, puis 029.)
