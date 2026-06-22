@@ -79,6 +79,11 @@ const SIRENE_DOWNLOAD_URL_OVERRIDE = process.env.SIRENE_DOWNLOAD_URL ?? null
 const MAX_STORAGE_MB = parseInt(process.env.MAX_STORAGE_MB ?? '100', 10)
 const BATCH_SIZE = parseInt(process.env.SIRENE_BATCH_SIZE ?? '500', 10)
 
+// Seuil de tolérance d'échec partiel : si plus de MAX_ROWS_FAILED lignes ont
+// échoué à l'upsert, l'ETL sort en code non-zero (échec partiel = alerte CI/cron).
+// 0 = strict (toute ligne perdue fait échouer le job).
+const MAX_ROWS_FAILED = parseInt(process.env.SIRENE_MAX_ROWS_FAILED ?? '0', 10)
+
 const LOG_EVERY_ROWS = 10_000
 const STORAGE_CHECK_EVERY_ROWS = 10_000
 
@@ -343,8 +348,13 @@ function mapRow(row: SireneCsvRow, sourceFile: string): SireneCacheRow | null {
 // SUPABASE — upsert batched + garde-fou storage
 // ---------------------------------------------------------------------------
 
-async function flushBatch(supabase: SupabaseClient, batch: SireneCacheRow[]): Promise<number> {
-  if (batch.length === 0) return 0
+interface FlushResult {
+  upserted: number
+  failed: number
+}
+
+async function flushBatch(supabase: SupabaseClient, batch: SireneCacheRow[]): Promise<FlushResult> {
+  if (batch.length === 0) return { upserted: 0, failed: 0 }
   const { error } = await supabase
     .from('sirene_cache')
     .upsert(batch, { onConflict: 'siren', ignoreDuplicates: false })
@@ -354,9 +364,11 @@ async function flushBatch(supabase: SupabaseClient, batch: SireneCacheRow[]): Pr
       first_siren: batch[0]?.siren,
       message: error.message,
     })
-    return 0
+    // On ne lève pas : on continue l'ETL (rejouable, idempotent), mais on
+    // remonte l'échec à l'appelant pour qu'il soit compté et signalé.
+    return { upserted: 0, failed: batch.length }
   }
-  return batch.length
+  return { upserted: batch.length, failed: 0 }
 }
 
 interface StorageStat {
@@ -561,6 +573,8 @@ interface ProcessStats {
   filtered_out: number
   kept: number
   upserted: number
+  batches_failed: number
+  rows_failed: number
   final_size_mb: number | null
 }
 
@@ -572,6 +586,8 @@ async function processZip(
   let processed = 0
   let kept = 0
   let upserted = 0
+  let batchesFailed = 0
+  let rowsFailed = 0
   let batch: SireneCacheRow[] = []
   let lastSizeMb: number | null = null
 
@@ -628,7 +644,12 @@ async function processZip(
       kept++
       batch.push(mapped)
       if (!DRY_RUN && batch.length >= BATCH_SIZE) {
-        upserted += await flushBatch(supabase, batch)
+        const res = await flushBatch(supabase, batch)
+        upserted += res.upserted
+        if (res.failed > 0) {
+          batchesFailed++
+          rowsFailed += res.failed
+        }
         batch = []
       }
     }
@@ -658,6 +679,8 @@ async function processZip(
         filtered_out: processed - kept,
         kept,
         upserted: 0,
+        batches_failed: 0,
+        rows_failed: 0,
         final_size_mb: null,
       }
     }
@@ -677,7 +700,12 @@ async function processZip(
     if (!DRY_RUN && processed % STORAGE_CHECK_EVERY_ROWS === 0) {
       // On flush avant de mesurer pour avoir une taille à jour.
       if (batch.length > 0) {
-        upserted += await flushBatch(supabase, batch)
+        const res = await flushBatch(supabase, batch)
+        upserted += res.upserted
+        if (res.failed > 0) {
+          batchesFailed++
+          rowsFailed += res.failed
+        }
         batch = []
       }
       const stat = await getStorageStat(supabase)
@@ -698,7 +726,12 @@ async function processZip(
 
   // Flush final
   if (batch.length > 0) {
-    upserted += await flushBatch(supabase, batch)
+    const res = await flushBatch(supabase, batch)
+    upserted += res.upserted
+    if (res.failed > 0) {
+      batchesFailed++
+      rowsFailed += res.failed
+    }
   }
 
   // Mesure finale
@@ -709,6 +742,8 @@ async function processZip(
     filtered_out: processed - kept,
     kept,
     upserted,
+    batches_failed: batchesFailed,
+    rows_failed: rowsFailed,
     final_size_mb: finalStat?.total_mb ?? lastSizeMb,
   }
 }
@@ -746,6 +781,12 @@ async function main() {
     log('error', 'init', 'SIRENE_BATCH_SIZE invalide', { raw: process.env.SIRENE_BATCH_SIZE })
     process.exit(1)
   }
+  if (isNaN(MAX_ROWS_FAILED) || MAX_ROWS_FAILED < 0) {
+    log('error', 'init', 'SIRENE_MAX_ROWS_FAILED invalide', {
+      raw: process.env.SIRENE_MAX_ROWS_FAILED,
+    })
+    process.exit(1)
+  }
 
   log('info', 'init', 'ETL SIRENE — démarrage', {
     download_url_override: SIRENE_DOWNLOAD_URL_OVERRIDE,
@@ -769,17 +810,34 @@ async function main() {
     zipPath = await downloadToTmp(downloadUrl)
     const stats = await processZip(zipPath, sourceFile, supabase)
     const durationMs = Date.now() - startedAt
-    log('info', 'done', 'ETL SIRENE terminé', {
+    // Échec partiel : des batches ont été perdus à l'upsert. On le remonte
+    // explicitement dans le résumé et on signale l'échec via le code de sortie
+    // si on dépasse le seuil de tolérance (sinon les batches perdus passaient
+    // inaperçus, total_upserted sous-comptant sans aucune alerte).
+    const partialFailure = stats.rows_failed > MAX_ROWS_FAILED
+    log(partialFailure ? 'error' : 'info', 'done', 'ETL SIRENE terminé', {
       total_processed: stats.processed,
       total_kept: stats.kept,
       total_upserted: stats.upserted,
       total_filtered_out: stats.filtered_out,
+      batches_failed: stats.batches_failed,
+      rows_failed: stats.rows_failed,
+      max_rows_failed: MAX_ROWS_FAILED,
+      partial_failure: partialFailure,
       rejection_counts: rejectionCounts,
       duration_min: +(durationMs / 60_000).toFixed(2),
       final_size_mb: stats.final_size_mb,
       source_file: sourceFile,
       dry_run: DRY_RUN,
     })
+    if (partialFailure) {
+      log('error', 'fatal', 'ETL SIRENE en échec partiel — batches perdus à l\'upsert', {
+        batches_failed: stats.batches_failed,
+        rows_failed: stats.rows_failed,
+        max_rows_failed: MAX_ROWS_FAILED,
+      })
+      exitCode = 3
+    }
   } catch (err) {
     if (err instanceof StorageLimitReachedError) {
       log('warn', 'fatal', 'ETL interrompu par garde-fou storage', {
