@@ -67,3 +67,32 @@ coverage/
 .vercel
 runs.json
 .supabase/
+
+# ============================================================
+# Artefacts locaux & fichiers a NOMS CLIENTS — NE JAMAIS COMMITTER
+# (captures QA, dumps Playwright, offres/prospects nominatifs : confidentialite clients)
+# ============================================================
+/*.png
+/*.jpg
+/*.jpeg
+/*.gif
+/*.webp
+/*.docx
+/*.pdf
+/*.html
+/*.txt
+/*.yml
+/*.json
+!/package.json
+!/package-lock.json
+!/tsconfig.json
+!/vercel.json
+/snapshot*.md
+.mcp.json
+audit-screenshots/
+captures/
+presentation/
+.playwright-mcp/
+.claude/worktrees/
+.claude/e3-orig-salvage/
+memory/sessions/
