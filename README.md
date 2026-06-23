@@ -52,84 +52,67 @@ Résultats d'ingénierie, vérifiables dans le code et les migrations (aucun KPI
 
 ```mermaid
 flowchart TB
-    subgraph User["👤 Utilisateur (consultant RSE)"]
-        UI["CRM Kanban · Liste du jour · Calendrier"]
-    end
+  subgraph LEG["Competences (code couleur)"]
+    direction LR
+    LP[" Pipeline de donnees "]:::data
+    LL[" Couche LLM "]:::llm
+    LB[" Base de donnees "]:::db
+    LA[" App SaaS "]:::app
+    LC[" GitHub Actions / CI-CD "]:::cicd
+    LS[" Observabilite / Securite "]:::sec
+  end
 
-    subgraph Edge["▲ Vercel / Next.js 15 (App Router)"]
-        MW["Middleware + Auth Supabase SSR"]
-        APP["Server Components / API Routes<br/>validation Zod aux frontières"]
-    end
+  TRIG["⏱️ Declencheurs<br/>GitHub Actions cron mensuel · Vercel Cron 22h"]:::cicd
 
-    %% ===== PIPELINE DATA (ETL + sourcing nocturne) =====
-    subgraph ETLBULK["⚙️ GitHub Actions — ETL SIRENE mensuel (cron)"]
-        IMPORT["import-sirene-bulk.ts<br/>streaming dump ~1 Go · retry x3<br/>upsert idempotent batches 500"]
-    end
+  subgraph FLOW["② Pipeline de donnees · ETL + sourcing nocturne"]
+    direction TB
+    ETL["import-sirene-bulk.ts<br/>streaming dump ~1 Go · retry x3<br/>upsert idempotent batches 500"]:::data
+    CACHE[("sirene_cache")]:::db
+    ORCH["orchestrator.ts · /api/agent/run"]:::data
+    SRC["sourcing-runner.ts<br/>cascade cache → SIRENE → Recherche Entreprises"]:::data
+    ENR["contact-enrichment.ts<br/>ADEME · dirigeants · emails"]:::data
+    ETL --> CACHE
+    ORCH --> SRC --> ENR
+    CACHE -.->|cache local| SRC
+  end
 
-    subgraph Night["🌙 Pipeline nocturne (Vercel Cron 22h)"]
-        ORCH["orchestrator.ts<br/>garde CRON_SECRET timing-safe"]
-        SRC["sourcing-runner.ts — cascade<br/>curseur paginé · circuit breaker"]
-        ENR["contact-enrichment.ts<br/>ADEME · dirigeants · emails pro"]
-    end
+  LLM["③ Couche LLM · gemini-scoring.ts<br/>Gemini 2.0-flash · sortie validee Zod<br/>anti-prompt-injection · zero PII"]:::llm
+  PROSPECTS[("prospects · scores")]:::db
 
-    subgraph Sources["📚 Sources de données externes"]
-        CACHE["sirene_cache (local)"]
-        SIRENE["API SIRENE INSEE"]
-        RECH["Recherche Entreprises"]
-        ADEME["ADEME / INPI / contacts"]
-    end
+  subgraph APP["⑤ App SaaS · Next.js 15 / Vercel"]
+    direction TB
+    WEB["App Router · Auth Supabase SSR<br/>API Routes Zod · CRM Kanban"]:::app
+    DBX[("agent_runs · profiles<br/>opt_out · domain_blacklist")]:::db
+    MAIL["Resend · listes & relances · opt-out RGPD"]:::app
+    USER(["👤 Utilisateur"]):::app
+    WEB --> MAIL
+    WEB --> USER
+    DBX -.-> WEB
+  end
 
-    %% ===== COUCHE LLM (skill phare) =====
-    subgraph LLM["🧠 Couche LLM"]
-        GEMINI["gemini-scoring.ts — Gemini 2.0-flash<br/>scoring 3 piliers · sortie validee Zod<br/>anti-prompt-injection · zero PII envoyee"]
-    end
+  subgraph OPS["Transverse · CI-CD & Observabilite"]
+    direction LR
+    CI["GitHub Actions CI<br/>lint · type · test+cov · build<br/>CodeQL · Dependabot · Preview"]:::cicd
+    SENTRY["Sentry · scrub PII<br/>3 runtimes"]:::sec
+  end
 
-    subgraph DB["🗄️ Supabase Postgres"]
-        RLS["RLS multi-tenant<br/>auth.uid() = user_id"]
-        TBL["profiles · prospects · daily_lists<br/>daily_list_items · agent_runs · sirene_cache"]
-    end
+  TRIG --> ETL
+  TRIG --> ORCH
+  ENR --> LLM --> PROSPECTS --> WEB
+  CI -.->|deploie| WEB
+  SENTRY -.->|monitore| FLOW
 
-    subgraph CICD["⚙️ GitHub Actions — CI/CD"]
-        CI["CI : lint · typecheck · test+coverage · build"]
-        PREV["Deploy Preview (PR)"]
-    end
+  classDef data fill:#2563eb,stroke:#1e3a8a,color:#fff,stroke-width:1px;
+  classDef llm  fill:#7c3aed,stroke:#4c1d95,color:#fff,stroke-width:1px;
+  classDef db   fill:#059669,stroke:#065f46,color:#fff,stroke-width:1px;
+  classDef app  fill:#ea580c,stroke:#9a3412,color:#fff,stroke-width:1px;
+  classDef cicd fill:#334155,stroke:#0f172a,color:#fff,stroke-width:1px;
+  classDef sec  fill:#dc2626,stroke:#7f1d1d,color:#fff,stroke-width:1px;
 
-    subgraph Obs["🔭 Observabilite"]
-        SENTRY["🐞 Sentry — scrub PII (3 runtimes)"]
-        RESEND["✉️ Resend — email liste prete"]
-    end
-
-    %% ----- Flux applicatif -----
-    User --> MW --> APP
-    APP -->|requetes filtrees par RLS| RLS --> TBL
-
-    %% ----- Pipeline data : ETL bulk -----
-    SIRENE -->|dump bulk| IMPORT
-    IMPORT -->|upsert idempotent| CACHE
-    CACHE --> TBL
-
-    %% ----- Pipeline data : sourcing nocturne en cascade -----
-    ORCH --> SRC
-    SRC -->|1 cache| CACHE
-    SRC -->|2 fallback| SIRENE
-    SRC -->|3 fallback| RECH
-    SRC --> ENR
-    ENR --> ADEME
-
-    %% ----- Sourcing alimente la couche LLM -----
-    ENR -->|features sans PII| GEMINI
-    GEMINI -->|prospects scores| TBL
-
-    %% ----- Livraison & observabilite -----
-    APP --> RESEND --> User
-    Edge -.traces.-> SENTRY
-    Night -.logs structures.-> SENTRY
-    CI --> PREV
-
-    classDef llm fill:#1e1b4b,stroke:#818cf8,stroke-width:2px,color:#e0e7ff;
-    classDef pipe fill:#0f2e1d,stroke:#34d399,stroke-width:2px,color:#d1fae5;
-    class GEMINI llm;
-    class IMPORT,ORCH,SRC,ENR pipe;
+  style LEG  fill:#ffffff,stroke:#cbd5e1,stroke-width:1px,color:#0f172a;
+  style FLOW fill:#eff6ff,stroke:#2563eb,stroke-width:2px,color:#1e3a8a;
+  style APP  fill:#fff7ed,stroke:#ea580c,stroke-width:2px,color:#9a3412;
+  style OPS  fill:#f1f5f9,stroke:#64748b,stroke-width:2px,color:#0f172a;
 ```
 
 ### Data lineage
