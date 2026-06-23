@@ -102,3 +102,11 @@ scripts/gen-session-tokens.mjs
 scripts/set-test-password.mjs
 scripts/gen-magic-link.mjs
 scripts/gen-confirm-url.mjs
+
+# Notes internes IA/dev & livrables commerciaux client — hors repo public
+CLAUDE.md
+PROMPT_OPTIMISE.md
+memory/
+docs/glan-*
+docs/copy/
+docs/seo/
