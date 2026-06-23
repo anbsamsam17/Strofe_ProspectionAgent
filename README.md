@@ -6,6 +6,8 @@
 
 De la donnée publique brute (SIRENE INSEE) à un CRM Kanban qualifié : sourcing nocturne automatisé, enrichissement multi-sources, scoring LLM et livraison quotidienne de prospects priorisés.
 
+**Projet conçu et développé par un profil _Data / Backend Engineer_** — ETL & pipelines de données, PostgreSQL avancé (RLS multi-tenant), LLM en production, CI/CD.
+
 [![CI](https://img.shields.io/github/actions/workflow/status/anbsamsam17/Strofe_ProspectionAgent/ci.yml?branch=main&label=CI&logo=github)](https://github.com/anbsamsam17/Strofe_ProspectionAgent/actions)
 [![Next.js](https://img.shields.io/badge/Next.js-15-black?logo=next.js)](https://nextjs.org/)
 [![React](https://img.shields.io/badge/React-19-149eca?logo=react)](https://react.dev/)
@@ -28,6 +30,21 @@ De la donnée publique brute (SIRENE INSEE) à un CRM Kanban qualifié : sourcin
 **ProspectionAgent** transforme un consultant en bilan carbone en machine de prospection : chaque nuit, l'agent source les entreprises françaises soumises à l'obligation BEGES depuis le registre **SIRENE**, les enrichit (données ADEME, contacts), les score via un LLM, puis livre au matin une **liste d'appels priorisés** prête à exploiter dans un **CRM Kanban**.
 
 **À qui ça sert :** consultants et cabinets RSE / décarbonation qui veulent un flux régulier de prospects qualifiés sans passer leurs journées à chercher des SIRET dans des fichiers Excel.
+
+---
+
+## 📊 Impact & résultats
+
+Résultats d'ingénierie, vérifiables dans le code et les migrations (aucun KPI client inventé) :
+
+- **Dump SIRENE ~1 Go traité en streaming** — le fichier n'est jamais chargé en mémoire, l'import reste en **O(1) mémoire** quel que soit le volume (`scripts/import-sirene-bulk.ts`).
+- **Upsert idempotent par batches de 500** — l'ETL est **rejouable** sans corrompre la base (`onConflict: 'siren'`), avec **retry exponentiel ×3** sur 5xx / timeout.
+- **Observabilité data-quality** — chaque ligne rejetée est comptée et **catégorisée par cause** (10 causes), avec un mode `DRY_RUN` qui parse et reporte sans rien écrire.
+- **3 sources en cascade** au sourcing nocturne — cache local SIRENE → API SIRENE INSEE → Recherche Entreprises, avec curseur de pagination persisté et circuit breaker.
+- **Scoring LLM contraint** — sortie du modèle **validée par Zod** avant écriture, avec fallback propre en cas de réponse non conforme.
+- **Automatisation planifiée** — **cron nocturne** (sourcing 22h, `reap-stale` 4h, purge 3h) + **ETL SIRENE mensuel** (1er du mois) via GitHub Actions avec freshness-check.
+- **29 migrations Postgres versionnées** — du schéma initial à la dernière évolution (`001_initial` → `029`), RLS multi-tenant sur toutes les tables métier.
+- **~99 suites de tests Vitest** — couvrant transformations de données, mapping SIRENE, scoring et helpers d'observabilité, avec coverage générée en CI.
 
 ---
 
@@ -113,6 +130,35 @@ flowchart TB
     classDef pipe fill:#0f2e1d,stroke:#34d399,stroke-width:2px,color:#d1fae5;
     class GEMINI llm;
     class IMPORT,ORCH,SRC,ENR pipe;
+```
+
+### Data lineage
+
+Parcours d'une donnée, du registre public INSEE jusqu'à la fiche prospect du CRM :
+
+```mermaid
+flowchart LR
+    INSEE["SIRENE INSEE<br/>dump bulk ~1 Go"]
+    IMPORT["import-sirene-bulk.ts<br/>streaming + upsert batches 500"]
+    CACHE["sirene_cache<br/>table Postgres"]
+    SRC["sourcing-runner.ts<br/>cascade nocturne"]
+    ENR["contact-enrichment.ts<br/>ADEME + contacts"]
+    SCORE["gemini-scoring.ts<br/>Gemini 2.0-flash + Zod"]
+    PROSPECTS["prospects<br/>table Postgres RLS"]
+    CRM["CRM Kanban<br/>liste du jour"]
+
+    INSEE -->|import mensuel idempotent| IMPORT
+    IMPORT -->|onConflict siren| CACHE
+    CACHE -->|sourcing nocturne 22h| SRC
+    SRC -->|features sans PII| ENR
+    ENR -->|scoring 3 piliers| SCORE
+    SCORE -->|upsert prospects scores| PROSPECTS
+    PROSPECTS -->|filtre par RLS auth.uid| CRM
+
+    classDef src fill:#0f2e1d,stroke:#34d399,stroke-width:2px,color:#d1fae5;
+    classDef llm fill:#1e1b4b,stroke:#818cf8,stroke-width:2px,color:#e0e7ff;
+    class INSEE,IMPORT,CACHE,SRC,ENR src;
+    class SCORE llm;
 ```
 
 ---
@@ -280,6 +326,19 @@ npm run import-sirene        # respecte DRY_RUN
 npx supabase migration new <nom>
 npx supabase db push
 ```
+
+---
+
+## 📚 Documentation technique
+
+Documentation d'ingénierie maintenue dans le dépôt :
+
+- **[docs/data-pipeline.md](docs/data-pipeline.md)** — anatomie de l'ETL SIRENE et du pipeline nocturne : streaming, idempotence, cascade de sourcing, scoring.
+- **[docs/cicd.md](docs/cicd.md)** — les 3 workflows GitHub Actions (CI, deploy preview, import SIRENE mensuel) et leur configuration.
+- **[docs/SECURITY-RLS.md](docs/SECURITY-RLS.md)** — modèle d'isolation multi-tenant : politiques RLS `auth.uid() = user_id` table par table.
+- **[SECURITY.md](SECURITY.md)** — politique de sécurité, gestion des secrets et procédure de signalement de vulnérabilité.
+- **[supabase/migrations/README.md](supabase/migrations/README.md)** — historique et conventions des 29 migrations Postgres.
+- **[docs/sirene-cache-deployment-checklist.md](docs/sirene-cache-deployment-checklist.md)** — checklist de déploiement et de mise en service du cache SIRENE.
 
 ---
 
