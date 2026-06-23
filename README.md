@@ -66,7 +66,7 @@ flowchart TB
     APP -->|requêtes filtrées par RLS| RLS --> TBL
     ETL -->|upsert idempotent| TBL
     ORCH --> SRC --> ENR --> SCORE -->|upsert| TBL
-    APP -->|email "liste prête"| RESEND["✉️ Resend"]
+    APP -->|email liste prête| RESEND["✉️ Resend"]
     RESEND --> User
     Edge -.scrub PII.-> SENTRY["🐞 Sentry"]
     Night -.logs structurés.-> SENTRY
