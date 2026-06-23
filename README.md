@@ -43,7 +43,7 @@ Résultats d'ingénierie, vérifiables dans le code et les migrations (aucun KPI
 - **3 sources en cascade** au sourcing nocturne — cache local SIRENE → API SIRENE INSEE → Recherche Entreprises, avec curseur de pagination persisté et circuit breaker.
 - **Scoring LLM contraint** — sortie du modèle **validée par Zod** avant écriture, avec fallback propre en cas de réponse non conforme.
 - **Automatisation planifiée** — **cron nocturne** (sourcing 22h, `reap-stale` 4h, purge 3h) + **ETL SIRENE mensuel** (1er du mois) via GitHub Actions avec freshness-check.
-- **29 migrations Postgres versionnées** — du schéma initial à la dernière évolution (`001_initial` → `029`), RLS multi-tenant sur toutes les tables métier.
+- **31 migrations Postgres versionnées** — du schéma initial à la dernière évolution (`001_initial` → `031`), RLS multi-tenant sur toutes les tables métier.
 - **~99 suites de tests Vitest** — couvrant transformations de données, mapping SIRENE, scoring et helpers d'observabilité, avec coverage générée en CI.
 
 ---
@@ -150,7 +150,7 @@ flowchart LR
 
 | Brique | Ce qui est mis en œuvre | Compétence |
 | --- | --- | --- |
-| **29 migrations Supabase** | RLS multi-tenant (`auth.uid() = user_id`), `UNIQUE(user_id, siren)`, colonnes `GENERATED ALWAYS`, RPC `SECURITY DEFINER`, index GIN / full-text FR | **BDD** |
+| **31 migrations Supabase** | RLS multi-tenant (`auth.uid() = user_id`), `UNIQUE(user_id, siren)`, colonnes `GENERATED ALWAYS`, RPC `SECURITY DEFINER`, index GIN / full-text FR | **BDD** |
 | **ETL SIRENE** | Streaming d'un dump ~1 Go, retry ×3, upsert idempotent par batches de 500, mode `DRY_RUN`, observabilité par cause de rejet | **Pipeline data** |
 | **Pipeline nocturne** | Orchestrateur cron → sourcing en cascade → enrichissement → scoring LLM validé par Zod → upsert | **Pipeline data** |
 | **3 workflows GitHub Actions** | CI (lint/typecheck/test+coverage/build), Deploy Preview Vercel, import SIRENE mensuel avec freshness-check | **DevOps / CI-CD** |
@@ -163,7 +163,7 @@ flowchart LR
 ## 🗄️ Base de données — Postgres avancé, multi-tenant
 
 - **Isolation stricte par locataire** : chaque table métier porte une politique **RLS** `auth.uid() = user_id` (SELECT / INSERT / UPDATE / DELETE). Les requêtes côté utilisateur (client SSR) sont filtrées par la base, pas par le code — pas de `.eq('user_id', …)` redondant.
-- **29 migrations versionnées** retraçant l'évolution réelle du schéma (`001_initial` → `029_domain_blacklist_update_with_check`).
+- **31 migrations versionnées** retraçant l'évolution réelle du schéma (`001_initial` → `031_rate_limits`).
 - **Patterns Postgres avancés réellement utilisés** :
   - colonnes **`GENERATED ALWAYS`** (ex. score composite *hot lead*, migration 024),
   - fonction **RPC `SECURITY DEFINER`** pour la recherche SIRENE (migration 019),
@@ -320,7 +320,7 @@ Documentation d'ingénierie maintenue dans le dépôt :
 - **[docs/cicd.md](docs/cicd.md)** — les 3 workflows GitHub Actions (CI, deploy preview, import SIRENE mensuel) et leur configuration.
 - **[docs/SECURITY-RLS.md](docs/SECURITY-RLS.md)** — modèle d'isolation multi-tenant : politiques RLS `auth.uid() = user_id` table par table.
 - **[SECURITY.md](SECURITY.md)** — politique de sécurité, gestion des secrets et procédure de signalement de vulnérabilité.
-- **[supabase/migrations/README.md](supabase/migrations/README.md)** — historique et conventions des 29 migrations Postgres.
+- **[supabase/migrations/README.md](supabase/migrations/README.md)** — historique et conventions des 31 migrations Postgres.
 - **[docs/sirene-cache-deployment-checklist.md](docs/sirene-cache-deployment-checklist.md)** — checklist de déploiement et de mise en service du cache SIRENE.
 
 ---

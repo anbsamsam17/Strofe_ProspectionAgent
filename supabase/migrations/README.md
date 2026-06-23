@@ -29,7 +29,7 @@ Les patterns Postgres les plus structurants du schéma, avec leur point d'ancrag
 
 ## Tableau des migrations
 
-29 fichiers `.sql` au total. La colonne **#** reprend le préfixe numérique du nom de
+31 fichiers `.sql` au total. La colonne **#** reprend le préfixe numérique du nom de
 fichier (l'ordre d'application réel est traité dans la note sur l'ordonnancement).
 
 | #   | Fichier                                       | But |
@@ -63,6 +63,8 @@ fichier (l'ordre d'application réel est traité dans la note sur l'ordonnanceme
 | 026 | `026_deal_value.sql`                          | Colonnes `prospects.deal_value` + `deal_probability` (forecast pipeline pondéré). |
 | 028 | `028_status_to_contact.sql`                   | ENUM `prospect_status` += `to_contact` (décision humaine « à contacter »). |
 | 029 | `029_domain_blacklist_update_with_check.sql`  | Durcissement RLS : recrée la policy UPDATE de `domain_blacklist` avec `WITH CHECK (auth.uid() = user_id)` (la 021 ne déclarait que `USING`), seule table déviant du standard 4-policies. |
+| 030 | `030_security_hardening.sql`                  | Durcissement sécurité : REVOKE anon sur `search_sirene_cache` + vue `sirene_cache_size`, `CHECK (deal_value >= 0)`, index UNIQUE `opt_out` (anti-doublons RGPD). |
+| 031 | `031_rate_limits.sql`                         | Rate-limiting par utilisateur : table `rate_limit_hits` + RPC atomique `increment_rate_limit` (RLS deny-all, service_role only). |
 
 ---
 
