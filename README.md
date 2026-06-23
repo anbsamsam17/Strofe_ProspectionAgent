@@ -75,7 +75,7 @@ flowchart TB
 
 ---
 
-## Ce que ce repo démontre
+## Capacités techniques mises en œuvre
 
 | Brique | Ce qui est mis en œuvre | Compétence |
 | --- | --- | --- |
@@ -225,4 +225,4 @@ npx supabase db push
 
 ## Licence
 
-Propriétaire — tous droits réservés. Code de démonstration / portfolio, non destiné à la réutilisation sans autorisation.
+Propriétaire — tous droits réservés. Réutilisation, reproduction ou usage commercial soumis à autorisation écrite préalable (voir [LICENSE](LICENSE)).
