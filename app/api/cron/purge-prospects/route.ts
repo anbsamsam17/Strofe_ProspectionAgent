@@ -200,3 +200,15 @@ export async function POST(req: NextRequest) {
     { status: 200 },
   )
 }
+
+// ------------------------------------------------------------
+// Handler GET — Vercel Cron
+// ------------------------------------------------------------
+//
+// Vercel Cron invoque cette route en GET avec Authorization: Bearer
+// {CRON_SECRET}. POST ne lit aucun corps de requête (auth via header
+// uniquement) — la délégation est donc sûre et l'auth CRON_SECRET
+// (isCronRequest) reste appliquée sur le chemin GET.
+export async function GET(req: NextRequest) {
+  return POST(req)
+}

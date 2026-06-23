@@ -253,3 +253,17 @@ export async function POST(request: NextRequest) {
     { status: 200 },
   )
 }
+
+// ------------------------------------------------------------
+// Handler GET — Vercel Cron
+// ------------------------------------------------------------
+//
+// Vercel Cron Jobs invoquent les routes en GET (jamais POST) avec le
+// header Authorization: Bearer {CRON_SECRET} mais SANS corps de requête.
+// On délègue à POST : celui-ci ne lit le body que si content-type est
+// application/json — absent sur l'appel cron, donc `body` reste {} et le
+// chemin cron (isCronRequest) s'exécute à l'identique. Comportement POST
+// inchangé pour les appelants existants (bouton « Lancer Glan », etc.).
+export async function GET(request: NextRequest) {
+  return POST(request)
+}
