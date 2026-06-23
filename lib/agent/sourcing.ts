@@ -3,6 +3,7 @@
 // Source : API Sirene INSEE v3.11 + ADEME BEGES (Data Fair)
 // ============================================================
 
+import { z } from 'zod'
 import { captureWithContext } from '@/lib/observability/sentry-helpers'
 import type {
   Prospect,
@@ -10,6 +11,66 @@ import type {
   SireneResponse,
 } from '@/lib/types'
 import { isDecret2022Compliant } from './decret-2022'
+
+// ------------------------------------------------------------
+// SCHEMAS ZOD — validation défensive des réponses API ENTRANTES
+//
+// On ne valide QUE les champs réellement consommés (header.total /
+// header.curseurSuivant / etablissements[].siren / .siret, et côté Recherche
+// Entreprises results[].siren / .siege). `.passthrough()` conserve les champs
+// non listés (on cast ensuite vers le type métier riche). En cas de dérive de
+// schéma (champ critique disparu/retypé) : capture Sentry 'schema_drift' +
+// fallback propre (skip page / liste vide) SANS planter ni changer le
+// happy-path. Aligné sur le pattern de `lib/agent/sources/bodacc.ts`.
+// ------------------------------------------------------------
+
+const SireneEtablissementSchema = z
+  .object({
+    siret: z.string(),
+    siren: z.string(),
+  })
+  .passthrough()
+
+const SireneResponseSchema = z
+  .object({
+    header: z
+      .object({
+        total: z.number().optional(),
+        curseurSuivant: z.string().optional(),
+      })
+      .passthrough()
+      .optional(),
+    etablissements: z.array(SireneEtablissementSchema).optional().default([]),
+  })
+  .passthrough()
+
+const RechercheEntreprisesResponseSchema = z
+  .object({
+    results: z
+      .array(
+        z
+          .object({
+            siren: z.string(),
+            siege: z.object({}).passthrough().optional().nullable(),
+          })
+          .passthrough(),
+      )
+      .optional()
+      .default([]),
+  })
+  .passthrough()
+
+// ADEME Data Fair : on ne valide ici QUE l'enveloppe (`results` doit être un
+// array d'objets). La validation fine de chaque record reste assurée par
+// `normalizeAdemeRecord` (type-guard runtime déjà en place, cf. plus bas) qui
+// skippe les records mal formés. Ce schéma sert uniquement à détecter une
+// dérive de la FORME de l'enveloppe (ex. `results` retypé en objet).
+const AdemeBegesResponseSchema = z
+  .object({
+    results: z.array(z.record(z.string(), z.unknown())).optional().default([]),
+    total: z.number().optional(),
+  })
+  .passthrough()
 
 // ------------------------------------------------------------
 // ERREURS TYPÉES
@@ -963,9 +1024,9 @@ export async function sourcerEntreprises(
       throw sireneErr
     }
 
-    let data: SireneResponse
+    let rawJson: unknown
     try {
-      data = (await response.json()) as SireneResponse
+      rawJson = await response.json()
     } catch (err) {
       const parseErr = new SireneApiError(
         `Sirene: parse JSON échoué page ${page} chunk=${currentChunkIndex}/${nafChunks.length} curseur=${currentRawCursor} — ${
@@ -985,6 +1046,34 @@ export async function sourcerEntreprises(
       })
       throw parseErr
     }
+
+    // Validation défensive du contrat ENTRANT : si l'INSEE change la forme de
+    // la réponse (header/etablissements retypés ou disparus), on capture une
+    // dérive de schéma et on throw SireneApiError pour basculer sur le fallback
+    // Recherche Entreprises (même chemin que les erreurs HTTP) — au lieu de
+    // crasher plus loin sur un `.header`/`.etablissements` inattendu.
+    const validated = SireneResponseSchema.safeParse(rawJson)
+    if (!validated.success) {
+      const driftErr = new SireneApiError(
+        `Sirene: schema_drift page ${page} chunk=${currentChunkIndex}/${nafChunks.length} curseur=${currentRawCursor}`,
+      )
+      captureWithContext(driftErr, {
+        pipeline_phase: 'sourcing',
+        api: 'sirene',
+        extra: {
+          phase: 'schema_drift',
+          page,
+          curseur: currentRawCursor,
+          chunk_index: currentChunkIndex,
+          chunk_count: nafChunks.length,
+          zod_issues: validated.error.issues.slice(0, 5),
+        },
+      })
+      throw driftErr
+    }
+    // Cast vers le type métier riche : `.passthrough()` a conservé tous les
+    // champs, seuls les champs critiques (siren/siret/header) sont garantis.
+    const data = validated.data as unknown as SireneResponse
 
     pagesLoaded++
 
@@ -1212,12 +1301,33 @@ export async function sourcerEntreprisesFallback(
 
       if (!response.ok) break
 
-      let data: { results?: RechercheEntreprisesResult[] }
+      let rawJson: unknown
       try {
-        data = await response.json()
+        rawJson = await response.json()
       } catch {
         break
       }
+
+      // Validation défensive du contrat ENTRANT. En cas de dérive de schéma
+      // (results retypé, siren manquant), on capture 'schema_drift' et on STOPPE
+      // la pagination pour ce NAF (fallback propre, pas de throw — le fallback
+      // doit rester best-effort). Le happy-path reste identique : on consomme
+      // `results` typé exactement comme avant via le cast ci-dessous.
+      const validated = RechercheEntreprisesResponseSchema.safeParse(rawJson)
+      if (!validated.success) {
+        captureWithContext(new Error('Recherche Entreprises: schema_drift'), {
+          pipeline_phase: 'sourcing',
+          api: 'recherche_entreprises',
+          extra: {
+            phase: 'schema_drift',
+            naf,
+            page,
+            zod_issues: validated.error.issues.slice(0, 5),
+          },
+        })
+        break
+      }
+      const data = validated.data as unknown as { results?: RechercheEntreprisesResult[] }
 
       const results = data?.results ?? []
 
@@ -1440,14 +1550,32 @@ export async function verifierBegesAdeme(siren: string): Promise<AdemeBegesEnric
     return null
   }
 
-  let data: { results?: unknown[]; total?: number }
+  let rawJson: unknown
   try {
-    data = await response.json()
+    rawJson = await response.json()
   } catch {
     return null
   }
 
-  const results = data?.results
+  // Validation défensive de l'enveloppe ENTRANTE. En cas de dérive de schéma
+  // (ex. `results` n'est plus un array), on capture 'schema_drift' et on
+  // retourne null (fallback propre : BEGES considéré non trouvé, pas de crash).
+  const validated = AdemeBegesResponseSchema.safeParse(rawJson)
+  if (!validated.success) {
+    captureWithContext(new Error('ADEME BEGES: schema_drift'), {
+      pipeline_phase: 'sourcing',
+      api: 'ademe',
+      extra: {
+        phase: 'schema_drift',
+        siren,
+        zod_issues: validated.error.issues.slice(0, 5),
+      },
+    })
+    return null
+  }
+  const data = validated.data
+
+  const results = data.results
   if (!results || results.length === 0) {
     return null
   }

@@ -17,6 +17,7 @@
 // ============================================================
 
 import type { SupabaseClient } from '@supabase/supabase-js'
+import { captureWithContext } from '@/lib/observability/sentry-helpers'
 
 // ------------------------------------------------------------
 // HELPERS INTERNES
@@ -76,6 +77,14 @@ export async function isOptedOut(
       .eq('siren', siren)
       .limit(1)
       .maybeSingle()
+    // Fail-open : une erreur DB n'est pas remontée au caller (cf. JSDoc), mais
+    // doit rester visible côté alerting — sinon un opt-out raté passe inaperçu.
+    if (error) {
+      captureWithContext(error, {
+        pipeline_phase: 'pitch',
+        extra: { fn: 'isOptedOut', check: 'siren', user_id: userId },
+      })
+    }
     if (!error && data) return true
   }
 
@@ -88,6 +97,12 @@ export async function isOptedOut(
       .ilike('email', emailLower)
       .limit(1)
       .maybeSingle()
+    if (error) {
+      captureWithContext(error, {
+        pipeline_phase: 'pitch',
+        extra: { fn: 'isOptedOut', check: 'email', user_id: userId },
+      })
+    }
     if (!error && data) return true
   }
 
@@ -119,7 +134,22 @@ export async function filterOptedOutSirens(
     .eq('user_id', userId)
     .in('siren', sirens)
 
-  if (error || !data) return sirens
+  if (error || !data) {
+    // Fail-open volontaire : on retourne la liste inchangée pour ne pas bloquer
+    // le sourcing sur un souci infra. Mais on capture l'erreur (sinon des SIREN
+    // opt-out pourraient être re-sourcés silencieusement — risque RGPD).
+    if (error) {
+      captureWithContext(error, {
+        pipeline_phase: 'sourcing',
+        extra: {
+          fn: 'filterOptedOutSirens',
+          user_id: userId,
+          sirens_count: sirens.length,
+        },
+      })
+    }
+    return sirens
+  }
 
   const blocked = new Set<string>()
   for (const row of data as Array<Pick<OptOutRow, 'siren'>>) {
