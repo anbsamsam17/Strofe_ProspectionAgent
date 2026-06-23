@@ -15,6 +15,7 @@ import { runAgentNocturne } from '@/lib/agent/orchestrator'
 import { runSourcing } from '@/lib/agent/sourcing-runner'
 import type { AgentRun } from '@/lib/types'
 import { isCronRequest } from '@/lib/auth/cron'
+import { checkRateLimit, rateLimitResponse } from '@/lib/rate-limit'
 
 // Vercel Pro — le run nocturne peut prendre plusieurs minutes
 export const maxDuration = 300
@@ -200,6 +201,18 @@ export async function POST(request: NextRequest) {
   // Utiliser le client admin pour l'orchestrateur (bypass RLS — le run crée
   // des enregistrements pour l'user sans passer par les policies user)
   const supabaseAdmin = createAdminClient()
+
+  // -- Rate-limit (anti-abus quotas LLM/Hunter/Pappers) : run agent complet --
+  // Le run nocturne est très coûteux (~3-5 min, OpenAI + Pappers + Hunter).
+  // 10 lancements manuels / heure suffisent largement à un usage légitime.
+  // Placé APRÈS l'auth, AVANT le travail coûteux. Fail-open si DB limiteur KO.
+  const runRl = await checkRateLimit(supabaseAdmin, targetUserId, 'agent_run', {
+    limit: 10,
+    windowSec: 3600,
+  })
+  if (!runRl.allowed) {
+    return rateLimitResponse(runRl)
+  }
 
   // -- Vérification anti-concurrence : un seul run actif à la fois par user --
   // Deux runs simultanés peuvent créer une condition de course sur l'upsert

@@ -21,7 +21,8 @@ import { z } from 'zod'
 import { Resend } from 'resend'
 import * as React from 'react'
 
-import { createClient } from '@/lib/supabase/server'
+import { createAdminClient, createClient } from '@/lib/supabase/server'
+import { checkRateLimit, rateLimitResponse } from '@/lib/rate-limit'
 import { isOptedOut } from '@/lib/agent/opt-out-checker'
 import { TEMPLATES } from '@/lib/email/templates/prospection'
 import {
@@ -79,6 +80,19 @@ export async function POST(request: NextRequest) {
       { error: { code: 'UNAUTHENTICATED', message: 'Non authentifié' } },
       { status: 401 },
     )
+  }
+
+  // 1bis. Rate-limit (anti-spam Resend) — chaque envoi part vers un prospect réel.
+  // 60 emails / heure : large pour une session de prospection manuelle, mais
+  // bloque un envoi en masse abusif (réputation domaine + conformité). Client
+  // admin dédié au limiteur. Placé APRÈS l'auth, AVANT le parse + l'envoi.
+  // Fail-open si la DB du limiteur est indisponible.
+  const emailRl = await checkRateLimit(createAdminClient, user.id, 'email_send', {
+    limit: 60,
+    windowSec: 3600,
+  })
+  if (!emailRl.allowed) {
+    return rateLimitResponse(emailRl)
   }
 
   // 2. Parse body

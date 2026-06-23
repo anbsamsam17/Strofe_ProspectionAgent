@@ -57,6 +57,10 @@ function makeSupabaseClient() {
 
 vi.mock('@/lib/supabase/server', () => ({
   createClient: vi.fn(async () => makeSupabaseClient()),
+  // Le rate-limiter (lib/rate-limit) est un no-op en test (NODE_ENV==='test')
+  // et n'appelle donc JAMAIS ce client ; ce stub existe seulement pour que la
+  // référence `createAdminClient` importée par la route soit définie.
+  createAdminClient: vi.fn(() => ({})),
 }))
 
 const mockEnrichirContact = vi.fn()

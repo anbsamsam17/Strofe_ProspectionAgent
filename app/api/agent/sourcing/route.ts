@@ -13,6 +13,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { createAdminClient, createClient } from '@/lib/supabase/server'
 import { runSourcing } from '@/lib/agent/sourcing-runner'
+import { checkRateLimit, rateLimitResponse } from '@/lib/rate-limit'
 
 // Vercel — le sourcing peut prendre plusieurs minutes (INSEE + ADEME)
 export const maxDuration = 300
@@ -133,6 +134,18 @@ export async function POST(request: NextRequest) {
   // sans ce filter on inspecterait les runs de tous les users.
   // Cf. .claude/rules/security.md §RLS pour le contexte.
   const supabaseAdmin = createAdminClient()
+
+  // -- Rate-limit (anti-abus INSEE/ADEME + quotas en aval) : sourcing pur --
+  // Plus léger qu'un run complet mais reste coûteux (pagination INSEE + ADEME).
+  // 20 sourcings / heure couvrent un usage intensif légitime (réglages multiples).
+  // Placé APRÈS l'auth, AVANT le travail coûteux. Fail-open si DB limiteur KO.
+  const sourcingRl = await checkRateLimit(supabaseAdmin, user.id, 'agent_sourcing', {
+    limit: 20,
+    windowSec: 3600,
+  })
+  if (!sourcingRl.allowed) {
+    return rateLimitResponse(sourcingRl)
+  }
 
   const { data: existingRun } = await supabaseAdmin
     .from('agent_runs')

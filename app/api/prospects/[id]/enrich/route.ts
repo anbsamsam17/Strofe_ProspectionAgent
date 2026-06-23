@@ -40,7 +40,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 
-import { createClient } from '@/lib/supabase/server'
+import { createAdminClient, createClient } from '@/lib/supabase/server'
+import { checkRateLimit, rateLimitResponse } from '@/lib/rate-limit'
 import { enrichirContact, type EnrichedContact } from '@/lib/agent/contact-enrichment'
 import { isProfessionalEmail } from '@/lib/agent/email-is-pro'
 import {
@@ -134,6 +135,19 @@ export async function POST(
       { error: { code: 'INVALID_INPUT', message: 'Identifiant prospect invalide' } },
       { status: 400 },
     )
+  }
+
+  // 2bis. Rate-limit (anti-abus quotas Pappers/Hunter) — cascade payante par hit.
+  // 30 enrichissements / minute : généreux pour un usage manuel (clics sur fiches)
+  // tout en plafonnant un script abusif. Client admin dédié au limiteur (le reste
+  // de la route reste en session SSR + RLS). Placé APRÈS l'auth, AVANT la cascade.
+  // Fail-open si la DB du limiteur est indisponible.
+  const enrichRl = await checkRateLimit(createAdminClient, user.id, 'prospect_enrich', {
+    limit: 30,
+    windowSec: 60,
+  })
+  if (!enrichRl.allowed) {
+    return rateLimitResponse(enrichRl)
   }
 
   // 3. Validation body (optionnel)
