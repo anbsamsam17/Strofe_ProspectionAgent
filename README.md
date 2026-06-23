@@ -41,7 +41,30 @@ flowchart TB
 
     subgraph Edge["▲ Vercel / Next.js 15 (App Router)"]
         MW["Middleware + Auth Supabase SSR"]
-        APP["Server Components / API Routes (Zod)"]
+        APP["Server Components / API Routes<br/>validation Zod aux frontières"]
+    end
+
+    %% ===== PIPELINE DATA (ETL + sourcing nocturne) =====
+    subgraph ETLBULK["⚙️ GitHub Actions — ETL SIRENE mensuel (cron)"]
+        IMPORT["import-sirene-bulk.ts<br/>streaming dump ~1 Go · retry x3<br/>upsert idempotent batches 500"]
+    end
+
+    subgraph Night["🌙 Pipeline nocturne (Vercel Cron 22h)"]
+        ORCH["orchestrator.ts<br/>garde CRON_SECRET timing-safe"]
+        SRC["sourcing-runner.ts — cascade<br/>curseur paginé · circuit breaker"]
+        ENR["contact-enrichment.ts<br/>ADEME · dirigeants · emails pro"]
+    end
+
+    subgraph Sources["📚 Sources de données externes"]
+        CACHE["sirene_cache (local)"]
+        SIRENE["API SIRENE INSEE"]
+        RECH["Recherche Entreprises"]
+        ADEME["ADEME / INPI / contacts"]
+    end
+
+    %% ===== COUCHE LLM (skill phare) =====
+    subgraph LLM["🧠 Couche LLM"]
+        GEMINI["gemini-scoring.ts — Gemini 2.0-flash<br/>scoring 3 piliers · sortie validee Zod<br/>anti-prompt-injection · zero PII envoyee"]
     end
 
     subgraph DB["🗄️ Supabase Postgres"]
@@ -49,28 +72,47 @@ flowchart TB
         TBL["profiles · prospects · daily_lists<br/>daily_list_items · agent_runs · sirene_cache"]
     end
 
-    subgraph GHA["⚙️ GitHub Actions"]
+    subgraph CICD["⚙️ GitHub Actions — CI/CD"]
         CI["CI : lint · typecheck · test+coverage · build"]
         PREV["Deploy Preview (PR)"]
-        ETL["Import SIRENE mensuel (cron)"]
     end
 
-    subgraph Night["🌙 Pipeline nocturne (Vercel Cron 22h)"]
-        ORCH["Orchestrator (CRON_SECRET timing-safe)"]
-        SRC["Sourcing en cascade<br/>cache → SIRENE → Recherche Entreprises"]
-        ENR["Enrichissement ADEME / contacts"]
-        SCORE["Scoring Gemini (Zod) + pitchs OpenAI"]
+    subgraph Obs["🔭 Observabilite"]
+        SENTRY["🐞 Sentry — scrub PII (3 runtimes)"]
+        RESEND["✉️ Resend — email liste prete"]
     end
 
+    %% ----- Flux applicatif -----
     User --> MW --> APP
-    APP -->|requêtes filtrées par RLS| RLS --> TBL
-    ETL -->|upsert idempotent| TBL
-    ORCH --> SRC --> ENR --> SCORE -->|upsert| TBL
-    APP -->|email liste prête| RESEND["✉️ Resend"]
-    RESEND --> User
-    Edge -.scrub PII.-> SENTRY["🐞 Sentry"]
-    Night -.logs structurés.-> SENTRY
+    APP -->|requetes filtrees par RLS| RLS --> TBL
+
+    %% ----- Pipeline data : ETL bulk -----
+    SIRENE -->|dump bulk| IMPORT
+    IMPORT -->|upsert idempotent| CACHE
+    CACHE --> TBL
+
+    %% ----- Pipeline data : sourcing nocturne en cascade -----
+    ORCH --> SRC
+    SRC -->|1 cache| CACHE
+    SRC -->|2 fallback| SIRENE
+    SRC -->|3 fallback| RECH
+    SRC --> ENR
+    ENR --> ADEME
+
+    %% ----- Sourcing alimente la couche LLM -----
+    ENR -->|features sans PII| GEMINI
+    GEMINI -->|prospects scores| TBL
+
+    %% ----- Livraison & observabilite -----
+    APP --> RESEND --> User
+    Edge -.traces.-> SENTRY
+    Night -.logs structures.-> SENTRY
     CI --> PREV
+
+    classDef llm fill:#1e1b4b,stroke:#818cf8,stroke-width:2px,color:#e0e7ff;
+    classDef pipe fill:#0f2e1d,stroke:#34d399,stroke-width:2px,color:#d1fae5;
+    class GEMINI llm;
+    class IMPORT,ORCH,SRC,ENR pipe;
 ```
 
 ---
@@ -79,7 +121,7 @@ flowchart TB
 
 | Brique | Ce qui est mis en œuvre | Compétence |
 | --- | --- | --- |
-| **28 migrations Supabase** | RLS multi-tenant (`auth.uid() = user_id`), `UNIQUE(user_id, siren)`, colonnes `GENERATED ALWAYS`, RPC `SECURITY DEFINER`, index GIN / full-text FR | **BDD** |
+| **29 migrations Supabase** | RLS multi-tenant (`auth.uid() = user_id`), `UNIQUE(user_id, siren)`, colonnes `GENERATED ALWAYS`, RPC `SECURITY DEFINER`, index GIN / full-text FR | **BDD** |
 | **ETL SIRENE** | Streaming d'un dump ~1 Go, retry ×3, upsert idempotent par batches de 500, mode `DRY_RUN`, observabilité par cause de rejet | **Pipeline data** |
 | **Pipeline nocturne** | Orchestrateur cron → sourcing en cascade → enrichissement → scoring LLM validé par Zod → upsert | **Pipeline data** |
 | **3 workflows GitHub Actions** | CI (lint/typecheck/test+coverage/build), Deploy Preview Vercel, import SIRENE mensuel avec freshness-check | **DevOps / CI-CD** |
@@ -92,7 +134,7 @@ flowchart TB
 ## 🗄️ Base de données — Postgres avancé, multi-tenant
 
 - **Isolation stricte par locataire** : chaque table métier porte une politique **RLS** `auth.uid() = user_id` (SELECT / INSERT / UPDATE / DELETE). Les requêtes côté utilisateur (client SSR) sont filtrées par la base, pas par le code — pas de `.eq('user_id', …)` redondant.
-- **28 migrations versionnées** retraçant l'évolution réelle du schéma (`001_initial` → `028_status_to_contact`).
+- **29 migrations versionnées** retraçant l'évolution réelle du schéma (`001_initial` → `029_domain_blacklist_update_with_check`).
 - **Patterns Postgres avancés réellement utilisés** :
   - colonnes **`GENERATED ALWAYS`** (ex. score composite *hot lead*, migration 024),
   - fonction **RPC `SECURITY DEFINER`** pour la recherche SIRENE (migration 019),
@@ -121,7 +163,7 @@ flowchart TB
 
 **Pipeline nocturne** (`/api/agent/run`, Vercel Cron 22h)
 - Garde **`CRON_SECRET`** vérifié en **timing-safe** (`crypto.timingSafeEqual`),
-- → **orchestrateur** → **sourcing en cascade** (cache local → SIRENE → Recherche Entreprises) → **enrichissement ADEME / contacts** → **scoring Gemini** (`gemini-2.0-flash`, sortie JSON validée par **Zod**, fallback propre) + génération de **pitchs OpenAI `gpt-4o`** → **upsert** dans `prospects` / `daily_list_items`,
+- → **orchestrateur** → **sourcing en cascade** (cache local → SIRENE → Recherche Entreprises) → **enrichissement ADEME / contacts** → **scoring Gemini** (`gemini-2.0-flash`, sortie JSON validée par **Zod**, fallback propre) → **upsert** dans `prospects`,
 - **logs structurés JSON** persistés dans `agent_runs.logs`,
 - crons complémentaires : `reap-stale` (4h) et `purge-prospects` (3h).
 
@@ -166,23 +208,47 @@ flowchart TB
 
 > Captures de l'application en production. Les entreprises affichées sont des données **publiques** (base SIRENE/INSEE), aucune donnée confidentielle client.
 
-### Prospects scorés & filtrés
+### 🤖 L'agent IA « Glan » — sourcing & scoring nocturnes
 
-![Liste des prospects avec scoring 0-100, filtres par statut/secteur et conformité BEGES](docs/screenshots/prospects-scoring.png)
+L'agent qui tourne chaque nuit : sourcing en cascade, enrichissement multi-sources et scoring LLM, livrés au matin.
 
-*Sortie du pipeline de sourcing : prospects qualifiés, score IA 0-100, statut BEGES (échéance d'obligation), 10 statuts CRM et filtres composables.*
+![Page de l'agent Glan : présentation de l'agent, prochaine exécution planifiée à 22h, bouton « Lancer Glan », et état des sources de données (Pappers, Hunter, INPI, Google CSE) avec leurs quotas](docs/screenshots/glan-agent.png)
 
-### Tableau de bord pipeline
+*La console de l'agent : mission, prochaine exécution (cron 22h), lancement manuel et consommation des quotas par source d'enrichissement.*
 
-![Tableau de bord du pipeline commercial : KPIs de conversion par étape](docs/screenshots/pipeline-dashboard.png)
+![Analyse d'un run de l'agent : compteurs sourcés / qualifiés / durée, timeline des étapes (Initialisation, Sourcing SIRENE, Enrichissement ADEME, Recherche contacts, Scoring 3 piliers) et logs JSON structurés](docs/screenshots/glan-run-analysis.png)
 
-*Analytics du pipeline : volume de prospects, taux de qualification, temps de traitement, valeur prévisionnelle.*
+*Analyse d'un run : métriques (entreprises sourcées, prospects qualifiés, durée), timeline des étapes du pipeline et logs structurés persistés dans `agent_runs`.*
 
-### Notifications & relances
+### 🗂️ CRM & prospects
 
-![Centre de notifications : relances email et rappels d'appels planifiés](docs/screenshots/notifications.png)
+![Tableau de bord des prospects : liste scorée 0-100, filtres par statut CRM et secteur, statut BEGES, raisons sociales et tri par score / récence](docs/screenshots/dashboard.png)
 
-*Suivi commercial : relances email, rappels d'appels et planification au calendrier.*
+*Tableau de bord des prospects : score IA 0-100, statut BEGES (échéance d'obligation), filtres composables par statut CRM et secteur, tri par score ou récence.*
+
+![Modale de lancement d'une recherche de prospects : cases à cocher par secteur d'activité et champ de zone géographique (département, région, ou France entière)](docs/screenshots/prospect-search.png)
+
+*Recherche de prospects à la demande : ciblage par secteurs d'activité et zone géographique pour piloter le sourcing de l'agent.*
+
+![Pipeline Kanban CRM : colonnes Nouveau / Qualifié / À contacter / Contacté avec cartes prospects, taux de conversion et répartition par section NAF](docs/screenshots/pipeline.png)
+
+*Pipeline Kanban (drag-and-drop) : vue d'ensemble du flux commercial, taux de conversion et répartition des prospects par section NAF.*
+
+### 📅 Suivi commercial
+
+![Calendrier mensuel (juin 2026) avec rappels d'appels et d'emails planifiés répartis sur les jours](docs/screenshots/calendar.png)
+
+*Calendrier de rappels : planification des appels et emails de relance, vue mois / semaine.*
+
+![Centre de notifications « Notifications importantes » : rappels en retard, contacts identifiés avec leur persona, badges Appel / Email / Rappel et actions de suivi](docs/screenshots/reminders.png)
+
+*Notifications & relances : rappels en retard mis en avant, contacts qualifiés (persona) et suivi des appels / emails.*
+
+### ⚙️ Configuration
+
+![Paramètres : gestion de la blacklist de domaines (« Ne pas contacter ») et état du cache SIRENE local (nombre d'entreprises en cache, taille de la base, dernière mise à jour et fraîcheur)](docs/screenshots/settings.png)
+
+*Configuration : blacklist de domaines (« ne pas contacter ») et état du cache SIRENE local alimentant le sourcing nocturne (volume, fraîcheur, ré-import à la demande).*
 
 ---
 
@@ -193,7 +259,7 @@ flowchart TB
 npm install
 
 # 2. Configurer l'environnement
-cp .env.example .env.local   # puis renseigner Supabase, INSEE, OpenAI, Gemini, Resend, Sentry, CRON_SECRET
+cp .env.example .env.local   # puis renseigner Supabase, INSEE, Gemini, Resend, Sentry, CRON_SECRET
 
 # 3. Lancer en développement (Turbopack)
 npm run dev                  # http://localhost:3000
