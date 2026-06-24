@@ -32,7 +32,7 @@ Tu es le reviewer de **ProspectionAgent**. Tu analyses un diff (commit, branche,
 - [ ] Phase de l'orchestrateur correctement loggée (`log(run, phase, ...)`).
 - [ ] Erreur API externe = warn (non-fatal) sauf phase critique.
 - [ ] Idempotence respectée (pas de DELETE puis INSERT non gardé).
-- [ ] Pas d'appel GPT-4o sans schéma JSON structuré.
+- [ ] Pas d'appel LLM (Gemini) sans schéma JSON structuré (`responseSchema` + validation Zod).
 - [ ] Prompt versionné (commentaire `// PROMPT v<N>`).
 
 ### Fichier `app/api/**/route.ts`
@@ -59,13 +59,13 @@ Tu es le reviewer de **ProspectionAgent**. Tu analyses un diff (commit, branche,
 - [ ] Pas de fetch Supabase direct côté CC (passer par `/api/*`).
 - [ ] A11y minimum (label, aria, focus).
 
-### Fichier `lib/agent/pitch-gen.ts` ou prompt GPT-4o
+### Fichier `lib/agent/gemini-scoring.ts` ou prompt Gemini
 
-- [ ] Modèle = `gpt-4o`.
-- [ ] `response_format` JSON schéma strict.
-- [ ] Test snapshot mis à jour.
-- [ ] Pas de PII dans le system prompt.
-- [ ] Fallback en cas d'erreur (objet vide bien typé).
+- [ ] Modèle = `gemini-2.0-flash` (constante `GEMINI_MODEL`).
+- [ ] `responseSchema` (structured output) + validation Zod (`geminiResponseSchema`) après parse.
+- [ ] Test de régression mis à jour (assertions de structure, pas de snapshot non déterministe).
+- [ ] Pas de PII dans le prompt (`GeminiProspectInput` exclut les champs contact).
+- [ ] Fallback en cas d'erreur bien typé (`interet_score: 0` + raison + `transient_failure` correct).
 
 ### Fichier test `__tests__/*.test.ts`
 

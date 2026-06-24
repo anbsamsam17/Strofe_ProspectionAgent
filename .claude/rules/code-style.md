@@ -11,7 +11,7 @@
 - TypeScript 5 en mode strict (`tsconfig.json`)
 - Tailwind v4 brut via `@tailwindcss/postcss` (pas de shadcn, pas de styled-components)
 - Supabase Postgres + Auth via `@supabase/ssr`
-- OpenAI SDK (`openai@^4`) — modèle figé `gpt-4o`
+- Google Gemini (`@google/generative-ai`) — modèle figé `gemini-2.0-flash`
 - Zod 3 pour la validation aux frontières
 - Resend pour l'envoi d'emails
 - Sentry pour les erreurs et le monitoring
@@ -49,7 +49,7 @@ Pas d'imports non utilisés (lint failure).
 
 ## Validation et erreurs
 
-- **Zod aux frontières** : tout body d'API entrant passe par `schema.safeParse()`. Toute donnée externe (Sirene, ADEME, Pappers, Hunter, OpenAI) parsée via un schema.
+- **Zod aux frontières** : tout body d'API entrant passe par `schema.safeParse()`. Toute donnée externe (Sirene, ADEME, Pappers, Hunter, Gemini) parsée via un schema.
 - Préférer `Result<T, E>` ou exceptions typées explicites. **Jamais** de `catch {}` silencieux ni `catch (e) { /* ignore */ }`.
 - Les erreurs sont remontées avec contexte (cause, prospect_id, run_id si dispo) à Sentry.
 

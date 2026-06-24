@@ -4,7 +4,7 @@ description: "Test bout-en-bout du pipeline agent nocturne en local (écrit en b
 
 # /test-agent-run
 
-Tu testes le pipeline complet (sourcing → enrichissement → scoring → contacts → pitch → email). **Cette commande ÉCRIT en base** — pour un test sans persistance, utilise `/agent-dry-run`.
+Tu testes le pipeline complet (sourcing → enrichissement → scoring → contacts → scoring Gemini → email). **Cette commande ÉCRIT en base** — pour un test sans persistance, utilise `/agent-dry-run`.
 
 ## 1. Pré-requis
 
@@ -42,10 +42,10 @@ Logs JSON structurés sur stdout. Phases attendues :
 
 1. `sourcing` — INSEE + fallback Recherche Entreprises (~200 prospects).
 2. `enrichment_beges` — batches de 20 vers data.ademe.fr.
-3. `scoring` — `lib/agent/scoring.ts`. Top 15 attendus > 50.
-4. `selection` — top 15 non-appelés.
-5. `enrichment_contact` — cascade Recherche Entreprises → Pappers → Hunter.
-6. `pitch_gen` — 15 pitchs gpt-4o (~30-60s, `BATCH_DELAY_MS=150`, `PARALLEL_GROUP_SIZE=5`).
+3. `scoring` — `lib/agent/scoring.ts`. Top attendus > 50.
+4. `enrichment_contact` — cascade Recherche Entreprises → Pappers → Hunter.
+5. `scoring_gemini` — `lib/agent/gemini-scoring.ts`, `gemini-2.0-flash` (`GEMINI_BATCH_DELAY_MS=200`, `GEMINI_PARALLEL_GROUP_SIZE=5`), `interet_score` + `raisons`.
+6. `selection` — top non-appelés.
 7. `completed` — `status = 'completed'`, `list_generated = true`.
 
 Si erreur : `level: 'error'`, `status: 'failed'`, `error_message` rempli.
@@ -53,9 +53,9 @@ Si erreur : `level: 'error'`, `status: 'failed'`, `error_message` rempli.
 ## 5. Vérification en BDD (Supabase studio)
 
 1. `agent_runs` : `status = 'completed'`, `prospects_sourced ~200`, `list_generated = true`, `completed_at` set.
-2. `prospects` : nouvelles lignes, certaines avec `beges_publie = true`, `obligation_beges = true`, `score_priorite > 50`.
+2. `prospects` : nouvelles lignes, certaines avec `beges_publie = true`, `obligation_beges = true`, `score_priorite > 50`, et `gemini_score` / `gemini_raisons` / `gemini_generated_at` renseignés (si `GEMINI_API_KEY` présente).
 3. `daily_lists` : ligne du jour, `status = 'ready'`, `generated_at` set, `notified_at` null.
-4. `daily_list_items` : 15 lignes liées, `accroche`, `pitch`, `objections_reponses[]`, `ordre` 1-15.
+4. `daily_list_items` : lignes liées au top du jour, avec `ordre` croissant.
 
 ## 6. Test de la notification email
 
@@ -64,7 +64,7 @@ curl -X POST http://localhost:3000/api/notifications/daily \
   -H "Authorization: Bearer $CRON_SECRET"
 ```
 
-Vérifie : (a) email reçu, (b) `daily_lists.notified_at` mis à jour, (c) contenu mentionne les 15 prospects.
+Vérifie : (a) email reçu, (b) `daily_lists.notified_at` mis à jour, (c) contenu mentionne les prospects du jour.
 
 ## 7. Nettoyage
 

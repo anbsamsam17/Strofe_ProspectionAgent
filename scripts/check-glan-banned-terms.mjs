@@ -41,7 +41,6 @@ const EXCLUDE_PATH_FRAGMENTS = [
 
 // Fichiers exclus spécifiquement (chemin relatif depuis ROOT, slash forward)
 const EXCLUDE_FILES = new Set([
-  'lib/agent/pitch-gen.ts',
   'lib/agent/orchestrator.ts',
   // Le doc copy cite explicitement les termes bannis dans un tableau "Avant → Après"
   // → il est la source de vérité, pas une régression.

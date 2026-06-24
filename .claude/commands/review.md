@@ -32,12 +32,12 @@ Tu reviews du code de l'agent de prospection BEGES. Cible : `$ARGUMENTS` (chemin
 - [ ] Les enums (`ProspectStatus`, `Priority`, etc.) sont en sync entre `lib/types.ts`, Zod schemas et la migration SQL (`CHECK` ou `ENUM` type).
 
 ### Pipeline agent
-- [ ] Les changements dans `lib/agent/orchestrator.ts` préservent l'ordre : sourcing → enrichissement BEGES → scoring → top 15 → enrichissement contact → pitch → email.
-- [ ] Les prompts GPT-4o dans `lib/agent/pitch-gen.ts` respectent l'ordre obligatoire ROI → image → légal. Si modifiés, ils sont mentionnés dans `memory/prompt-history.md`.
+- [ ] Les changements dans `lib/agent/orchestrator.ts` préservent l'ordre : sourcing → enrichissement BEGES → scoring composite → enrichissement contact → scoring Gemini → sélection top → email.
+- [ ] Le prompt Gemini dans `lib/agent/gemini-scoring.ts` respecte l'ordre obligatoire des raisons ROI → image → légal et le schéma `{ interet_score, raisons }`. Si modifié, il est mentionné dans `memory/prompt-history.md`.
 - [ ] Pas de TODO sans ticket ou commentaire d'explication.
 
 ### Robustesse
-- [ ] Les appels HTTP externes (INSEE, ADEME, Pappers, Hunter, OpenAI, Resend) ont un timeout et un retry/fallback documenté.
+- [ ] Les appels HTTP externes (INSEE, ADEME, Pappers, Hunter, Gemini, Resend) ont un timeout et un retry/fallback documenté.
 - [ ] Les erreurs sont catchées et loggées de façon structurée (JSON pour l'orchestrateur). Pas de `console.log` brut qui leak des secrets ou PII.
 - [ ] Sentry capture les erreurs critiques mais ne logge ni `service_role`, ni emails clients, ni numéros SIREN/SIRET sans nécessité.
 

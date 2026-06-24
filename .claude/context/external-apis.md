@@ -131,24 +131,28 @@ L'API Sirene live INSEE étant chroniquement instable (HTTP 400 Solr, quotas, OA
   - **email-finder** : `{first_name, last_name, domain}` → email vérifié.
 - **Cascade** : domain-search d'abord (déduit le pattern), puis email-finder par dirigeant trouvé via Pappers.
 
-## OpenAI (GPT-4o pour pitchs)
+## Google Gemini (scoring commercial + catégorisation secteur)
 
-- **URL base** : `https://api.openai.com/v1/` (via SDK officiel `openai` ^4.89).
-- **Auth** : `Authorization: Bearer <key>`.
-- **Variables d'env** : `OPENAI_API_KEY`.
-- **Modèle** : `gpt-4o` (constante `GPT_MODEL` dans `lib/agent/pitch-gen.ts`).
-- **Rate limit** : RPM tier standard ~500. L'orchestrator parallélise par groupes de **5** (`PARALLEL_GROUP_SIZE`) avec délai **150 ms** (`BATCH_DELAY_MS`) entre groupes.
-- **Timeout / retries** : `timeout: 30_000`, `maxRetries: 2` (config client OpenAI).
-- **Format de sortie** : JSON structuré — voir `prompts-guide.md`.
+- **Endpoint** : `https://generativelanguage.googleapis.com/` (via SDK officiel `@google/generative-ai`).
+- **Auth** : API key (`GEMINI_API_KEY`), gérée par le SDK.
+- **Variables d'env** : `GEMINI_API_KEY` (optionnelle — sans elle, la phase de scoring commercial est skippée proprement via `isGeminiAvailable()`).
+- **Modèle** : `gemini-2.0-flash` (constante `GEMINI_MODEL` dans `lib/agent/gemini-scoring.ts`).
+- **Usage** :
+  - **Scoring commercial** (`scoreLeadsBatchGemini`) : pour chaque prospect enrichi, intérêt 0-100 + 3-5 raisons d'appel → persistés dans `prospects` (`gemini_interet_score`, `gemini_raisons`, `gemini_generated_at`).
+  - **Catégorisation secteur** (`categoriserSecteurAvecGemini`) : complète `prospects.secteur_libelle` quand vide. Cache LRU 1h + throttle 50 ms.
+- **Rate limit** : Gemini 2.0 Flash ~1000 RPM (Tier 1), 30 req/min sur le quota gratuit. L'orchestrator parallélise par groupes de **5** (`GEMINI_PARALLEL_GROUP_SIZE`) avec délai **200 ms** (`GEMINI_BATCH_DELAY_MS`) entre groupes.
+- **Timeout / retries** : `GEMINI_TIMEOUT_MS = 15_000` (scoring) / `8_000` (catégorisation), `GEMINI_MAX_RETRIES = 1` sur erreur retriable (429 / 5xx / timeout).
+- **Format de sortie** : structured output natif (`responseSchema`) + re-validation Zod — voir `prompts-guide.md`.
+- **Échec transitoire vs définitif** : sur échec transitoire le résultat porte `transient_failure: true` ; le caller laisse alors `gemini_generated_at` NULL pour re-tenter au prochain run.
 
 ## Resend (emails transactionnels)
 
 - **URL base** : `https://api.resend.com/`.
 - **Auth** : API key.
 - **Variables d'env** : `RESEND_API_KEY`, `RESEND_FROM_EMAIL` (à vérifier).
-- **Usage** : `/api/notifications/daily` envoie un email "votre liste de 15 appels est prête" à `profiles.settings.notification_email` (fallback `profiles.email`). Templates React Email dans `lib/email/`.
+- **Usage** : `/api/notifications/daily` envoie un email récapitulatif des nouveaux prospects sourcés / qualifiés à `profiles.settings.notification_email` (fallback `profiles.email`). Templates React Email dans `lib/email/`.
 - **Quota** : 3 000 emails/mois gratuit, suffisant pour la beta.
-- **Garde-fou** : `daily_lists.notified_at` IS NULL → envoie ; sinon skip (évite double envoi sur Vercel retry).
+- **Garde-fou** : un garde anti-double-envoi (idempotence) protège contre les retries Vercel sur la même journée.
 
 ## Supabase (base + auth)
 
@@ -172,8 +176,8 @@ NEXT_PUBLIC_SUPABASE_URL=
 NEXT_PUBLIC_SUPABASE_ANON_KEY=
 SUPABASE_SERVICE_ROLE_KEY=
 
-# OpenAI
-OPENAI_API_KEY=
+# Google Gemini (scoring commercial + catégorisation secteur — optionnel, phase skippée sans)
+GEMINI_API_KEY=
 
 # Sirene INSEE (API Key depuis sept. 2025 — anciennes vars OAuth2 INSEE_CLIENT_ID/SECRET mortes)
 # Génération : https://portail-api.insee.fr/ → Applications → ton app → API Keys
@@ -223,4 +227,4 @@ Toutes les fixtures sont **100 % statiques** (aucun `fetch`/`axios`), typées st
 Quand une API tombe :
 1. Log warn dans `agent_runs.logs` avec le SIREN ou batch concerné.
 2. Si fallback existe (Sirene → Recherche Entreprises) → bascule.
-3. Sinon → la phase non-fatale (`scoring`, `contact_enrichment`) continue sans cette donnée ; la phase fatale (`sourcing`, `selection`, `daily_list`) propage l'erreur → `agent_runs.status='failed'`.
+3. Sinon → la phase non-fatale (`scoring commercial Gemini`, `contact_enrichment`) continue sans cette donnée ; la phase fatale (`sourcing`, upsert `prospects`) propage l'erreur → `agent_runs.status='failed'`.

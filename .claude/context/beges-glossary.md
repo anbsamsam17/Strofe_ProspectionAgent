@@ -19,7 +19,7 @@
 
 ### Sanction
 
-Amende administrative jusqu'à **10 000 €** par BEGES manquant ou non publié, **renouvelable**. Argument à manier en appui, pas en ouverture (cf. `prompts-guide.md`).
+Amende administrative jusqu'à **50 000 €** par BEGES manquant ou non publié (montant porté de 10 000 € par la loi Industrie verte de 2023), **100 000 € en cas de récidive**. Argument à manier en appui, pas en ouverture (cf. `prompts-guide.md`).
 
 ### Plateforme de publication
 
@@ -27,11 +27,11 @@ Amende administrative jusqu'à **10 000 €** par BEGES manquant ou non publié,
 
 ## Logique de filtre dans le pipeline
 
-À la phase 5 (`selection`), on garde uniquement :
+Au scoring déterministe et au travail du pipeline commercial, on privilégie :
 - `beges_publie = false` (jamais publié) — cible principale (+20 pts au scoring)
 - OU `beges_valide = false` (publié mais > 4 ans) — cible renouvellement (+15 pts au scoring)
 
-Les prospects "à jour" (`beges_publie=true` ET `beges_valide=true`) sont exclus de la sélection — pas pertinents commercialement.
+Les prospects "à jour" (`beges_publie=true` ET `beges_valide=true`) sont dépriorisés — peu pertinents commercialement.
 
 ## NAF prioritaires & rationale
 
@@ -54,7 +54,7 @@ Sous-ensemble strict (NAF_PRIORITAIRES dans `scoring.ts`) utilisé pour le bonus
 
 ## Personae cibles (`contact_type` enum)
 
-Le pitch GPT-4o est adapté au persona recommandé pour chaque prospect.
+L'angle des raisons d'appel produites par le scoring commercial Gemini s'adapte au persona recommandé pour chaque prospect.
 
 | Persona | Code DB | Levier dominant |
 |---------|---------|------------------|
@@ -63,7 +63,7 @@ Le pitch GPT-4o est adapté au persona recommandé pour chaque prospect.
 | **DRH** (Directeur RH) | `drh` | Marque employeur (attractivité, rétention talents), engagement collaborateurs. |
 | **DG / PDG** | `dg` | Compétitivité, appels d'offres avec critères RSE, risque réglementaire et réputationnel. |
 
-Ordre de priorité de ciblage par défaut : RSE → DAF → DRH → DG (cf. `lib/agent/pitch-gen.ts` SYSTEM_PROMPT).
+Ordre de priorité de ciblage par défaut : RSE → DAF → DRH → DG (cf. `lib/agent/gemini-scoring.ts` `SYSTEM_PROMPT`).
 
 ## Termes connexes
 

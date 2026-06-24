@@ -4,7 +4,7 @@ description: "Checklist de déploiement Vercel pour l'agent de prospection BEGES
 
 # /deploy
 
-Tu prépares un déploiement de l'agent IA sur Vercel (Next.js 15 + Supabase + OpenAI). Pas de staging séparé — la preview Vercel sur PR fait office de pré-prod.
+Tu prépares un déploiement de l'agent IA sur Vercel (Next.js 15 + Supabase + Gemini). Pas de staging séparé — la preview Vercel sur PR fait office de pré-prod.
 
 ## 1. Validation locale avant push
 
@@ -28,7 +28,7 @@ Si l'un échoue : ne déploie pas, corrige d'abord. Référence `/fix-issue` si 
 Vérifie sur le dashboard Vercel que les vars suivantes sont définies en environnement **Production** :
 
 - `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`
-- `OPENAI_API_KEY`
+- `GEMINI_API_KEY` (`gemini-2.0-flash`, scoring d'intérêt commercial)
 - `INSEE_CLIENT_ID`, `INSEE_CLIENT_SECRET` (OAuth2 token 7j)
 - `PAPPERS_API_KEY`, `HUNTER_API_KEY`
 - `RESEND_API_KEY`, `EMAIL_FROM`

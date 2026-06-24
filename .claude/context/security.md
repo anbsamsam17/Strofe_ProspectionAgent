@@ -2,19 +2,18 @@
 
 ## 1. Row Level Security (RLS)
 
-Activée sur les 5 tables : `profiles`, `prospects`, `daily_lists`, `daily_list_items`, `agent_runs`.
+Activée sur toutes les tables user : `profiles`, `prospects`, `prospect_contacts`, `prospect_exchanges`, `agent_runs` (les tables `daily_lists` / `daily_list_items` ont été supprimées au pivot du 2026-05-14, migration `014_drop_daily_lists_and_rename.sql`).
 
 **4 policies par table** (SELECT / INSERT / UPDATE / DELETE) avec la même règle :
 
 ```sql
-auth.uid() = user_id    -- pour prospects, daily_lists, daily_list_items, agent_runs
+auth.uid() = user_id    -- pour prospects, prospect_contacts, prospect_exchanges, agent_runs
 auth.uid() = id         -- pour profiles (PK = auth.users.id)
 ```
 
 Conséquences pratiques :
 - **Côté client / API en session user** : ne JAMAIS doubler par un `.eq('user_id', userId)` dans le code — RLS le fait. Doubler masque des bugs (par ex. user_id absent du contexte) et n'apporte rien.
 - **Côté orchestrator / cron** : on utilise `createAdminClient()` (service_role) qui **bypasse RLS**. Donc on filtre **explicitement** par `user_id` à chaque requête (le code de `orchestrator.ts` le fait partout).
-- `daily_list_items.user_id` est **dénormalisé** (FK vers auth.users) pour éviter une jointure coûteuse dans la policy RLS — décision documentée dans `memory/project-context.md`.
 
 ## 2. Service role key
 
@@ -85,7 +84,7 @@ Règles :
 ## 7. SSRF — whitelist domaines
 
 Les `fetch()` sortants du pipeline ne vont QUE vers :
-- `api.openai.com`
+- `generativelanguage.googleapis.com` (Gemini, via SDK `@google/generative-ai`)
 - `api.insee.fr` / `recherche-entreprises.api.gouv.fr`
 - `data.ademe.fr`
 - `api.pappers.fr`
@@ -108,20 +107,21 @@ Aucune URL fournie par un utilisateur ne doit être passée à `fetch()` sans va
 
 `PUBLIC_ROUTES = ['/', '/login', '/signup', '/auth/callback']` dans `middleware.ts`. Tout le reste exige une session valide.
 
-## 10. Sanitization prompts GPT-4o
+## 10. Sanitization prompts Gemini
 
-Les données externes injectées dans le prompt OpenAI (raison sociale, signaux scrapés, etc.) sont :
+Les données externes injectées dans le prompt Gemini (raison sociale, signaux scrapés, etc.) sont :
+- Passées par `sanitizeForPrompt` (suppression caractères de contrôle, échappement `<`/`>`, troncature).
 - Enveloppées dans `<données_entreprise>...</données_entreprise>` avec instruction explicite d'ignorer leur contenu.
-- Scannées contre `INJECTION_PATTERNS` (cf. `lib/agent/pitch-gen.ts`) — log warn si match (non bloquant).
+- Scannées contre `INJECTION_PATTERNS` (cf. `lib/agent/gemini-scoring.ts`) — log warn si match (non bloquant).
 
-Voir `prompts-guide.md` pour le détail.
+Rappel PII : l'input scoring est restreint au type `GeminiProspectInput` qui exclut `contact_email`, `contact_telephone`, `contact_nom`, `contact_prenom`. Voir `prompts-guide.md` pour le détail.
 
 ## Checklist avant déploiement prod
 
 - [ ] `CRON_SECRET` défini dans Vercel (rotation après staging).
 - [ ] `SUPABASE_SERVICE_ROLE_KEY` scope Production uniquement.
 - [ ] Sentry `beforeSend` scrub PII testé.
-- [ ] RLS activée sur les 5 tables (vérifier : `SELECT relname, relrowsecurity FROM pg_class WHERE relname IN ('profiles','prospects','daily_lists','daily_list_items','agent_runs');`).
+- [ ] RLS activée sur toutes les tables user (vérifier : `SELECT relname, relrowsecurity FROM pg_class WHERE relname IN ('profiles','prospects','prospect_contacts','prospect_exchanges','agent_runs');`).
 - [ ] `/api/agent/run` rejette les requêtes sans Bearer valide ET sans session (test 401).
 - [ ] Aucune référence `NEXT_PUBLIC_SUPABASE_SERVICE_ROLE_KEY` ni équivalent.
 - [ ] `.env.local` absent du commit (`git log --all --full-history -- .env.local` doit être vide).

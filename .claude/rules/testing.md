@@ -34,15 +34,20 @@
 - Recherche Entreprises (api.gouv.fr)
 - Pappers
 - Hunter.io
-- OpenAI (gpt-4o)
+- Google Gemini (`gemini-2.0-flash`)
 - Resend
 
 Pattern :
 ```ts
-vi.mock('openai', () => ({
-  default: vi.fn().mockImplementation(() => ({
-    chat: { completions: { create: vi.fn().mockResolvedValue(/* fixture */) } },
+vi.mock('@google/generative-ai', () => ({
+  GoogleGenerativeAI: vi.fn().mockImplementation(() => ({
+    getGenerativeModel: () => ({
+      generateContent: vi.fn().mockResolvedValue({
+        response: { text: () => JSON.stringify(/* fixture */) },
+      }),
+    }),
   })),
+  SchemaType: { OBJECT: 'object', ARRAY: 'array', STRING: 'string', INTEGER: 'integer' },
 }))
 ```
 
@@ -59,8 +64,8 @@ Stocker les fixtures (réponses Sirene, ADEME, etc.) en dur dans le test ou dans
 - `sourcing.ts` isolé (input synthétique → liste prospects attendue).
 - `scoring.ts` isolé (input prospect → score 0-100 — voir `__tests__/scoring.test.ts`).
 - `contact-enrichment.ts` isolé (cascade Recherche Entreprises → Pappers → Hunter, chaque source mockée).
-- `pitch-gen.ts` isolé (mock OpenAI, vérifier que le pitch suit l'ordre obligatoire — cf. `rules/llm-prompts.md`).
-- `daily-list-generator.ts` isolé (insertion `daily_lists` + `daily_list_items`).
+- `gemini-scoring.ts` isolé (mock `@google/generative-ai`, vérifier la validation Zod, le batching, et la distinction échec transitoire / définitif — cf. `rules/llm-prompts.md`).
+- `sourcing-runner.ts` isolé (boucle adaptative, persistance curseur, upsert `prospects`).
 
 Un test E2E orchestrateur peut exister, mais il enchaîne les mocks — il ne sert qu'à vérifier le câblage.
 
@@ -82,7 +87,7 @@ Un test E2E orchestrateur peut exister, mais il enchaîne les mocks — il ne se
 
 - `lib/agent/` (cœur métier) : **70%** minimum.
 - Reste du projet : **50%** minimum.
-- Fonctions critiques (`isCronRequest`, scoring, pitch gen) : couvrir tous les cas d'erreur.
+- Fonctions critiques (`isCronRequest`, scoring déterministe, scoring commercial Gemini) : couvrir tous les cas d'erreur.
 
 ## Commandes
 

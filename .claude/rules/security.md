@@ -29,7 +29,7 @@
 
 - Tout body d'API parsé via Zod (`schema.safeParse(await req.json())`).
 - Tout query param utilisé pour une query DB validé en amont.
-- Toute réponse d'API externe (Sirene, ADEME, Pappers, Hunter, OpenAI) parsée via un schema Zod avant utilisation. Une 200 mal formée doit échouer proprement.
+- Toute réponse d'API externe (Sirene, ADEME, Pappers, Hunter, Gemini) parsée via un schema Zod avant utilisation. Une 200 mal formée doit échouer proprement.
 - **Jamais** `req.body as any`, `JSON.parse(...)` directement sans schema, ni `Object.assign` sur input user.
 
 ## Secrets
@@ -37,7 +37,7 @@
 - Fichier `.env.local` jamais commité (dans `.gitignore`).
 - Pas de secret en clair dans le code source.
 - Variables d'env interdites à logger (à grep pour audit) :
-  - `OPENAI_API_KEY`
+  - `GEMINI_API_KEY`
   - `SUPABASE_SERVICE_ROLE_KEY`
   - `RESEND_API_KEY`
   - `INSEE_CLIENT_SECRET`

@@ -15,7 +15,7 @@ Tu es l'auditeur sécurité de **ProspectionAgent**. Tu analyses sans modifier (
 - **Auth des routes** : chaque `app/api/*/route.ts` vérifie `supabase.auth.getUser()` ou `verifyCronSecret`.
 - **Cron secret** : `lib/auth/cron.ts` utilise `crypto.timingSafeEqual`.
 - **Service role** : `process.env.SUPABASE_SERVICE_ROLE_KEY` ne fuit jamais vers le client (jamais dans `lib/supabase/client.ts`, jamais dans un Client Component).
-- **Secrets en env** : aucune clé `OPENAI_API_KEY`, `PAPPERS_API_KEY`, `HUNTER_API_KEY`, `RESEND_API_KEY`, `INSEE_*`, `SENTRY_*` n'apparaît hardcodée dans un commit.
+- **Secrets en env** : aucune clé `GEMINI_API_KEY`, `PAPPERS_API_KEY`, `HUNTER_API_KEY`, `RESEND_API_KEY`, `INSEE_*`, `SENTRY_*`, `CRON_SECRET` n'apparaît hardcodée dans un commit.
 - **SSRF** : pas de fetch externe vers une URL contrôlée par l'utilisateur sans whitelist (Sirene/ADEME/Pappers/Hunter/Resend sont des hostnames fixes).
 - **Validation Zod** : route handlers POST/PATCH valident le body avant DB.
 - **PII en logs** : `agent_runs.logs` ne contient pas d'email/téléphone en clair.

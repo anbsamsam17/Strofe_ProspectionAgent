@@ -28,7 +28,7 @@ Tu fais un audit sécurité du repo. Sors un rapport classé Critique / Moyen / 
 
 ## 4. SSRF / injection sur fetches externes
 
-Pour chaque appel externe (INSEE, ADEME, Pappers, Hunter, Recherche Entreprises, OpenAI, Resend) dans `lib/agent/sourcing.ts`, `lib/agent/contact-enrichment.ts`, `lib/agent/pitch-gen.ts`, `lib/email/send.ts` :
+Pour chaque appel externe (INSEE, ADEME, Pappers, Hunter, Recherche Entreprises, Gemini, Resend) dans `lib/agent/sourcing.ts`, `lib/agent/contact-enrichment.ts`, `lib/agent/gemini-scoring.ts`, `lib/email/send.ts` :
 
 1. Confirme que les URLs sont construites à partir de **constantes** + paramètres validés (SIREN regex `^\d{9}$`, code postal regex, etc.).
 2. Aucun param non sanitizé inséré dans l'URL via template string.

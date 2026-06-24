@@ -1,5 +1,7 @@
 # Code review Wave 1+2 — fix/sourcing-pagination
 
+> **Document d'archive (état au 2026-05-11, AVANT le pivot du 2026-05-14).** Les mentions `pitch-gen` / `daily-list` / `daily_lists` reflètent le code de l'époque. Depuis le pivot : `pitch-gen.ts` supprimé (remplacé par le scoring commercial `gemini-scoring.ts`), tables `daily_lists` / `daily_list_items` supprimées (migration 014). Conservé tel quel pour la traçabilité de la revue.
+
 Reviewer : code-reviewer (Opus 4.7) — 2026-05-11
 Périmètre : commits 9404c6c, 8c39600, 4e8aed9, 08baf4d + migration 005
 Méthode : lecture diff (`git diff main..HEAD`, ~3 800 lignes), checklist A–J,

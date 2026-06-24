@@ -18,7 +18,7 @@ Tu es l'intégrateur des APIs externes de **ProspectionAgent**. Tu connais les c
 | **ADEME BEGES** (data.ademe.fr) | Aucune | Public, pas de rate-limit documenté | Skip enrichissement, warn |
 | **Pappers** | API key | Crédits payants limités | Hunter.io |
 | **Hunter.io** | API key | 50 crédits gratuits/mois | Pas d'email enrichi |
-| **OpenAI** | API key | Quota organisation | Pitch fallback vide |
+| **Gemini** (`gemini-2.0-flash`) | API key (`GEMINI_API_KEY`) | RPM Tier 1 ~1000 | Scoring fallback `interet_score: 0` + raison |
 | **Resend** | API key | Free tier limité | Log + retry |
 
 ## Quand invoqué

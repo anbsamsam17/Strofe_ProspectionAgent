@@ -12,7 +12,6 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { createAdminClient, createClient } from '@/lib/supabase/server'
 import { runAgentNocturne } from '@/lib/agent/orchestrator'
-import { runSourcing } from '@/lib/agent/sourcing-runner'
 import type { AgentRun } from '@/lib/types'
 import { isCronRequest } from '@/lib/auth/cron'
 import { checkRateLimit, rateLimitResponse } from '@/lib/rate-limit'
@@ -39,14 +38,6 @@ function buildRunStats(run: AgentRun) {
     sourced: run.prospects_sourced,
     qualified: run.prospects_qualified,
     listGenerated: run.list_generated,
-  }
-}
-
-/** Construit la réponse stats normalisée à partir d'un résultat runSourcing. */
-function buildSourcingStats(result: { prospectsNew: number; prospectsUpdated: number }) {
-  return {
-    prospectsNew: result.prospectsNew,
-    prospectsUpdated: result.prospectsUpdated,
   }
 }
 

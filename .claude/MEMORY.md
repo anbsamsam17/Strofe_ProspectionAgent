@@ -14,7 +14,7 @@ Index des notes de contexte. Une entrée = un fichier ciblé. Le contenu vit dan
 
 ## Intégrations
 - [APIs externes](context/external-apis.md) — Sirene OAuth2, ADEME, Recherche Entreprises, Pappers, Hunter.io, Resend
-- [Prompts GPT-4o](context/prompts-guide.md) — système prompt, ordre des arguments, personae, JSON output, versionnage
+- [Prompts Gemini](context/prompts-guide.md) — système prompt, ordre des arguments, personae, JSON output, versionnage
 
 ## Operations
 - [Crons Vercel](context/crons.md) — 22h + 7h30, Bearer CRON_SECRET, retry, test local

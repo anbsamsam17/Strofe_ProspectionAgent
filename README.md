@@ -2,7 +2,7 @@
 
 # Strofe — ProspectionAgent
 
-### Agent IA de prospection B2B « bilan carbone / BEGES » — du registre SIRENE à la liste d'appels du jour
+### Agent IA de prospection B2B « bilan carbone / BEGES » — du registre SIRENE au CRM commercial qualifié
 
 De la donnée publique brute (SIRENE INSEE) à un CRM Kanban qualifié : sourcing nocturne automatisé, enrichissement multi-sources, scoring LLM et livraison quotidienne de prospects priorisés.
 
@@ -27,7 +27,7 @@ De la donnée publique brute (SIRENE INSEE) à un CRM Kanban qualifié : sourcin
 
 ## Le pitch
 
-**ProspectionAgent** transforme un consultant en bilan carbone en machine de prospection : chaque nuit, l'agent source les entreprises françaises soumises à l'obligation BEGES depuis le registre **SIRENE**, les enrichit (données ADEME, contacts), les score via un LLM, puis livre au matin une **liste d'appels priorisés** prête à exploiter dans un **CRM Kanban**.
+**ProspectionAgent** transforme un consultant en bilan carbone en machine de prospection : chaque nuit, l'agent source les entreprises françaises soumises à l'obligation BEGES depuis le registre **SIRENE**, les enrichit (données ADEME, contacts), les score via un LLM, puis alimente un **CRM Kanban** de prospects qualifiés et priorisés, prêts à appeler.
 
 **À qui ça sert :** consultants et cabinets RSE / décarbonation qui veulent un flux régulier de prospects qualifiés sans passer leurs journées à chercher des SIRET dans des fichiers Excel.
 
@@ -128,7 +128,7 @@ flowchart LR
     ENR["contact-enrichment.ts<br/>ADEME + contacts"]
     SCORE["gemini-scoring.ts<br/>Gemini 2.0-flash + Zod"]
     PROSPECTS["prospects<br/>table Postgres RLS"]
-    CRM["CRM Kanban<br/>liste du jour"]
+    CRM["CRM Kanban<br/>pipeline commercial"]
 
     INSEE -->|import mensuel idempotent| IMPORT
     IMPORT -->|onConflict siren| CACHE
@@ -169,7 +169,7 @@ flowchart LR
   - fonction **RPC `SECURITY DEFINER`** pour la recherche SIRENE (migration 019),
   - **index GIN / full-text** adaptés au français pour la recherche d'entreprises,
   - contrainte d'idempotence **`UNIQUE(user_id, siren)`**.
-- **Modèle de données** : `profiles` (extension `auth.users`, settings JSONB), `prospects` (identité SIRENE + BEGES + score + statut CRM), `daily_lists` / `daily_list_items` (la liste d'appels du jour), `agent_runs` (journal du cron), `sirene_cache` (cache local du registre).
+- **Modèle de données** : `profiles` (extension `auth.users`, settings JSONB + curseur de sourcing), `prospects` (identité SIRENE + BEGES + score composite + scoring Gemini + statut CRM), `prospect_contacts` / `prospect_exchanges` (contacts enrichis + historique des échanges), `agent_runs` (journal du cron), `sirene_cache` (cache local du registre). Les tables `daily_lists` / `daily_list_items` ont été retirées au pivot (migration `014_drop_daily_lists_and_rename.sql`).
 - **3 clients Supabase** distincts : browser (anon), SSR (anon + cookies), admin (service_role, serveur uniquement).
 
 ### ⭐ Points forts base de données
@@ -218,7 +218,7 @@ flowchart LR
 ## 🚀 Application SaaS
 
 - **Stack** : Next.js **15** (App Router, Turbopack) · React **19** · TypeScript **5** strict · Tailwind CSS **v4** · `next-themes` (dark mode).
-- **CRM Kanban** : pipeline drag-and-drop (`@dnd-kit`), **liste d'appels du jour**, **calendrier de rappels** (`@fullcalendar`), saisie des résultats d'appel par l'humain.
+- **CRM Kanban** : pipeline drag-and-drop (`@dnd-kit`), **file de prospects priorisés**, **calendrier de rappels** (`@fullcalendar`), saisie des résultats d'appel par l'humain.
 - **Emails transactionnels** : **Resend** + `@react-email/components` (« votre liste est prête »).
 - **RGPD** : footer **article 14**, **opt-out** via token **HMAC**, **scrub PII** Sentry sur les **3 runtimes** (client / server / edge), purge automatique des prospects.
 - **Observabilité** : Sentry (`@sentry/nextjs` v9), `beforeSend` qui retire emails / téléphones des prospects.

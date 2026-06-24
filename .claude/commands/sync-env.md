@@ -18,7 +18,7 @@ Tu compares `.env.local` avec la liste des variables attendues par le projet. **
 - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
 - `SUPABASE_SERVICE_ROLE_KEY` (SERVER ONLY)
 
-**OpenAI** — `OPENAI_API_KEY` (gpt-4o)
+**Gemini** — `GEMINI_API_KEY` (`gemini-2.0-flash`, scoring d'intérêt commercial + raisons)
 
 **INSEE Sirene** — `INSEE_CLIENT_ID`, `INSEE_CLIENT_SECRET` (OAuth2, token valide 7j)
 
@@ -53,7 +53,7 @@ Présentes hors référence (à investiguer) :
 ## 3. Sources des clés manquantes
 
 - `NEXT_PUBLIC_SUPABASE_*`, `SUPABASE_SERVICE_ROLE_KEY` → Supabase dashboard → Project Settings → API
-- `OPENAI_API_KEY` → platform.openai.com → API Keys (quota gpt-4o)
+- `GEMINI_API_KEY` → aistudio.google.com → API Keys (`gemini-2.0-flash`)
 - `INSEE_CLIENT_*` → api.insee.fr → application → identifiants OAuth2 (régénérer si > 7j)
 - `PAPPERS_API_KEY` → pappers.fr → Espace Pro → API
 - `HUNTER_API_KEY` → hunter.io → Settings → API

@@ -1,24 +1,23 @@
 ---
 name: agent-debugging
-description: "Debug du pipeline nocturne (sourcing → scoring → enrichissement → pitch → email). À activer quand l'utilisateur dit : agent ne tourne pas, pas de prospects, scoring bizarre, pas reçu l'email, pipeline cassé."
+description: "Debug du pipeline nocturne (sourcing → scoring déterministe → enrichissement → scoring commercial Gemini → pipeline commercial). À activer quand l'utilisateur dit : agent ne tourne pas, pas de prospects, scoring bizarre, scoring Gemini KO, pipeline cassé."
 ---
 
 # Skill : Agent Debugging — Pipeline Nocturne
 
-Activé quand l'utilisateur parle de debug du pipeline : "l'agent n'a pas tourné", "pas de prospects générés", "scoring bizarre", "pas reçu l'email matinal", "le cron a échoué".
+Activé quand l'utilisateur parle de debug du pipeline : "l'agent n'a pas tourné", "pas de prospects générés", "scoring bizarre", "le scoring Gemini renvoie 0", "le cron a échoué".
 
 ## Architecture rapide (pour rappel)
 
 Cron 22h → `POST /api/agent/run` → `lib/agent/orchestrator.ts` :
-1. **Sourcing** (`sourcing.ts`) : Sirene OAuth2 INSEE → liste entreprises éligibles.
-2. **BEGES** (`sourcing.ts` + ADEME) : cross-check si BEGES publié.
-3. **Scoring** (`scoring.ts`) : score composite 0-100.
-4. **Top 15** non-appelés.
-5. **Enrichissement** (`contact-enrichment.ts`) : Recherche Entreprises → Pappers → Hunter (cascade).
-6. **Pitch** (`pitch-gen.ts`) : GPT-4o, JSON structuré.
-7. **Daily list** (`daily-list-generator.ts`) : INSERT `daily_lists` + `daily_list_items`.
+1. **Sourcing adaptatif** (`sourcing.ts` / `sourcing-runner.ts`) : Sirene INSEE par curseur (API Key) → liste entreprises éligibles. Fallback Recherche Entreprises gouv.
+2. **BEGES** (ADEME) : cross-check si BEGES publié (`beges_publie` / `beges_valide`).
+3. **Scoring déterministe** (`scoring.ts`) : score composite 0-100, `statut = score >= 20 ? 'qualified' : 'sourced'`.
+4. **Upsert `prospects`** (`onConflict: 'user_id,siren'`).
+5. **Enrichissement contact** (`contact-enrichment.ts`) : Recherche Entreprises → Pappers → Hunter (cascade).
+6. **Scoring commercial Gemini** (`gemini-scoring.ts`) : `gemini-2.0-flash`, intérêt 0-100 + 3-5 raisons d'appel, structured output + Zod → `UPDATE prospects` (`gemini_interet_score`, `gemini_raisons`, `gemini_generated_at`).
 
-Cron 7h30 → `POST /api/notifications/daily` → email Resend.
+Pas de génération de « liste de 15 appels/jour » depuis le pivot du 2026-05-14 : les prospects qualifiés alimentent le pipeline commercial (statut CRM). Les tables `daily_lists` / `daily_list_items` ont été supprimées (migration 014).
 
 ## Étape 1 : Lire `agent_runs`
 
@@ -47,11 +46,11 @@ LIMIT 5;
 - Filtrer sur `route:/api/agent/run` ou `route:/api/notifications/daily`.
 - Filtrer sur les 24 dernières heures.
 - Pattern fréquents :
-  - Erreur INSEE 401 → token OAuth2 expiré ou `INSEE_CLIENT_SECRET` rotaté.
+  - Erreur INSEE 401 / 403 → `INSEE_API_KEY` invalide, rotatée, ou app non abonnée à l'API Sirene (depuis sept. 2025 : API Key, plus d'OAuth2).
   - Pappers 402 / 403 → crédits épuisés.
-  - Hunter 429 → quota mensuel 50 atteint.
-  - OpenAI 429 → RPM dépassé (batch trop agressif — voir `BATCH_DELAY_MS` dans `pitch-gen.ts`).
-  - Resend 422 → email destinataire invalide dans `profiles.notification_email`.
+  - Hunter 429 → quota mensuel atteint.
+  - Gemini 429 / timeout → quota/RPM dépassé. Le scoring fait 1 retry puis fallback `transient_failure` (`gemini_generated_at` laissé NULL → re-tenté au prochain run). Voir `GEMINI_BATCH_DELAY_MS` / `GEMINI_PARALLEL_GROUP_SIZE` dans `gemini-scoring.ts`.
+  - Resend 422 → email destinataire invalide dans `profiles.settings.notification_email`.
 
 ## Étape 4 : Test isolé d'une phase
 
@@ -73,13 +72,13 @@ Pour les autres phases : importer la fonction depuis `lib/agent/<phase>.ts` dans
 
 | Source | Quota | Comment vérifier |
 |---|---|---|
-| INSEE Sirene | Token OAuth2 expire toutes les 7j | `lib/agent/sourcing.ts` doit re-fetch automatiquement |
+| INSEE Sirene | API Key (depuis sept. 2025, plus d'OAuth2), ~30 req/min plan gratuit | `lib/agent/sourcing.ts` (`getInseeApiKey`) ; app abonnée à l'API Sirene sur portail-api.insee.fr |
 | ADEME | Pas de quota public | Endpoint `data.ademe.fr` joignable |
-| Recherche Entreprises | Pas de clé, soft rate limit | Logs Sentry sur 429 |
+| Recherche Entreprises | Pas de clé, soft rate limit (~7 req/s) | Logs Sentry sur 429 |
 | Pappers | Crédits payants | Dashboard Pappers |
-| Hunter | 50 recherches / mois (free) | Dashboard Hunter |
-| OpenAI | RPM gpt-4o (~500) | Dashboard OpenAI |
-| Resend | 100 emails/j (free) | Dashboard Resend |
+| Hunter | ~25 recherches / mois (free) | Dashboard Hunter |
+| Gemini | `gemini-2.0-flash` : ~30 req/min, ~1500 req/jour (free) | Dashboard Google AI Studio |
+| Resend | 3 000 emails/mois (free) | Dashboard Resend |
 
 ## Étape 6 : Dry-run local
 

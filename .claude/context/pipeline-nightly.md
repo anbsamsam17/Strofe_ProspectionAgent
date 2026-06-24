@@ -18,7 +18,7 @@ Le pipeline est orchestré par `lib/agent/orchestrator.ts` (`runAgentNocturne`),
 [orchestrator.runAgentNocturne(userId, supabaseAdmin)]
     │
     ├─ Phase 1  init               → INSERT agent_runs (status running)
-    ├─ Phase 2  load_settings      → SELECT profiles.settings (NAF cibles, ville, daily_call_target)
+    ├─ Phase 2  load_settings      → SELECT profiles.settings (NAF cibles, ville, sourcing_target_per_run)
     │
     ├─ Phase 3+4 phaseSourcingAdaptive → runPipelineSourcing (lib/agent/sourcing-runner.ts)
     │   │   ├─ resolveSourcingFilters       → tranches INSEE, range CP, départements, NAF, signature SHA-256
@@ -29,7 +29,7 @@ Le pipeline est orchestré par `lib/agent/orchestrator.ts` (`runAgentNocturne`),
     │   │   ├─ runAdaptiveSourcing          → boucle :
     │   │   │      fetch 1 page curseur Sirene (excludeSirens, pageSize=100, maxPages=1)
     │   │   │      dedup + push collected (mute sirenSet)
-    │   │   │      stop si candidats >= max(daily_call_target × 3, 50)
+    │   │   │      stop si candidats >= max(sourcing_target_per_run × 3, 50)
     │   │   │            OU curseurSuivant === curseur (univers épuisé)
     │   │   │            OU HARD_CAP_PAGES=50 ou HARD_CAP_DURATION_MS=4 min
     │   │   │      mode dégradé : SireneApiError → sourcerEntreprisesFallback (1 appel)
@@ -40,18 +40,16 @@ Le pipeline est orchestré par `lib/agent/orchestrator.ts` (`runAgentNocturne`),
     │   │   └─ UPDATE profiles.sourcing_state → { curseur, filters_signature, last_total, exhausted_at, last_run_at }
     │   └─ remplit agent_runs : prospects_new/updated, sirene_total_available, sirene_pages_loaded, sirene_curseur_final
     │
-    ├─ Phase 4.5 contact_enrichment → top 10 score>70 sans email/tel
+    ├─ Phase 4.5 contact_enrichment → top prospects score>70 sans email/tel
     │                                  Pappers (dirigeants + tel) puis Hunter.io (emails)
     │                                  séquentiel pour préserver quotas
-    ├─ Phase 5  selection          → top N (daily_call_target) :
-    │                                  statut in (sourced, qualified)
-    │                                  beges_publie=false OU beges_valide=false
-    │                                  exclus = prospects déjà dans la daily_list du jour
-    ├─ Phase 6  generation_pitch   → GPT-4o, groupes de 5 en parallèle, delay 150ms
-    └─ Phase 7  construction_liste → UPSERT daily_lists (status generating)
-                                     INSERT daily_list_items (mode append cumulatif, ordre décalé)
-                                     UPDATE daily_lists status=ready
-[fin]  status completed, completed_at, logs persistés
+    └─ Phase 5  scoring_commercial → scoreLeadsBatchGemini (lib/agent/gemini-scoring.ts)
+                                     gemini-2.0-flash, groupes de 5 en parallèle, delay 200ms
+                                     intérêt 0-100 + 3-5 raisons d'appel → UPDATE prospects
+                                     (gemini_interet_score, gemini_raisons, gemini_generated_at)
+                                     échec transitoire → gemini_generated_at NULL (retry next run)
+[fin]  status completed, completed_at, logs persistés. Les prospects qualifiés
+       alimentent le pipeline commercial (statut CRM), pas une liste figée d'appels.
 ```
 
 ## Détail par phase
@@ -63,7 +61,7 @@ Le pipeline est orchestré par `lib/agent/orchestrator.ts` (`runAgentNocturne`),
 - **Échec** : throw si run déjà en cours → 409 côté API.
 
 ### 2. load_settings
-- Lit `profiles.settings` (JSONB) : `target_sectors`, `target_city`, `target_postal_codes`, `daily_call_target`, `notification_email`, `offer_description`.
+- Lit `profiles.settings` (JSONB) : `target_sectors`, `target_city`, `target_postal_codes`, `sourcing_target_per_run` (anciennement `daily_call_target`, renommé migration 014), `notification_email`, `offer_description`.
 - Échec fatal → run passe `failed`.
 
 ### 3+4. sourcing adaptatif + enrichissement + scoring + upsert (fusionnés Wave 2.2)
@@ -81,7 +79,7 @@ Le pipeline est orchestré par `lib/agent/orchestrator.ts` (`runAgentNocturne`),
   - Sinon reprendre `state.curseurSuivant`.
 - **Boucle adaptative** (`runAdaptiveSourcing`) :
   - Appelle `sourcerEntreprises({ curseur, pageSize:100, maxPages:1, excludeSirens })` page par page.
-  - Stop dès que `candidates >= max(daily_call_target × 3, 50)` OU `curseurSuivant === curseur` (univers Sirene épuisé).
+  - Stop dès que `candidates >= max(sourcing_target_per_run × 3, 50)` OU `curseurSuivant === curseur` (univers Sirene épuisé).
   - Caps de sécurité : `HARD_CAP_PAGES=50` et `HARD_CAP_DURATION_MS=4 min` (cron Vercel time out à 5 min).
   - Mode dégradé : `SireneApiError` à la première page → bascule sur `sourcerEntreprisesFallback` (Recherche Entreprises, sans curseur, 1 appel).
 - **Enrichissement ADEME** : `Promise.allSettled` batches de 20 (pas de bloquer sur échec individuel — mode dégradé : l'étab passe sans données BEGES).
@@ -97,29 +95,22 @@ Le pipeline est orchestré par `lib/agent/orchestrator.ts` (`runAgentNocturne`),
 - Séquentiel (pas de parallélisme) pour préserver les quotas gratuits Pappers / Hunter.
 - Sans `PAPPERS_API_KEY` ou `HUNTER_API_KEY` → phase ignorée silencieusement.
 
-### 5. selection
-- `target = settings.daily_call_target ?? 15`.
-- Filtre : `user_id`, `statut in ('sourced','qualified')`, `beges_publie=false OR beges_valide=false`, ORDER BY `score_priorite DESC`, LIMIT target.
-- Exclut les `prospect_id` déjà présents dans la `daily_list` du jour (idempotence).
-
-### 6. generation_pitch
-- `genererPitchsBatch(prospects, settings)` → GPT-4o.
-- Groupes de 5 en parallèle, délai 150 ms entre groupes (RPM standard gpt-4o = 500).
-- Si un pitch échoue → fallback minimal (ne bloque pas le batch).
-
-### 7. construction_liste
-- Upsert `daily_lists` (status `generating`) avec `onConflict: 'user_id,date'`.
-- **Mode append cumulatif** : pas de DELETE des items existants. Récupère `MAX(ordre)` actuel et décale les nouveaux items (ordre += lastOrdre). Les items déjà appelés ET non appelés sont conservés.
-- Insert `daily_list_items`.
-- UPDATE `daily_lists` → status `ready`, `generated_at = NOW()`.
+### 5. scoring commercial Gemini
+- **Non-fatale**. `scoreLeadsBatchGemini(prospects)` → `gemini-2.0-flash` (`lib/agent/gemini-scoring.ts`).
+- Cible : les prospects sourcés/qualifiés non encore scorés par Gemini (`gemini_generated_at IS NULL`).
+- Groupes de 5 en parallèle, délai 200 ms entre groupes (`GEMINI_PARALLEL_GROUP_SIZE`, `GEMINI_BATCH_DELAY_MS`).
+- Sortie validée Zod : `interet_score` 0-100 + 3-5 `raisons` d'appel → `UPDATE prospects` (`gemini_interet_score`, `gemini_raisons`, `gemini_generated_at`).
+- **Échec transitoire** (timeout / 429 / 5xx) : `gemini_generated_at` laissé NULL → prospect re-tenté au prochain run (pas de verrouillage à `interet_score: 0`). **Échec définitif** : fallback stable persistable.
+- Sans `GEMINI_API_KEY` → phase skippée proprement (`isGeminiAvailable()`).
+- Pas de génération de liste d'appels : les prospects qualifiés sont travaillés via leur statut CRM dans le pipeline commercial.
 
 ## Idempotence
 
 Si le cron tourne 2× la même nuit (Vercel retry sur non-200, ou trigger manuel) :
 1. `phaseInit` détecte un run déjà `running` → throw → 409.
-2. Sinon, à `phaseSelection` les prospects déjà dans la liste sont exclus → pas de doublons.
-3. À `phaseCreateDailyList` l'upsert `daily_lists` est idempotent ; les items ajoutés continuent la numérotation `ordre` (mode append).
-4. Conséquence : 2 runs successifs **agrandissent** la liste si de nouveaux prospects qualifiés existent.
+2. L'upsert `prospects` est idempotent (`onConflict: 'user_id,siren'`) : un même SIREN n'est jamais dupliqué.
+3. Le scoring commercial Gemini ne re-score que les prospects sans `gemini_generated_at` → pas de double appel LLM ni de coût inutile.
+4. Conséquence : 2 runs successifs **enrichissent** la base si de nouveaux prospects qualifiés existent, sans doublons.
 5. **Curseur jamais perdu** : `runPipelineSourcing` (`lib/agent/sourcing-runner.ts:830-880`) enveloppe boucle + enrich + upsert dans `try/finally` → `persistSourcingState` est appelé même si enrich/upsert throw, tant que la boucle a produit un `outcome` (curseur consommé toujours écrit en base).
 
 ## Compteurs typiques (post-Wave 2.2)
@@ -131,8 +122,7 @@ Si le cron tourne 2× la même nuit (Vercel retry sur non-200, ou trigger manuel
 | Après dédup          | identique candidats (dedup déjà appliquée via `excludeSirens`) |
 | Enrichis ADEME       | identique candidats |
 | Qualifiés (score≥20) | 30-70% des candidats |
-| Top sélectionnés     | 15 (par défaut) |
-| Pitchs générés       | 15 (parallèle 5×3) |
+| Scorés par Gemini    | les qualifiés sans `gemini_generated_at` (parallèle 5×) |
 
 ## Mode dégradé
 
@@ -142,7 +132,8 @@ Si le cron tourne 2× la même nuit (Vercel retry sur non-200, ou trigger manuel
 - ADEME timeout sur un étab → log warn, l'étab passe sans enrichissement BEGES (mode dégradé conservé Wave 2.2).
 - Migration 004 non appliquée (colonnes `beges_url`/`beges_valide` absentes) → retry upsert sans ces colonnes (warn).
 - Pappers/Hunter manquants → phase 4.5 silencieuse.
-- OpenAI rate limit → pitch fallback minimal (à vérifier dans `lib/agent/pitch-gen.ts` pour la stratégie exacte).
+- Gemini rate limit (429) / timeout / 5xx → 1 retry puis fallback `transient_failure` : `gemini_generated_at` laissé NULL → prospect re-scoré au prochain run (cf. `lib/agent/gemini-scoring.ts`).
+- `GEMINI_API_KEY` absente → phase scoring commercial skippée proprement (`isGeminiAvailable()`).
 
 ## Observabilité (post-Wave 2.2)
 

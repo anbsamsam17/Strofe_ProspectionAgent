@@ -90,7 +90,7 @@ Codes d'erreur cohérents (string court SCREAMING_SNAKE) : `UNAUTHENTICATED`, `F
 - `401` non authentifié (pas de session).
 - `403` authentifié mais pas le droit (rare avec RLS — la query renvoie vide, pas 403).
 - `404` ressource non trouvée.
-- `429` rate limit (Hunter quota, OpenAI RPM).
+- `429` rate limit (Hunter quota, Gemini RPM).
 - `500` erreur serveur non gérée.
 
 ## Routes cron

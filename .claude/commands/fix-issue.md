@@ -36,11 +36,11 @@ Tu corriges un bug sur l'agent de prospection BEGES. Argument : `$ARGUMENTS` (de
 
 1. `npm run test` — le nouveau test passe, aucun ancien test ne casse.
 2. `npm run type-check` — zéro erreur TS.
-3. Si le fix touche `lib/agent/orchestrator.ts`, `lib/agent/sourcing.ts`, `lib/agent/scoring.ts`, `lib/agent/pitch-gen.ts` ou `lib/agent/contact-enrichment.ts` : lance `/agent-dry-run` pour vérifier que le pipeline complet tourne toujours bout en bout sans crash.
+3. Si le fix touche `lib/agent/orchestrator.ts`, `lib/agent/sourcing.ts`, `lib/agent/scoring.ts`, `lib/agent/gemini-scoring.ts` ou `lib/agent/contact-enrichment.ts` : lance `/agent-dry-run` pour vérifier que le pipeline complet tourne toujours bout en bout sans crash.
 4. Si le fix touche une route API : `curl` la route en local avec un payload valide ET un payload invalide (Zod doit toujours rejeter proprement).
 
 ## 6. Documentation
 
 1. Commit message : `fix(<scope>): <résumé court>` — mentionne l'ID Sentry si applicable.
-2. Si la leçon est réutilisable (ex: piège récurrent sur Supabase RLS, OpenAI rate limit, etc.) : ajoute une entrée dans `memory/hindsight.md`.
+2. Si la leçon est réutilisable (ex: piège récurrent sur Supabase RLS, Gemini rate limit, etc.) : ajoute une entrée dans `memory/hindsight.md`.
 3. Ne ferme l'issue Sentry qu'après le déploiement (`/deploy`) et confirmation que l'erreur ne réapparaît pas pendant 24h.
