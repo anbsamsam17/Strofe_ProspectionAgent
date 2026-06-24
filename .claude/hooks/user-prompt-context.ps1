@@ -8,7 +8,7 @@ try {
     # Drain stdin (payload not needed but must be consumed)
     $null = [Console]::In.ReadToEnd()
 
-    Write-Output "Project: Agent BEGES (prospection) - Next.js 15 + Supabase + OpenAI gpt-4o."
+    Write-Output "Project: Agent BEGES (prospection) - Next.js 15 + Supabase + Google Gemini (gemini-2.0-flash)."
     Write-Output "Stack scripts: npm run dev | build | lint | type-check | test (vitest)."
     Write-Output "Always consult CLAUDE.md and .claude/MEMORY.md (if present) before architectural decisions."
     Write-Output "Secrets live in .env.local - never read, log, or commit them."
