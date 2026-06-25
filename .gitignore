@@ -110,3 +110,7 @@ memory/
 docs/glan-*
 docs/copy/
 docs/seo/
+
+# Python (analysis/ EDA)
+__pycache__/
+*.pyc

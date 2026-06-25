@@ -1,0 +1,496 @@
+{
+  "$schema_note": "Golden set d'éval du scoring commercial Gemini (gemini-2.0-flash). AUCUNE PII (pas de contact_email/telephone/nom). Chaque cas = input GeminiProspectInput réel + score attendu (range) + propriétés attendues des raisons. Voir lib/agent/__evals__/README.md.",
+  "version": 1,
+  "cases": [
+    {
+      "id": "grande-indus-beges-jamais-publie",
+      "label": "Grande industrie soumise, BEGES jamais publié — cible très chaude",
+      "input": {
+        "raison_sociale": "Fonderie Métallurgique de l'Atlantique SA",
+        "secteur_naf": "2451Z",
+        "secteur_libelle": "Fonderie de fonte",
+        "effectif_min": 750,
+        "effectif_max": 999,
+        "ville": "Saint-Nazaire",
+        "beges_publie": false,
+        "beges_valide": null,
+        "obligation_beges": true,
+        "signaux": [
+          {
+            "type": "sustainability_report_missing",
+            "description": "Aucun BEGES sur le registre ADEME alors que l'effectif dépasse 500 salariés",
+            "weight": 0.9
+          }
+        ]
+      },
+      "expected_score_range": [80, 100],
+      "expected_reason_properties": {
+        "mentions_taille_ou_effectif": true,
+        "mentions_secteur": true,
+        "mentions_beges_state": true,
+        "roi_or_image_before_legal": true,
+        "no_alarmism": true,
+        "min_count": 3,
+        "max_count": 5
+      }
+    },
+    {
+      "id": "grande-transport-beges-expire",
+      "label": "Transport > 500, BEGES publié expiré (> 4 ans) — chaud (renouvellement)",
+      "input": {
+        "raison_sociale": "Transports Logistiques Rhône-Alpes SAS",
+        "secteur_naf": "4941A",
+        "secteur_libelle": "Transports routiers de fret interurbains",
+        "effectif_min": 600,
+        "effectif_max": 799,
+        "ville": "Lyon",
+        "beges_publie": true,
+        "beges_valide": false,
+        "obligation_beges": true,
+        "signaux": [
+          {
+            "type": "sustainability_report_missing",
+            "description": "Dernier BEGES publié il y a plus de 4 ans, hors période de validité",
+            "weight": 0.8
+          }
+        ]
+      },
+      "expected_score_range": [70, 95],
+      "expected_reason_properties": {
+        "mentions_secteur": true,
+        "mentions_beges_state": true,
+        "roi_or_image_before_legal": true,
+        "no_alarmism": true,
+        "min_count": 3,
+        "max_count": 5
+      }
+    },
+    {
+      "id": "grande-agro-beges-jamais-signaux",
+      "label": "Agro-alimentaire > 500, jamais publié, signaux RSE — très chaud",
+      "input": {
+        "raison_sociale": "Coopérative Agroalimentaire du Sud-Ouest",
+        "secteur_naf": "1011Z",
+        "secteur_libelle": "Transformation et conservation de la viande de boucherie",
+        "effectif_min": 900,
+        "effectif_max": 1200,
+        "ville": "Toulouse",
+        "beges_publie": false,
+        "beges_valide": null,
+        "obligation_beges": true,
+        "signaux": [
+          {
+            "type": "job_posting",
+            "description": "Recrutement d'un Responsable RSE et décarbonation publié récemment",
+            "weight": 0.7
+          },
+          {
+            "type": "press_release",
+            "description": "Communiqué sur un objectif net-zéro à horizon 2035",
+            "weight": 0.6
+          }
+        ]
+      },
+      "expected_score_range": [82, 100],
+      "expected_reason_properties": {
+        "mentions_taille_ou_effectif": true,
+        "mentions_secteur": true,
+        "mentions_signaux": true,
+        "roi_or_image_before_legal": true,
+        "no_alarmism": true,
+        "min_count": 3,
+        "max_count": 5
+      }
+    },
+    {
+      "id": "grande-sante-beges-expire",
+      "label": "Santé > 500, BEGES expiré — chaud",
+      "input": {
+        "raison_sociale": "Clinique du Lac SAS",
+        "secteur_naf": "8610Z",
+        "secteur_libelle": "Activités hospitalières",
+        "effectif_min": 520,
+        "effectif_max": 700,
+        "ville": "Annecy",
+        "beges_publie": true,
+        "beges_valide": false,
+        "obligation_beges": true,
+        "signaux": []
+      },
+      "expected_score_range": [68, 92],
+      "expected_reason_properties": {
+        "mentions_secteur": true,
+        "mentions_beges_state": true,
+        "roi_or_image_before_legal": true,
+        "no_alarmism": true,
+        "min_count": 3,
+        "max_count": 5
+      }
+    },
+    {
+      "id": "grande-energie-beges-ajour",
+      "label": "Énergie > 500, BEGES à jour récent — tiède (optimisation leviers)",
+      "input": {
+        "raison_sociale": "Régie Énergétique Métropolitaine",
+        "secteur_naf": "3511Z",
+        "secteur_libelle": "Production d'électricité",
+        "effectif_min": 800,
+        "effectif_max": 1000,
+        "ville": "Grenoble",
+        "beges_publie": true,
+        "beges_valide": true,
+        "obligation_beges": true,
+        "signaux": []
+      },
+      "expected_score_range": [30, 60],
+      "expected_reason_properties": {
+        "mentions_beges_state": true,
+        "roi_or_image_before_legal": true,
+        "no_alarmism": true,
+        "min_count": 3,
+        "max_count": 5
+      }
+    },
+    {
+      "id": "grande-industrie-beges-ajour-froid",
+      "label": "Industrie > 500, BEGES à jour conforme — froid",
+      "input": {
+        "raison_sociale": "Plasturgie Industrielle de Normandie SAS",
+        "secteur_naf": "2221Z",
+        "secteur_libelle": "Fabrication de plaques, feuilles, tubes et profilés en matières plastiques",
+        "effectif_min": 550,
+        "effectif_max": 650,
+        "ville": "Rouen",
+        "beges_publie": true,
+        "beges_valide": true,
+        "obligation_beges": true,
+        "signaux": []
+      },
+      "expected_score_range": [25, 55],
+      "expected_reason_properties": {
+        "mentions_beges_state": true,
+        "roi_or_image_before_legal": true,
+        "no_alarmism": true,
+        "min_count": 3,
+        "max_count": 5
+      }
+    },
+    {
+      "id": "moyenne-industrie-anticipation",
+      "label": "Industrie 250-500 hors obligation stricte — anticipation possible, tiède",
+      "input": {
+        "raison_sociale": "Mécanique de Précision Jurassienne",
+        "secteur_naf": "2562B",
+        "secteur_libelle": "Mécanique industrielle",
+        "effectif_min": 300,
+        "effectif_max": 450,
+        "ville": "Besançon",
+        "beges_publie": false,
+        "beges_valide": null,
+        "obligation_beges": false,
+        "signaux": []
+      },
+      "expected_score_range": [35, 62],
+      "expected_reason_properties": {
+        "mentions_taille_ou_effectif": true,
+        "roi_or_image_before_legal": true,
+        "no_alarmism": true,
+        "min_count": 3,
+        "max_count": 5
+      }
+    },
+    {
+      "id": "moyenne-services-anticipation-signaux",
+      "label": "Services 250-500, signaux RSE, hors obligation — tiède/intéressant",
+      "input": {
+        "raison_sociale": "Cabinet Conseil Numérique Atlantique",
+        "secteur_naf": "6202A",
+        "secteur_libelle": "Conseil en systèmes et logiciels informatiques",
+        "effectif_min": 280,
+        "effectif_max": 420,
+        "ville": "Nantes",
+        "beges_publie": false,
+        "beges_valide": null,
+        "obligation_beges": false,
+        "signaux": [
+          {
+            "type": "certification",
+            "description": "Démarche de labellisation EcoVadis engagée",
+            "weight": 0.5
+          }
+        ]
+      },
+      "expected_score_range": [32, 62],
+      "expected_reason_properties": {
+        "mentions_signaux": true,
+        "roi_or_image_before_legal": true,
+        "no_alarmism": true,
+        "min_count": 3,
+        "max_count": 5
+      }
+    },
+    {
+      "id": "petite-services-hors-obligation",
+      "label": "Petite société de services hors obligation — froid",
+      "input": {
+        "raison_sociale": "Agence Communication Créative Sarl",
+        "secteur_naf": "7311Z",
+        "secteur_libelle": "Activités des agences de publicité",
+        "effectif_min": 12,
+        "effectif_max": 25,
+        "ville": "Tours",
+        "beges_publie": false,
+        "beges_valide": null,
+        "obligation_beges": false,
+        "signaux": []
+      },
+      "expected_score_range": [0, 30],
+      "expected_reason_properties": {
+        "roi_or_image_before_legal": true,
+        "no_alarmism": true,
+        "min_count": 3,
+        "max_count": 5
+      }
+    },
+    {
+      "id": "petite-commerce-hors-obligation",
+      "label": "Petit commerce de détail hors obligation — froid",
+      "input": {
+        "raison_sociale": "Distribution Locale Vins et Spiritueux",
+        "secteur_naf": "4725Z",
+        "secteur_libelle": "Commerce de détail de boissons en magasin spécialisé",
+        "effectif_min": 8,
+        "effectif_max": 15,
+        "ville": "Dijon",
+        "beges_publie": false,
+        "beges_valide": null,
+        "obligation_beges": false,
+        "signaux": []
+      },
+      "expected_score_range": [0, 28],
+      "expected_reason_properties": {
+        "no_alarmism": true,
+        "min_count": 3,
+        "max_count": 5
+      }
+    },
+    {
+      "id": "grande-construction-jamais-publie",
+      "label": "BTP > 500, jamais publié — très chaud",
+      "input": {
+        "raison_sociale": "Construction Bâtiment Méditerranée SA",
+        "secteur_naf": "4120A",
+        "secteur_libelle": "Construction de maisons individuelles",
+        "effectif_min": 1100,
+        "effectif_max": 1500,
+        "ville": "Marseille",
+        "beges_publie": false,
+        "beges_valide": null,
+        "obligation_beges": true,
+        "signaux": [
+          {
+            "type": "press_release",
+            "description": "Réponse à des appels d'offres publics avec critères environnementaux",
+            "weight": 0.6
+          }
+        ]
+      },
+      "expected_score_range": [80, 100],
+      "expected_reason_properties": {
+        "mentions_taille_ou_effectif": true,
+        "mentions_beges_state": true,
+        "roi_or_image_before_legal": true,
+        "no_alarmism": true,
+        "min_count": 3,
+        "max_count": 5
+      }
+    },
+    {
+      "id": "grande-logistique-zfe",
+      "label": "Logistique > 500 en ZFE, BEGES expiré — chaud (localisation)",
+      "input": {
+        "raison_sociale": "Entrepôts et Distribution Île-de-France",
+        "secteur_naf": "5210B",
+        "secteur_libelle": "Entreposage et stockage non frigorifique",
+        "effectif_min": 650,
+        "effectif_max": 850,
+        "ville": "Aubervilliers",
+        "beges_publie": true,
+        "beges_valide": false,
+        "obligation_beges": true,
+        "signaux": [
+          {
+            "type": "event",
+            "description": "Zone à faibles émissions (ZFE) du Grand Paris impactant la flotte",
+            "weight": 0.7
+          }
+        ]
+      },
+      "expected_score_range": [70, 95],
+      "expected_reason_properties": {
+        "mentions_secteur": true,
+        "mentions_beges_state": true,
+        "roi_or_image_before_legal": true,
+        "no_alarmism": true,
+        "min_count": 3,
+        "max_count": 5
+      }
+    },
+    {
+      "id": "grande-tertiaire-beges-jamais",
+      "label": "Services tertiaires > 500, jamais publié — chaud mais secteur modéré",
+      "input": {
+        "raison_sociale": "Assurances Mutuelles du Centre",
+        "secteur_naf": "6512Z",
+        "secteur_libelle": "Autres assurances",
+        "effectif_min": 700,
+        "effectif_max": 900,
+        "ville": "Orléans",
+        "beges_publie": false,
+        "beges_valide": null,
+        "obligation_beges": true,
+        "signaux": []
+      },
+      "expected_score_range": [60, 88],
+      "expected_reason_properties": {
+        "mentions_taille_ou_effectif": true,
+        "mentions_beges_state": true,
+        "roi_or_image_before_legal": true,
+        "no_alarmism": true,
+        "min_count": 3,
+        "max_count": 5
+      }
+    },
+    {
+      "id": "moyenne-agro-anticipation",
+      "label": "Agro 250-500 hors obligation, secteur lourd — tiède/intéressant",
+      "input": {
+        "raison_sociale": "Laiterie Coopérative des Monts",
+        "secteur_naf": "1051C",
+        "secteur_libelle": "Fabrication de fromage",
+        "effectif_min": 260,
+        "effectif_max": 480,
+        "ville": "Clermont-Ferrand",
+        "beges_publie": false,
+        "beges_valide": null,
+        "obligation_beges": false,
+        "signaux": []
+      },
+      "expected_score_range": [35, 65],
+      "expected_reason_properties": {
+        "mentions_secteur": true,
+        "roi_or_image_before_legal": true,
+        "no_alarmism": true,
+        "min_count": 3,
+        "max_count": 5
+      }
+    },
+    {
+      "id": "grande-chimie-decret-non-conforme",
+      "label": "Chimie > 500, BEGES publié récent mais scope 3 incomplet — chaud",
+      "input": {
+        "raison_sociale": "Chimie Fine de l'Est SA",
+        "secteur_naf": "2059Z",
+        "secteur_libelle": "Fabrication d'autres produits chimiques",
+        "effectif_min": 820,
+        "effectif_max": 1050,
+        "ville": "Strasbourg",
+        "beges_publie": true,
+        "beges_valide": true,
+        "obligation_beges": true,
+        "signaux": [
+          {
+            "type": "sustainability_report_missing",
+            "description": "BEGES publié post-2023 sans scope 3 significatif ni plan d'action chiffré (Décret 2022-982)",
+            "weight": 0.75
+          }
+        ]
+      },
+      "expected_score_range": [55, 85],
+      "expected_reason_properties": {
+        "mentions_secteur": true,
+        "mentions_signaux": true,
+        "roi_or_image_before_legal": true,
+        "no_alarmism": true,
+        "min_count": 3,
+        "max_count": 5
+      }
+    },
+    {
+      "id": "petite-industrie-volontaire",
+      "label": "Petite industrie < 250 hors obligation, secteur lourd — froid/tiède bas",
+      "input": {
+        "raison_sociale": "Atelier Menuiserie Bois du Massif",
+        "secteur_naf": "1623Z",
+        "secteur_libelle": "Fabrication de charpentes et d'autres menuiseries",
+        "effectif_min": 45,
+        "effectif_max": 90,
+        "ville": "Limoges",
+        "beges_publie": false,
+        "beges_valide": null,
+        "obligation_beges": false,
+        "signaux": []
+      },
+      "expected_score_range": [10, 42],
+      "expected_reason_properties": {
+        "no_alarmism": true,
+        "min_count": 3,
+        "max_count": 5
+      }
+    },
+    {
+      "id": "grande-transport-maritime-jamais",
+      "label": "Transport maritime > 500, littoral, jamais publié — très chaud",
+      "input": {
+        "raison_sociale": "Armateur Maritime du Ponant SA",
+        "secteur_naf": "5020Z",
+        "secteur_libelle": "Transports maritimes et côtiers de fret",
+        "effectif_min": 600,
+        "effectif_max": 780,
+        "ville": "Le Havre",
+        "beges_publie": false,
+        "beges_valide": null,
+        "obligation_beges": true,
+        "signaux": [
+          {
+            "type": "press_release",
+            "description": "Pression réglementaire FuelEU Maritime et décarbonation du transport maritime",
+            "weight": 0.7
+          }
+        ]
+      },
+      "expected_score_range": [80, 100],
+      "expected_reason_properties": {
+        "mentions_taille_ou_effectif": true,
+        "mentions_secteur": true,
+        "mentions_beges_state": true,
+        "roi_or_image_before_legal": true,
+        "no_alarmism": true,
+        "min_count": 3,
+        "max_count": 5
+      }
+    },
+    {
+      "id": "micro-services-froid-total",
+      "label": "Micro-entreprise de services, aucune obligation, aucun signal — froid total",
+      "input": {
+        "raison_sociale": "Studio Graphique Indépendant",
+        "secteur_naf": "7410Z",
+        "secteur_libelle": "Activités spécialisées de design",
+        "effectif_min": 1,
+        "effectif_max": 5,
+        "ville": "Poitiers",
+        "beges_publie": false,
+        "beges_valide": null,
+        "obligation_beges": false,
+        "signaux": []
+      },
+      "expected_score_range": [0, 22],
+      "expected_reason_properties": {
+        "no_alarmism": true,
+        "min_count": 3,
+        "max_count": 5
+      }
+    }
+  ]
+}

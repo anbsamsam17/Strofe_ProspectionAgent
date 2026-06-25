@@ -1,0 +1,7 @@
+# EDA scoring — dépendances Python (épinglées, Python 3.11)
+pandas==2.2.3
+numpy==2.1.3
+matplotlib==3.9.2
+# Notebook (présentation recruteur). jupyter installé séparément si besoin.
+jupyter==1.1.1
+nbformat==5.10.4

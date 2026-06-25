@@ -4,9 +4,9 @@
 
 ### Agent IA de prospection B2B « bilan carbone / BEGES » — du registre SIRENE au CRM commercial qualifié
 
-De la donnée publique brute (SIRENE INSEE) à un CRM Kanban qualifié : sourcing nocturne automatisé, enrichissement multi-sources, scoring LLM et livraison quotidienne de prospects priorisés.
+De la donnée publique brute (SIRENE INSEE) à un CRM Kanban qualifié : ETL en streaming, sourcing nocturne automatisé, enrichissement multi-sources, scoring LLM **évalué** et **gates de qualité de données** sur chaque run.
 
-**Projet conçu et développé par un profil _Data / Backend Engineer_** — ETL & pipelines de données, PostgreSQL avancé (RLS multi-tenant), LLM en production, CI/CD.
+**Conçu et développé par un profil _Data Engineer_** — ETL idempotent & pipelines, PostgreSQL avancé (RLS multi-tenant), LLM en production **avec eval harness & métriques (MAE)**, data-quality gates, observabilité, CI/CD.
 
 [![CI](https://img.shields.io/github/actions/workflow/status/anbsamsam17/Strofe_ProspectionAgent/ci.yml?branch=main&label=CI&logo=github)](https://github.com/anbsamsam17/Strofe_ProspectionAgent/actions)
 [![Next.js](https://img.shields.io/badge/Next.js-15-black?logo=next.js)](https://nextjs.org/)
@@ -15,7 +15,9 @@ De la donnée publique brute (SIRENE INSEE) à un CRM Kanban qualifié : sourcin
 [![Supabase](https://img.shields.io/badge/Supabase-Postgres%20%2B%20RLS-3ecf8e?logo=supabase&logoColor=white)](https://supabase.com/)
 [![Vercel](https://img.shields.io/badge/Vercel-deployed-black?logo=vercel)](https://vercel.com/)
 [![Sentry](https://img.shields.io/badge/Sentry-monitored-362d59?logo=sentry&logoColor=white)](https://sentry.io/)
-[![Vitest](https://img.shields.io/badge/Vitest-~99%20suites-6e9f18?logo=vitest&logoColor=white)](https://vitest.dev/)
+[![Tests](https://img.shields.io/badge/tests-1459%20passing-6e9f18?logo=vitest&logoColor=white)](https://vitest.dev/)
+[![LLM eval](https://img.shields.io/badge/LLM_eval-MAE%20%2B%20golden%20set-7c3aed)](lib/agent/__evals__/README.md)
+[![Data quality](https://img.shields.io/badge/data_quality-5%20gates-fb923c)](lib/agent/data-quality.ts)
 [![License](https://img.shields.io/badge/License-Proprietary-red)](#licence)
 
 </div>
@@ -43,8 +45,10 @@ Résultats d'ingénierie, vérifiables dans le code et les migrations (aucun KPI
 - **3 sources en cascade** au sourcing nocturne — cache local SIRENE → API SIRENE INSEE → Recherche Entreprises, avec curseur de pagination persisté et circuit breaker.
 - **Scoring LLM contraint** — sortie du modèle **validée par Zod** avant écriture, avec fallback propre en cas de réponse non conforme.
 - **Automatisation planifiée** — **cron nocturne** (sourcing 22h, `reap-stale` 4h, purge 3h) + **ETL SIRENE mensuel** (1er du mois) via GitHub Actions avec freshness-check.
-- **31 migrations Postgres versionnées** — du schéma initial à la dernière évolution (`001_initial` → `031`), RLS multi-tenant sur toutes les tables métier.
-- **~99 suites de tests Vitest** — couvrant transformations de données, mapping SIRENE, scoring et helpers d'observabilité, avec coverage générée en CI.
+- **Scoring LLM évalué (eval harness)** — le scoring Gemini est mesuré sur un golden set : **MAE**, **% within-range**, conformité des raisons, respect de l'ordre métier. Tourne **offline en CI** + live (`npm run eval:llm`).
+- **Data-quality gates par run** — 5 contrôles non-fatals (volume sourcé, taux sans contact / sans BEGES, match ADEME, chute vs run précédent) → statut `ok/warn/critical` dans `agent_runs.logs`.
+- **32 migrations Postgres versionnées** — du schéma initial à la dernière évolution (`001_initial` → `032_pipeline_metrics`), RLS multi-tenant sur toutes les tables métier.
+- **1 459 tests Vitest (101 fichiers)** — transformations de données, mapping SIRENE, scoring, data-quality et helpers d'observabilité, avec coverage générée en CI.
 
 ---
 
@@ -150,20 +154,21 @@ flowchart LR
 
 | Brique | Ce qui est mis en œuvre | Compétence |
 | --- | --- | --- |
-| **31 migrations Supabase** | RLS multi-tenant (`auth.uid() = user_id`), `UNIQUE(user_id, siren)`, colonnes `GENERATED ALWAYS`, RPC `SECURITY DEFINER`, index GIN / full-text FR | **BDD** |
+| **Qualité & éval data** | Eval harness LLM (MAE, golden set), 5 data-quality gates par run, vue analytique `pipeline_metrics_daily` | **Data quality / Observabilité** |
+| **32 migrations Supabase** | RLS multi-tenant (`auth.uid() = user_id`), `UNIQUE(user_id, siren)`, colonnes `GENERATED ALWAYS`, RPC `SECURITY DEFINER`, vue `security_invoker`, index GIN / full-text FR | **BDD** |
 | **ETL SIRENE** | Streaming d'un dump ~1 Go, retry ×3, upsert idempotent par batches de 500, mode `DRY_RUN`, observabilité par cause de rejet | **Pipeline data** |
 | **Pipeline nocturne** | Orchestrateur cron → sourcing en cascade → enrichissement → scoring LLM validé par Zod → upsert | **Pipeline data** |
 | **3 workflows GitHub Actions** | CI (lint/typecheck/test+coverage/build), Deploy Preview Vercel, import SIRENE mensuel avec freshness-check | **DevOps / CI-CD** |
 | **Sécurité applicative** | `CRON_SECRET` timing-safe, service_role serveur-only, Zod aux frontières, scrub PII Sentry sur 3 runtimes | **SaaS / Sécurité** |
 | **CRM end-to-end** | Auth, Kanban drag-and-drop, calendrier de rappels, RGPD (opt-out HMAC, art. 14) | **SaaS end-to-end** |
-| **~99 suites Vitest** | Transformations de données, mapping SIRENE, scoring, helpers d'observabilité | **Qualité / Tests** |
+| **1 459 tests Vitest** | Transformations de données, mapping SIRENE, scoring, data-quality, helpers d'observabilité + eval harness LLM offline en CI | **Qualité / Tests** |
 
 ---
 
 ## 🗄️ Base de données — Postgres avancé, multi-tenant
 
 - **Isolation stricte par locataire** : chaque table métier porte une politique **RLS** `auth.uid() = user_id` (SELECT / INSERT / UPDATE / DELETE). Les requêtes côté utilisateur (client SSR) sont filtrées par la base, pas par le code — pas de `.eq('user_id', …)` redondant.
-- **31 migrations versionnées** retraçant l'évolution réelle du schéma (`001_initial` → `031_rate_limits`).
+- **32 migrations versionnées** retraçant l'évolution réelle du schéma (`001_initial` → `032_pipeline_metrics`).
 - **Patterns Postgres avancés réellement utilisés** :
   - colonnes **`GENERATED ALWAYS`** (ex. score composite *hot lead*, migration 024),
   - fonction **RPC `SECURITY DEFINER`** pour la recherche SIRENE (migration 019),
@@ -205,11 +210,53 @@ flowchart LR
 
 ---
 
+## 🎯 Qualité, évaluation & observabilité du pipeline
+
+> La différence entre « un pipeline qui tourne » et « un système data mesuré et amélioré ».
+> Détail : **[docs/data-architecture.md](docs/data-architecture.md)**.
+
+### Eval harness LLM — *mesurer la qualité du scoring, pas l'espérer*
+
+Le scoring commercial Gemini est évalué sur un **golden set de 18 cas sans PII** couvrant tout le spectre (`lib/agent/__fixtures__/golden-prospects.json`), via un harness isolé de la CI unitaire (`npm run eval:llm`).
+
+- **Mode live** (`GEMINI_API_KEY`) : **MAE** sur `interet_score` vs centre de la fourchette attendue, **% within-range**, **conformité sémantique des raisons**, **respect de l'ordre métier** ROI / image → légal.
+- **Mode offline déterministe** (CI, zéro réseau) : intégrité des fixtures, builder de prompt (faits réglementaires figés, **zéro fuite PII**), schéma Zod réel.
+
+→ *Évaluation quantitative d'un système LLM, séparation eval / CI* — `lib/agent/__evals__/`.
+
+### Data-quality gates — *alerter sur une dégradation au lieu de la subir*
+
+Phase **non-fatale** et **pure** (zéro I/O) en fin de pipeline : `runDataQualityChecks()` agrège 5 expectations PII-free et renvoie un statut `ok | warn | critical` loggué dans `agent_runs.logs`.
+
+| Gate | Détecte |
+| --- | --- |
+| `SOURCED_VOLUME` | volume sourcé effondré (pipeline cassé) |
+| `SANS_CONTACT_RATE` | cascade d'enrichissement contact en échec |
+| `SANS_BEGES_RATE` | enrichissement ADEME massivement KO |
+| `ADEME_MATCH_RATE` | taux de match BEGES anormalement nul |
+| `DROP_VS_PREVIOUS` | chute brutale vs run précédent du même utilisateur |
+
+→ *Data-quality engineering façon « expectations », robustesse non-fatale* — `lib/agent/data-quality.ts`.
+
+### Métriques de pipeline — *vue SQL analytique, RLS-safe*
+
+Vue `pipeline_metrics_daily` (1 ligne par jour × utilisateur) : runs total / réussis / échoués, `success_rate`, sourcés / qualifiés, `qualification_rate`, durée **moyenne et médiane** (`PERCENTILE_CONT`). `security_invoker = true` → hérite de la RLS d'`agent_runs`, **aucune fuite cross-tenant**.
+
+→ *Modélisation analytique, fonctions de percentile, sécurité par construction* — `supabase/migrations/032_pipeline_metrics.sql`.
+
+### EDA data-driven — *justifier les seuils de scoring par la donnée*
+
+Notebook Jupyter + scripts Python reproductibles (`analysis/`) validant les seuils et poids de `lib/agent/scoring.ts` sur un dataset synthétique réaliste : seuils de taille indexés sur le seuil légal (500 salariés), poids 30/30/40 validés, score peu corrélé à la seule taille (**Spearman ρ ≈ 0,55**). **Limite assumée** : dataset synthétique → cohérence interne, pas pouvoir prédictif ; étape suivante = corréler aux `call_result` réels.
+
+→ *Analyse exploratoire, Python / pandas, esprit critique sur ses propres choix* — `analysis/README.md`.
+
+---
+
 ## ⚙️ CI/CD & GitHub Actions
 
 | Workflow | Déclencheur | Rôle |
 | --- | --- | --- |
-| **`ci.yml`** | push `main`/`develop`, PR `main` | `lint` · `type-check` · `test:coverage` (artifact uploadé) · `build` (avec cache `.next`). Jobs parallèles + `concurrency` cancel-in-progress. |
+| **`ci.yml`** | push `main`/`develop`, PR `main` | `lint` · `type-check` · `test:coverage` (artifact uploadé) · **`eval:llm` (eval harness offline)** · `build` (avec cache `.next`). Jobs parallèles + `concurrency` cancel-in-progress. |
 | **`deploy-preview.yml`** | PR `main` | Tests en *gate* avant déploiement preview Vercel. |
 | **`sirene-import.yml`** | cron mensuel (1er à 04h UTC) + `workflow_dispatch` | Import SIRENE via **GitHub Environment** (secrets injectés), **freshness-check** (skip si cache < 25j, `force` possible), timeout 60 min, Node 22. |
 
@@ -227,7 +274,7 @@ flowchart LR
 
 ## ✅ Tests
 
-- **~99 suites Vitest** (`vitest run`, jsdom, `@testing-library/react`).
+- **1 459 tests Vitest sur 101 fichiers** (`vitest run`, jsdom, `@testing-library/react`).
 - Couverture des **transformations de données** (mapping SIRENE, sourcing), du **scoring**, des **helpers d'observabilité** et des règles métier (blacklist, hot-lead, décret 2022, BEGES).
 - **Coverage** générée en CI (`test:coverage`) et publiée en artifact.
 
@@ -320,7 +367,8 @@ Documentation d'ingénierie maintenue dans le dépôt :
 - **[docs/cicd.md](docs/cicd.md)** — les 3 workflows GitHub Actions (CI, deploy preview, import SIRENE mensuel) et leur configuration.
 - **[docs/SECURITY-RLS.md](docs/SECURITY-RLS.md)** — modèle d'isolation multi-tenant : politiques RLS `auth.uid() = user_id` table par table.
 - **[SECURITY.md](SECURITY.md)** — politique de sécurité, gestion des secrets et procédure de signalement de vulnérabilité.
-- **[supabase/migrations/README.md](supabase/migrations/README.md)** — historique et conventions des 31 migrations Postgres.
+- **[docs/data-architecture.md](docs/data-architecture.md)** — couche qualité / évaluation / observabilité : eval harness LLM (MAE, golden set), data-quality gates, vue `pipeline_metrics_daily`, contrats de données Zod par source.
+- **[supabase/migrations/README.md](supabase/migrations/README.md)** — historique et conventions des 32 migrations Postgres.
 - **[docs/sirene-cache-deployment-checklist.md](docs/sirene-cache-deployment-checklist.md)** — checklist de déploiement et de mise en service du cache SIRENE.
 
 ---

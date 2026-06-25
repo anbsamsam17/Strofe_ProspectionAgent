@@ -87,6 +87,9 @@ jobs:
       - name: Run tests with coverage
         run: npm run test:coverage
 
+      - name: Run LLM eval harness (offline, deterministic)
+        run: npm run eval:llm
+
       - name: Upload coverage report
         uses: actions/upload-artifact@v4
         if: always()

@@ -11,6 +11,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
+    "eval:llm": "vitest run --config vitest.evals.config.ts",
     "import-sirene": "node --experimental-strip-types --env-file-if-exists=.env.local scripts/import-sirene-bulk.ts"
   },
   "dependencies": {

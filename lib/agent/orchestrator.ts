@@ -22,6 +22,11 @@ import type {
   ProfileSettings,
 } from '@/lib/types'
 import { checkBlacklistedDomains } from './blacklist-checker'
+import {
+  runDataQualityChecks,
+  type DataQualityReport,
+  type RunQualityMetrics,
+} from './data-quality'
 import { enrichirContact, getCreditsUsed } from './contact-enrichment'
 import { isProfessionalEmail } from './email-is-pro'
 import { filterOptedOutSirens } from './opt-out-checker'
@@ -889,6 +894,133 @@ async function phaseGeminiScoring(
 }
 
 // ------------------------------------------------------------
+// PHASE 6 : DATA QUALITY GATES (assertions de qualité du run)
+// ------------------------------------------------------------
+
+/**
+ * Borne max de chiffres significatifs pour les taux loggués (PII-free, mais on
+ * garde des logs compacts).
+ */
+const DQ_RATE_PRECISION = 4
+
+/**
+ * Dérive les métriques PII-free du run à partir du `PipelineSourcingOutput`.
+ *
+ * - `prospectsSansContact` : ni email ni téléphone après enrichissement sourcing.
+ * - `prospectsSansBeges` / `prospectsAvecBeges` : `beges_publie` est positionné à
+ *   `true` ssi un bilan ADEME a matché (cf. `enrichirProspect` dans sourcing.ts).
+ *   Les prospects en mode dégradé ont `beges_publie=false`.
+ *
+ * Aucune donnée individuelle (siren, contact, raison sociale) ne sort de cette
+ * fonction — seuls des compteurs agrégés.
+ */
+function deriveRunQualityMetrics(
+  output: PipelineSourcingOutput,
+  previousProspectsSourced: number | null,
+): RunQualityMetrics {
+  let sansContact = 0
+  let avecBeges = 0
+
+  for (const p of output.scored) {
+    const hasEmail = Boolean(p.contact_email)
+    const hasPhone = Boolean(p.contact_telephone)
+    if (!hasEmail && !hasPhone) sansContact += 1
+    if (p.beges_publie === true) avecBeges += 1
+  }
+
+  const sourced = output.scored.length
+
+  return {
+    prospectsSourced: sourced,
+    prospectsSansContact: sansContact,
+    prospectsSansBeges: sourced - avecBeges,
+    prospectsAvecBeges: avecBeges,
+    usedFallback: output.outcome.usedFallback,
+    universeEmpty: output.outcome.universeEmpty,
+    previousProspectsSourced,
+  }
+}
+
+/**
+ * Charge le `prospects_sourced` du run précédent (même user, terminé) pour
+ * alimenter le check de chute brutale. Best-effort : toute erreur → `null`
+ * (le check comparatif sera simplement skippé).
+ */
+async function loadPreviousSourced(
+  run: AgentRun,
+  supabase: SupabaseServerClient,
+): Promise<number | null> {
+  const { data, error } = await supabase
+    .from('agent_runs')
+    .select('prospects_sourced')
+    .eq('user_id', run.user_id)
+    .eq('status', 'completed')
+    .neq('id', run.id)
+    .order('started_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+
+  if (error || !data) return null
+  const value = data.prospects_sourced
+  return typeof value === 'number' ? value : null
+}
+
+/**
+ * Phase NON-FATALE — exécute les data-quality gates en fin de pipeline et
+ * loggue/persiste un résumé. Un statut dégradé (`warn`/`critical`) est loggué
+ * en `warn` pour remonter dans `agent_runs.logs` ; un statut `ok` en `info`.
+ *
+ * Aucune PII : seuls des compteurs/taux agrégés sont loggués.
+ */
+async function phaseDataQuality(
+  run: AgentRun,
+  supabase: SupabaseServerClient,
+  output: PipelineSourcingOutput,
+): Promise<DataQualityReport> {
+  run.phase = 'data_quality'
+
+  const previousProspectsSourced = await loadPreviousSourced(run, supabase)
+  const metrics = deriveRunQualityMetrics(output, previousProspectsSourced)
+  const report = runDataQualityChecks(metrics)
+
+  // Résumé compact des checks dégradés pour le log d'alerte (PII-free).
+  const degraded = report.checks
+    .filter((c) => !c.skipped && c.status !== 'ok')
+    .map((c) => ({
+      name: c.name,
+      status: c.status,
+      observed: Number(c.observed.toFixed(DQ_RATE_PRECISION)),
+      threshold: c.threshold,
+      message: c.message,
+    }))
+
+  const logLevel: 'info' | 'warn' = report.status === 'ok' ? 'info' : 'warn'
+
+  log(
+    run,
+    'data_quality',
+    `Data quality: ${report.status} (${report.summary.warn} warn, ${report.summary.critical} critical, ${report.summary.skipped} skipped)`,
+    logLevel,
+    {
+      dq_status: report.status,
+      dq_summary: report.summary,
+      dq_metrics: {
+        prospects_sourced: metrics.prospectsSourced,
+        prospects_sans_contact: metrics.prospectsSansContact,
+        prospects_sans_beges: metrics.prospectsSansBeges,
+        prospects_avec_beges: metrics.prospectsAvecBeges,
+        used_fallback: metrics.usedFallback,
+        universe_empty: metrics.universeEmpty,
+        previous_prospects_sourced: metrics.previousProspectsSourced,
+      },
+      dq_degraded_checks: degraded,
+    },
+  )
+
+  return report
+}
+
+// ------------------------------------------------------------
 // ORCHESTRATEUR PRINCIPAL
 // ------------------------------------------------------------
 
@@ -1056,6 +1188,27 @@ export async function runAgentNocturne(
     await updateRunInDB(run, supabaseAdmin)
   } catch (err) {
     log(run, 'gemini_scoring', 'Scoring Gemini échoué — pipeline non bloqué', 'warn', {
+      error: err instanceof Error ? err.message : String(err),
+    })
+  }
+
+  // --------------------------------------------------------
+  // PHASE 6 : DATA QUALITY GATES (détection de dégradation)
+  // Phase NON-FATALE — un échec DQ ne fait JAMAIS planter le run.
+  // Dérive des compteurs/taux PII-free depuis le pipeline de sourcing,
+  // exécute les expectations et loggue/persiste un résumé (warn si dégradé).
+  // Skippée si le sourcing n'a produit aucun output (ne devrait pas arriver
+  // ici car un sourcing en échec fait un return anticipé plus haut).
+  // --------------------------------------------------------
+  try {
+    if (pipelineOutput) {
+      await phaseDataQuality(run, supabaseAdmin, pipelineOutput)
+      await updateRunInDB(run, supabaseAdmin)
+    } else {
+      log(run, 'data_quality', 'Aucun output de sourcing — data quality skippée', 'info')
+    }
+  } catch (err) {
+    log(run, 'data_quality', 'Data quality échouée — pipeline non bloqué', 'warn', {
       error: err instanceof Error ? err.message : String(err),
     })
   }
