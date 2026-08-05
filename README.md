@@ -6,7 +6,7 @@
 
 De la donnée publique brute (SIRENE INSEE) à un CRM Kanban qualifié : ETL en streaming, sourcing nocturne automatisé, enrichissement multi-sources, scoring LLM **évalué** et **gates de qualité de données** sur chaque run.
 
-**Conçu et développé par un profil _Data Engineer_** — ETL idempotent & pipelines, PostgreSQL avancé (RLS multi-tenant), LLM en production **avec eval harness & métriques (MAE)**, data-quality gates, observabilité, CI/CD.
+**Un outil que je construis et fais tourner en production chez Strofe** — ETL idempotent & pipelines, PostgreSQL avancé (RLS multi-tenant), LLM en production **avec eval harness & métriques (MAE)**, data-quality gates, observabilité, CI/CD.
 
 [![CI](https://img.shields.io/github/actions/workflow/status/anbsamsam17/Strofe_ProspectionAgent/ci.yml?branch=main&label=CI&logo=github)](https://github.com/anbsamsam17/Strofe_ProspectionAgent/actions)
 [![Next.js](https://img.shields.io/badge/Next.js-15-black?logo=next.js)](https://nextjs.org/)
@@ -22,12 +22,12 @@ De la donnée publique brute (SIRENE INSEE) à un CRM Kanban qualifié : ETL en 
 
 </div>
 
-> ## 🟢 Statut : **en production** · **2 clients payants**
-> Application déployée sur Vercel, pipeline nocturne et import SIRENE mensuel opérationnels.
+> ## 🟢 Statut : **en production**
+> Application déployée sur Vercel et utilisée au quotidien par des consultants BEGES ; pipeline nocturne et import SIRENE mensuel opérationnels.
 
 ---
 
-## Le pitch
+## Ce que fait l'outil
 
 **ProspectionAgent** transforme un consultant en bilan carbone en machine de prospection : chaque nuit, l'agent source les entreprises françaises soumises à l'obligation BEGES depuis le registre **SIRENE**, les enrichit (données ADEME, contacts), les score via un LLM, puis alimente un **CRM Kanban** de prospects qualifiés et priorisés, prêts à appeler.
 
@@ -35,7 +35,7 @@ De la donnée publique brute (SIRENE INSEE) à un CRM Kanban qualifié : ETL en 
 
 ---
 
-## 📊 Impact & résultats
+## Impact & résultats
 
 Résultats d'ingénierie, vérifiables dans le code et les migrations (aucun KPI client inventé) :
 
@@ -56,7 +56,7 @@ Résultats d'ingénierie, vérifiables dans le code et les migrations (aucun KPI
 
 ```mermaid
 flowchart TB
-  subgraph LEG["Competences (code couleur)"]
+  subgraph LEG["Legende (code couleur)"]
     direction LR
     LP[" Pipeline de donnees "]:::data
     LL[" Couche LLM "]:::llm
@@ -150,22 +150,22 @@ flowchart LR
 
 ---
 
-## Capacités techniques mises en œuvre
+## Les briques du système
 
-| Brique | Ce qui est mis en œuvre | Compétence |
+| Brique | Ce qui est mis en œuvre | Domaine |
 | --- | --- | --- |
 | **Qualité & éval data** | Eval harness LLM (MAE, golden set), 5 data-quality gates par run, vue analytique `pipeline_metrics_daily` | **Data quality / Observabilité** |
 | **32 migrations Supabase** | RLS multi-tenant (`auth.uid() = user_id`), `UNIQUE(user_id, siren)`, colonnes `GENERATED ALWAYS`, RPC `SECURITY DEFINER`, vue `security_invoker`, index GIN / full-text FR | **BDD** |
 | **ETL SIRENE** | Streaming d'un dump ~1 Go, retry ×3, upsert idempotent par batches de 500, mode `DRY_RUN`, observabilité par cause de rejet | **Pipeline data** |
 | **Pipeline nocturne** | Orchestrateur cron → sourcing en cascade → enrichissement → scoring LLM validé par Zod → upsert | **Pipeline data** |
-| **3 workflows GitHub Actions** | CI (lint/typecheck/test+coverage/build), Deploy Preview Vercel, import SIRENE mensuel avec freshness-check | **DevOps / CI-CD** |
+| **4 workflows GitHub Actions** | CI (lint/typecheck/test+coverage/build), CodeQL, Deploy Preview Vercel, import SIRENE mensuel avec freshness-check | **DevOps / CI-CD** |
 | **Sécurité applicative** | `CRON_SECRET` timing-safe, service_role serveur-only, Zod aux frontières, scrub PII Sentry sur 3 runtimes | **SaaS / Sécurité** |
 | **CRM end-to-end** | Auth, Kanban drag-and-drop, calendrier de rappels, RGPD (opt-out HMAC, art. 14) | **SaaS end-to-end** |
 | **1 459 tests Vitest** | Transformations de données, mapping SIRENE, scoring, data-quality, helpers d'observabilité + eval harness LLM offline en CI | **Qualité / Tests** |
 
 ---
 
-## 🗄️ Base de données — Postgres avancé, multi-tenant
+## Base de données — Postgres avancé, multi-tenant
 
 - **Isolation stricte par locataire** : chaque table métier porte une politique **RLS** `auth.uid() = user_id` (SELECT / INSERT / UPDATE / DELETE). Les requêtes côté utilisateur (client SSR) sont filtrées par la base, pas par le code — pas de `.eq('user_id', …)` redondant.
 - **32 migrations versionnées** retraçant l'évolution réelle du schéma (`001_initial` → `032_pipeline_metrics`).
@@ -177,7 +177,7 @@ flowchart LR
 - **Modèle de données** : `profiles` (extension `auth.users`, settings JSONB + curseur de sourcing), `prospects` (identité SIRENE + BEGES + score composite + scoring Gemini + statut CRM), `prospect_contacts` / `prospect_exchanges` (contacts enrichis + historique des échanges), `agent_runs` (journal du cron), `sirene_cache` (cache local du registre). Les tables `daily_lists` / `daily_list_items` ont été retirées au pivot (migration `014_drop_daily_lists_and_rename.sql`).
 - **3 clients Supabase** distincts : browser (anon), SSR (anon + cookies), admin (service_role, serveur uniquement).
 
-### ⭐ Points forts base de données
+### Points forts base de données
 
 - **Colonne `GENERATED ALWAYS … STORED`** : le flag *hot lead* est calculé **dans la base** à chaque `UPDATE`, jamais en code — garantit la cohérence UI / agent et alimente un index partiel `WHERE is_hot_lead = TRUE` (`supabase/migrations/024_hot_lead_composite.sql:39`).
 - **RPC `SECURITY DEFINER` + `STABLE`** `search_sirene_cache(...)` : encapsule tout le sourcing multi-critères (NAF, tranche, plage CP, dedup SIREN) en un appel SQL unique et bypasse la ré-évaluation RLS par ligne (`supabase/migrations/019_sirene_search_function.sql:95`).
@@ -187,7 +187,7 @@ flowchart LR
 
 ---
 
-## 🔄 Pipeline de données
+## Pipeline de données
 
 **ETL SIRENE mensuel** (`scripts/import-sirene-bulk.ts`)
 - Lecture en **streaming** d'un dump compressé ~1 Go (jamais chargé en mémoire),
@@ -201,16 +201,16 @@ flowchart LR
 - **logs structurés JSON** persistés dans `agent_runs.logs`,
 - crons complémentaires : `reap-stale` (4h) et `purge-prospects` (3h).
 
-### ⭐ Points forts pipeline data
+### Points forts pipeline data
 
-- **Observabilité data-quality** : chaque ligne rejetée à l'import SIRENE est comptée et **catégorisée par cause** (10 causes : `etat`, `siege`, `tranche_missing/excluded`, `naf_missing/excluded`, `siren_missing/format`, `siret_missing/format`), avec un mode **`DRY_RUN`** qui parse et reporte sans rien écrire (`scripts/import-sirene-bulk.ts:257` et `:88`).
-- **Idempotence** : upsert `onConflict: 'siren'` par **batches de 500**, rejouable sans corrompre la base (`scripts/import-sirene-bulk.ts:350` et `:80`).
-- **Résilience** : **retry exponentiel ×3** sur 5xx / timeout au download (`scripts/import-sirene-bulk.ts:509`), **garde-fou storage** (ABORT au-delà du quota) et abandon immédiat sur 4xx non-retryable (`scripts/import-sirene-bulk.ts:513`).
-- **Reprise & robustesse du sourcing nocturne** : **curseur de pagination persisté** dans `profiles.sourcing_state` (invalidé si la signature des filtres change), **circuit breaker** sur l'enrichissement téléphone et **heartbeat 30 s** poussé dans `agent_runs.logs` (`lib/agent/sourcing-runner.ts:7`, `:37`, `:202`).
+- **Observabilité data-quality** : chaque ligne rejetée à l'import SIRENE est comptée et **catégorisée par cause** (10 causes : `etat`, `siege`, `tranche_missing/excluded`, `naf_missing/excluded`, `siren_missing/format`, `siret_missing/format`), avec un mode **`DRY_RUN`** qui parse et reporte sans rien écrire (`scripts/import-sirene-bulk.ts:261` et `:93`).
+- **Idempotence** : upsert `onConflict: 'siren'` par **batches de 500**, rejouable sans corrompre la base (`scripts/import-sirene-bulk.ts:360` et `:80`).
+- **Résilience** : **retry exponentiel ×3** sur 5xx / timeout au download (`scripts/import-sirene-bulk.ts:508`), **garde-fou storage** (ABORT au-delà du quota) et abandon immédiat sur 4xx non-retryable (`scripts/import-sirene-bulk.ts:525`).
+- **Reprise & robustesse du sourcing nocturne** : **curseur de pagination persisté** dans `profiles.sourcing_state` (invalidé si la signature des filtres change), **circuit breaker** sur l'enrichissement téléphone et **heartbeat 30 s** poussé dans `agent_runs.logs` (`lib/agent/sourcing-runner.ts:7`, `:37`, `:201`).
 
 ---
 
-## 🎯 Qualité, évaluation & observabilité du pipeline
+## Qualité, évaluation & observabilité du pipeline
 
 > La différence entre « un pipeline qui tourne » et « un système data mesuré et amélioré ».
 > Détail : **[docs/data-architecture.md](docs/data-architecture.md)**.
@@ -222,7 +222,9 @@ Le scoring commercial Gemini est évalué sur un **golden set de 18 cas sans PII
 - **Mode live** (`GEMINI_API_KEY`) : **MAE** sur `interet_score` vs centre de la fourchette attendue, **% within-range**, **conformité sémantique des raisons**, **respect de l'ordre métier** ROI / image → légal.
 - **Mode offline déterministe** (CI, zéro réseau) : intégrité des fixtures, builder de prompt (faits réglementaires figés, **zéro fuite PII**), schéma Zod réel.
 
-→ *Évaluation quantitative d'un système LLM, séparation eval / CI* — `lib/agent/__evals__/`.
+> Dernier run live tenté le 2026-08-05 : interrompu par le quota de l'API Gemini (HTTP 429, free tier `gemini-2.0-flash` épuisé) — aucun chiffre n'est publié tant qu'un run live complet n'a pas abouti. Au premier run complet, les métriques mesurées (MAE, within-range, conformité, n = 18) seront publiées ici et le rapport commité dans `lib/agent/__evals__/last-report.json`.
+
+Code : `lib/agent/__evals__/`.
 
 ### Data-quality gates — *alerter sur une dégradation au lieu de la subir*
 
@@ -236,33 +238,34 @@ Phase **non-fatale** et **pure** (zéro I/O) en fin de pipeline : `runDataQualit
 | `ADEME_MATCH_RATE` | taux de match BEGES anormalement nul |
 | `DROP_VS_PREVIOUS` | chute brutale vs run précédent du même utilisateur |
 
-→ *Data-quality engineering façon « expectations », robustesse non-fatale* — `lib/agent/data-quality.ts`.
+Code : `lib/agent/data-quality.ts`.
 
 ### Métriques de pipeline — *vue SQL analytique, RLS-safe*
 
 Vue `pipeline_metrics_daily` (1 ligne par jour × utilisateur) : runs total / réussis / échoués, `success_rate`, sourcés / qualifiés, `qualification_rate`, durée **moyenne et médiane** (`PERCENTILE_CONT`). `security_invoker = true` → hérite de la RLS d'`agent_runs`, **aucune fuite cross-tenant**.
 
-→ *Modélisation analytique, fonctions de percentile, sécurité par construction* — `supabase/migrations/032_pipeline_metrics.sql`.
+Code : `supabase/migrations/032_pipeline_metrics.sql`.
 
 ### EDA data-driven — *justifier les seuils de scoring par la donnée*
 
 Notebook Jupyter + scripts Python reproductibles (`analysis/`) validant les seuils et poids de `lib/agent/scoring.ts` sur un dataset synthétique réaliste : seuils de taille indexés sur le seuil légal (500 salariés), poids 30/30/40 validés, score peu corrélé à la seule taille (**Spearman ρ ≈ 0,55**). **Limite assumée** : dataset synthétique → cohérence interne, pas pouvoir prédictif ; étape suivante = corréler aux `call_result` réels.
 
-→ *Analyse exploratoire, Python / pandas, esprit critique sur ses propres choix* — `analysis/README.md`.
+Détail : `analysis/README.md`.
 
 ---
 
-## ⚙️ CI/CD & GitHub Actions
+## CI/CD & GitHub Actions
 
 | Workflow | Déclencheur | Rôle |
 | --- | --- | --- |
 | **`ci.yml`** | push `main`/`develop`, PR `main` | `lint` · `type-check` · `test:coverage` (artifact uploadé) · **`eval:llm` (eval harness offline)** · `build` (avec cache `.next`). Jobs parallèles + `concurrency` cancel-in-progress. |
+| **`codeql.yml`** | cron hebdo + push/PR `main` | Analyse statique de sécurité CodeQL (JavaScript/TypeScript). |
 | **`deploy-preview.yml`** | PR `main` | Tests en *gate* avant déploiement preview Vercel. |
 | **`sirene-import.yml`** | cron mensuel (1er à 04h UTC) + `workflow_dispatch` | Import SIRENE via **GitHub Environment** (secrets injectés), **freshness-check** (skip si cache < 25j, `force` possible), timeout 60 min, Node 22. |
 
 ---
 
-## 🚀 Application SaaS
+## Application SaaS
 
 - **Stack** : Next.js **15** (App Router, Turbopack) · React **19** · TypeScript **5** strict · Tailwind CSS **v4** · `next-themes` (dark mode).
 - **CRM Kanban** : pipeline drag-and-drop (`@dnd-kit`), **file de prospects priorisés**, **calendrier de rappels** (`@fullcalendar`), saisie des résultats d'appel par l'humain.
@@ -272,7 +275,7 @@ Notebook Jupyter + scripts Python reproductibles (`analysis/`) validant les seui
 
 ---
 
-## ✅ Tests
+## Tests
 
 - **1 459 tests Vitest sur 101 fichiers** (`vitest run`, jsdom, `@testing-library/react`).
 - Couverture des **transformations de données** (mapping SIRENE, sourcing), du **scoring**, des **helpers d'observabilité** et des règles métier (blacklist, hot-lead, décret 2022, BEGES).
@@ -280,11 +283,11 @@ Notebook Jupyter + scripts Python reproductibles (`analysis/`) validant les seui
 
 ---
 
-## 🖼️ Aperçu
+## Aperçu
 
 > Captures de l'application en production. Les entreprises affichées sont des données **publiques** (base SIRENE/INSEE), aucune donnée confidentielle client.
 
-### 🤖 L'agent IA « Glan » — sourcing & scoring nocturnes
+### L'agent IA « Glan » — sourcing & scoring nocturnes
 
 L'agent qui tourne chaque nuit : sourcing en cascade, enrichissement multi-sources et scoring LLM, livrés au matin.
 
@@ -296,7 +299,7 @@ L'agent qui tourne chaque nuit : sourcing en cascade, enrichissement multi-sourc
 
 *Analyse d'un run : métriques (entreprises sourcées, prospects qualifiés, durée), timeline des étapes du pipeline et logs structurés persistés dans `agent_runs`.*
 
-### 🗂️ CRM & prospects
+### CRM & prospects
 
 ![Tableau de bord des prospects : liste scorée 0-100, filtres par statut CRM et secteur, statut BEGES, raisons sociales et tri par score / récence](docs/screenshots/dashboard.png)
 
@@ -310,7 +313,7 @@ L'agent qui tourne chaque nuit : sourcing en cascade, enrichissement multi-sourc
 
 *Pipeline Kanban (drag-and-drop) : vue d'ensemble du flux commercial, taux de conversion et répartition des prospects par section NAF.*
 
-### 📅 Suivi commercial
+### Suivi commercial
 
 ![Calendrier mensuel (juin 2026) avec rappels d'appels et d'emails planifiés répartis sur les jours](docs/screenshots/calendar.png)
 
@@ -320,7 +323,7 @@ L'agent qui tourne chaque nuit : sourcing en cascade, enrichissement multi-sourc
 
 *Notifications & relances : rappels en retard mis en avant, contacts qualifiés (persona) et suivi des appels / emails.*
 
-### ⚙️ Configuration
+### Configuration
 
 ![Paramètres : gestion de la blacklist de domaines (« Ne pas contacter ») et état du cache SIRENE local (nombre d'entreprises en cache, taille de la base, dernière mise à jour et fraîcheur)](docs/screenshots/settings.png)
 
@@ -328,7 +331,7 @@ L'agent qui tourne chaque nuit : sourcing en cascade, enrichissement multi-sourc
 
 ---
 
-## ▶️ Démarrer
+## Démarrer
 
 ```bash
 # 1. Installer les dépendances
@@ -359,12 +362,12 @@ npx supabase db push
 
 ---
 
-## 📚 Documentation technique
+## Documentation technique
 
 Documentation d'ingénierie maintenue dans le dépôt :
 
 - **[docs/data-pipeline.md](docs/data-pipeline.md)** — anatomie de l'ETL SIRENE et du pipeline nocturne : streaming, idempotence, cascade de sourcing, scoring.
-- **[docs/cicd.md](docs/cicd.md)** — les 3 workflows GitHub Actions (CI, deploy preview, import SIRENE mensuel) et leur configuration.
+- **[docs/cicd.md](docs/cicd.md)** — les workflows GitHub Actions (CI, deploy preview, import SIRENE mensuel) et leur configuration.
 - **[docs/SECURITY-RLS.md](docs/SECURITY-RLS.md)** — modèle d'isolation multi-tenant : politiques RLS `auth.uid() = user_id` table par table.
 - **[SECURITY.md](SECURITY.md)** — politique de sécurité, gestion des secrets et procédure de signalement de vulnérabilité.
 - **[docs/data-architecture.md](docs/data-architecture.md)** — couche qualité / évaluation / observabilité : eval harness LLM (MAE, golden set), data-quality gates, vue `pipeline_metrics_daily`, contrats de données Zod par source.
@@ -373,11 +376,9 @@ Documentation d'ingénierie maintenue dans le dépôt :
 
 ---
 
-## 👤 Auteur
+## Auteur
 
-**Samir Anbri** — [samir.anbri@gmail.com](mailto:samir.anbri@gmail.com) · GitHub [@anbsamsam17](https://github.com/anbsamsam17)
-<!-- LinkedIn : <à compléter> -->
-<!-- CV : <à compléter> -->
+**Samir Anbri** — [samir.anbri@gmail.com](mailto:samir.anbri@gmail.com) · [LinkedIn](https://www.linkedin.com/in/samir-anbri/) · GitHub [@anbsamsam17](https://github.com/anbsamsam17)
 
 ## Licence
 
