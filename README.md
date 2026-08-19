@@ -8,7 +8,7 @@ De la donnée publique brute (SIRENE INSEE) à un CRM Kanban qualifié : ETL en 
 
 **Un outil que je construis et fais tourner en production chez Strofe** — ETL idempotent & pipelines, PostgreSQL avancé (RLS multi-tenant), LLM en production **avec eval harness & métriques (MAE)**, data-quality gates, observabilité, CI/CD.
 
-[![CI](https://img.shields.io/github/actions/workflow/status/anbsamsam17/Strofe_ProspectionAgent/ci.yml?branch=main&label=CI&logo=github)](https://github.com/anbsamsam17/Strofe_ProspectionAgent/actions)
+[![CI](https://img.shields.io/github/actions/workflow/status/AnbriSamir/Strofe_ProspectionAgent/ci.yml?branch=main&label=CI&logo=github)](https://github.com/AnbriSamir/Strofe_ProspectionAgent/actions)
 [![Next.js](https://img.shields.io/badge/Next.js-15-black?logo=next.js)](https://nextjs.org/)
 [![React](https://img.shields.io/badge/React-19-149eca?logo=react)](https://react.dev/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5-3178c6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
@@ -378,7 +378,7 @@ Documentation d'ingénierie maintenue dans le dépôt :
 
 ## Auteur
 
-**Samir Anbri** — [samir.anbri@gmail.com](mailto:samir.anbri@gmail.com) · [LinkedIn](https://www.linkedin.com/in/samir-anbri/) · GitHub [@anbsamsam17](https://github.com/anbsamsam17)
+**Samir Anbri** — [samir.anbri@gmail.com](mailto:samir.anbri@gmail.com) · [LinkedIn](https://www.linkedin.com/in/samir-anbri/) · GitHub [@AnbriSamir](https://github.com/AnbriSamir)
 
 ## Licence
 
