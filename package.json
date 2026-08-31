@@ -19,13 +19,13 @@
     "@dnd-kit/sortable": "^10.0.0",
     "@dnd-kit/utilities": "^3.2.2",
     "@fullcalendar/core": "^6.1.20",
-    "@fullcalendar/daygrid": "^6.1.20",
-    "@fullcalendar/interaction": "^6.1.20",
+    "@fullcalendar/daygrid": "^6.1.21",
+    "@fullcalendar/interaction": "^6.1.21",
     "@fullcalendar/react": "^6.1.20",
-    "@fullcalendar/timegrid": "^6.1.20",
+    "@fullcalendar/timegrid": "^6.1.21",
     "@google/generative-ai": "^0.24.1",
-    "@react-email/components": "^1.0.11",
-    "@react-three/drei": "^10.7.7",
+    "@react-email/components": "^1.0.12",
+    "@react-three/drei": "^10.7.8",
     "@react-three/fiber": "^9.6.1",
     "@rive-app/react-canvas": "^4.28.4",
     "@sentry/nextjs": "^9.0.0",
@@ -37,8 +37,8 @@
     "next": "15.5.14",
     "next-themes": "^0.4.4",
     "openai": "^4.89.0",
-    "react": "^19.0.0",
-    "react-dom": "^19.0.0",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
     "resend": "^4.2.0",
     "three": "^0.184.0",
     "zod": "^3.24.2"
@@ -46,7 +46,7 @@
   "devDependencies": {
     "@tailwindcss/postcss": "^4.2.2",
     "@testing-library/jest-dom": "^6.6.3",
-    "@testing-library/react": "^16.3.0",
+    "@testing-library/react": "^16.3.3",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
@@ -60,7 +60,7 @@
     "supabase": "^2.98.2",
     "tailwindcss": "^4",
     "typescript": "^5",
-    "unzipper": "^0.12.3",
+    "unzipper": "^0.12.5",
     "vitest": "^3.1.1"
   }
 }
